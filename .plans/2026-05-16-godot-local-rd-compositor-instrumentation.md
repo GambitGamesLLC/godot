@@ -101,18 +101,48 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ## Final Results
 
-**Status:** ⚠️ Draft
+**Status:** ⚠️ Partial
 
-**What We Built:** Pending execution.
+**What We Built:** We finished the mapping/strategy half of the Godot instrumentation lane and clarified the surviving repro seam for the next session. The durable instrumentation map now identifies the exact Godot and GDGS files to instrument, the staged callback/compute isolation order, and the key assertions/breadcrumbs needed to separate plugin misuse from engine/backend failure. The critical correction from this pass is that the current surviving repro is not actually running on a local RenderingDevice in the hot path; it is using the global RenderingDevice in both the raster and compositor path, so the next coder pass should instrument the compositor callback plus staged global-RD compute path first.
 
-**Reference Check:** Pending.
+**Reference Check:** `REF-01`, `REF-02`, `REF-04`, `REF-05`, and `REF-06` are now the key fresh-session starting points. `REF-06` is the most important handoff artifact.
 
 **Commits:**
-- Pending.
+- `2e9a557` - `docs: map GDGS compositor instrumentation seams`
 
 **Lessons Learned:**
 - After removing one real plugin misuse, the next best step is diagnostic isolation, not another guess.
+- The surviving seam changed meaning after source inspection: the immediate experiment should target global-RD-in-compositor behavior, not assume a local-RD sync bug.
+
+## Fresh Session Start / Next Steps
+
+Start the next session from this plan and `REF-06`, then execute in this order:
+
+1. **Task 2 (`oc-jev`) — prepare the local instrumentation branch/package**
+   - create a dedicated instrumentation branch in `/home/derrick/.openclaw/workspace/projects/godot/`
+   - add callback entry/exit breadcrumbs in `RendererSceneRenderRD::_process_compositor_effects(...)`
+   - add a small debug stage gate in `gaussian_compositor_effect.gd`
+   - add per-pass stage gates/logs in `gaussian_renderer.gd`
+   - add dispatch-name / push-constant-size / group-count logging in `gaussian_rendering_device_context.gd`
+   - add seam-correction logging proving the current repro is global/global, not local/global
+2. **Run the staged isolation experiments in the documented order**
+   - callback only, skip `render_for_compositor()`
+   - no dispatch
+   - trivial dispatch
+   - projection only
+   - radix only
+   - boundaries only
+   - render pass last
+   - compositor writeback/presentation only after raster stages are stable
+3. **Use `--accurate-breadcrumbs` on at least one rerun per meaningful stage change**
+4. **Only after stage-gating results are in, run Task 3 (`oc-76q`)**
+   - audit whether the instrumentation package actually gives the highest-signal answer and whether the surviving culprit now looks plugin-side, unsupported-boundary-side, or engine/backend-side
+
+Avoid reopening already-closed branches unless the new stage-gating evidence directly points back to them:
+- the radix push-constant contract bug is fixed and validated as removed
+- the earlier indirect-dispatch hypothesis no longer leads the suspect list
+- final compositor writeback/presentation is demoted because `No Present` still crashes
 
 ---
 
-*Completed on Pending*
+*Completed on 2026-05-16 (partial; ready for fresh-session continuation)*
