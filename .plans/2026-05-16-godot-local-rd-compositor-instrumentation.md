@@ -378,6 +378,53 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ---
 
+### Task 16: QA compare projection probe visibility against scratch mirror visibility
+
+**Bead ID:** `oc-2cr`  
+**SubAgent:** `primary` (for `qa`)  
+**Role:** `qa`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-2cr` and keep the investigation projection-only. Use the new `scratch_projection_mirror_only` checkpoint and compare it against `projection_probe_only`. Determine whether projection activity/stage bits become visible in the known-good scratch mirror path even when the main projection probe remains zero or unreadable. Capture the most important mirror/probe fields, preserve durable notes/artifact references, update this plan with actual findings, and close bead `oc-2cr` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA compared the two requested minimum projection-only checkpoints on the active instrumentation branches and recorded the durable evidence in `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`). To stay directly comparable to the earlier valid Vulkan evidence and avoid the already-documented managed-runtime drift / dummy-renderer trap, the pass again used the preserved repro binary `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64` (`4.7.dev5.official.a8643700c`) on the host GPU path (`DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`). Exact runs: `projection_only + projection_probe_only`; `projection_only + scratch_projection_mirror_only`; both exited `134`, with artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-mirror-vulkan-dev5-20260517-18222280927/`. Important harness note: the temporary checkpoint runner in `.temp/` did not yet know about the new `scratch_projection_mirror_only` enum value, so QA patched only that temp harness mapping (not repo code) to run the second checkpoint. The answer is a useful negative result: both checkpoints preserve the same projection launch contract (`128`-byte / `32`-float push constants, `group_count=(1060, 1, 1)`, barrier complete), both still proceed through `projection_only_gate`, and the device still later fails at `fence_wait` with lost-device breadcrumbs collapsing first to `BLIT_PASS`. Crucially, `projection_probe_only` remained all zero / non-observing (`probe_words=[0, ...]`, `probe_invocations=0`, `probe_visible_splats=0`, `probe_error_flags_hex=0x00000000`), and the supposedly known-good scratch mirror path did **not** reveal hidden projection activity either: `scratch_words` was entirely zero, `scratch_signature_ok=false`, `scratch_projection_stage_bits=0x00000000`, `scratch_projection_entered=false`, `scratch_projection_visible_path=false`, `scratch_projection_sort_reserved=false`, and `scratch_projection_sort_written=false`. So the new mirror path does not presently show projection activity/stage bits becoming visible anywhere that the main probe missed; both evidence buffers remain zero-valued while the later failure signature stays unchanged. This closes the QA evidence package for bead `oc-2cr` and points the next recommendation back toward projection-triggered synchronization / lifetime / backend fallout or broader visibility/coherency failure affecting both probe paths.
+
+---
+
+### Task 17: Inspect projection post-dispatch resource lifetime and cleanup hazards
+
+**Bead ID:** `oc-hm0`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-hm0` and keep the investigation projection-only. Focus on post-dispatch resource lifetime, cleanup timing, aliasing, and synchronization/backend hazard evidence around the projection outputs and associated buffers. Add small, reversible, high-signal instrumentation that can show whether cleanup/reuse/rebinding or lifetime transitions line up suspiciously close to the failing projection dispatch and later fence/device-loss fallout. Keep the staged repro model intact, avoid speculative fixes, update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-hm0` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_render_manager.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_scene_registry.gd`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a projection-only lifetime / cleanup instrumentation pass in GDGS without changing staged behavior. `gaussian_gpu_state_cache.gd` now tracks per-state `gpu_generation`, remembers the last cleanup request serial + reason, snapshots the key projection RIDs (projection/scratch probe buffers, histogram, sort buffers, culled buffer, tile bounds, render/depth textures, projection descriptor set, scratch descriptor set, projection pipeline), and logs those snapshots at cleanup request, cleanup flush, cleanup_state, and rebuild time. `gaussian_renderer.gd` now includes the same projection resource snapshot plus cleanup-request metadata directly on `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end`, and it flags unexpected RID aliasing across the critical projection-owned resources. `gaussian_render_manager.gd` now passes cleanup reasons through to the state cache, and `gaussian_scene_registry.gd` tags the empty-scene cleanup path as `scene_registry_empty`. This gives QA a way to correlate: (1) which exact projection-owned resources were bound when the failing dispatch launched, (2) whether those handles were later torn down or regenerated before the fence/device-loss fallout, and (3) whether any suspicious aliasing/rebinding shows up across buffers or outputs that should stay distinct. Validation: source parse/load check against the preserved repro binary `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64` with a temporary `--headless -s` loader script; result `parse_ok`.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
