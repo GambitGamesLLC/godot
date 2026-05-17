@@ -525,3 +525,118 @@ The next useful lane should stay projection-internal, not readback-internal:
 1. inspect projection shader writes / bounds assumptions directly
 2. add projection-owned GPU-side sentinels or shader-side guardrails that do not require immediate CPU readback
 3. inspect post-projection resource lifetime / aliasing / synchronization assumptions that can poison the device before the later `fence_wait`
+
+## Follow-up QA pass for bead `oc-bl3` — projection GPU guard diagnostics rerun
+
+### Scope
+
+Rerun the staged repro after bead `oc-33u` added the new projection-internal GPU guard counters and first-failure fields, while keeping the investigation projection-only and using the minimum readback mode that can still surface the probe.
+
+Branches / commits under test:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `a5da0f979d717895073c820237defaca35ecbc4e`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `64287e1b260cf17e527578b036bbcea7ea30a13c`
+
+### Runtime used
+
+For comparability with the earlier dev5 repro evidence, QA again used the preserved repro binary:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`
+- version: `4.7.dev5.official.a8643700c`
+
+Important runtime note: the first noninteractive retry using `--headless` fell into Godot's dummy renderer and never exercised Vulkan, so QA discarded that attempt as invalid. The durable artifact package below uses the corrected host-GPU launch path instead:
+
+- `--display-driver wayland --rendering-driver vulkan`
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000`
+
+That corrected launch path preserved the real Vulkan repro but did change the observed render size from the earlier headless package (`1152x648`) to the live desktop size (`2304x1296`). The crash signature and probe result below were stable across both the normal and `--accurate-breadcrumbs` reruns on that corrected launch path.
+
+### Artifact roots
+
+- normal run: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-guard-vulkan-dev5-20260517-180114/`
+- accurate rerun: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-guard-vulkan-dev5-accurate-20260517-180149/`
+
+Key files:
+
+- normal log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-guard-vulkan-dev5-20260517-180114/logs/projection_only__projection_probe_only.normal.log`
+- accurate log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-guard-vulkan-dev5-accurate-20260517-180149/logs/projection_only__projection_probe_only.accurate.log`
+- normal context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-guard-vulkan-dev5-20260517-180114/context.txt`
+- accurate context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-guard-vulkan-dev5-accurate-20260517-180149/context.txt`
+
+### Exact runs performed
+
+1. invalid launch probe — `projection_only + projection_probe_only` via `--headless`; discarded because Godot fell into the dummy renderer instead of the Vulkan path
+2. `projection_only + projection_probe_only` via `--display-driver wayland --rendering-driver vulkan` — exit `134`
+3. `projection_only + projection_probe_only + --accurate-breadcrumbs` via the same Vulkan launch path — exit `134`
+
+Per the minimum-runs constraint, QA did not broaden back out to other stages. `projection_probe_only` was already the smallest useful readback mode for surfacing the new guard package.
+
+### Findings
+
+#### The new GPU guard package stays completely clean before the later device-loss path
+
+Both valid reruns reach the same projection chain successfully:
+
+1. `renderer stage=prepared ... projection_push_constant_bytes=128 ... projection_group_count=1060`
+2. `renderer stage=projection_begin ... push_constant_floats=32 ... sort_capacity=2711230`
+3. `rd dispatch pipeline=gsplat_projection push_constant_bytes=128 direct=true group_count=(1060, 1, 1)`
+4. `rd barrier complete pipeline=gsplat_projection`
+5. `renderer stage=projection_end`
+6. `renderer stage=projection_post_dispatch_checkpoint_begin ... checkpoint=projection_probe_only`
+7. `renderer stage=projection_readback_projection_probe_begin ... projection_probe_valid=true`
+
+At the probe readback itself, `fence_wait` still fails, but the probe buffer is returned and decoded. The important result is that every newly added guard field remains zero / unset:
+
+- `probe_error_flags_hex=0x00000000`
+- `probe_first_failure_stage_name=none`
+- `probe_first_failure_id=0`
+- `probe_max_requested_sort_end=0`
+- `probe_max_requested_tile_id=0`
+- `probe_sort_overflow_guard_count=0`
+- `probe_tile_guard_count=0`
+- `probe_guard_abort_count=0`
+- `probe_non_finite_failure_count=0`
+
+The broader probe words are also all zero in both reruns:
+
+- `probe_words=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]`
+- `probe_invocations=0`
+- `probe_visible_splats=0`
+- `probe_duplicated_splats=0`
+- `probe_emitted_sort_elements=0`
+
+So this QA pass did **not** observe an immediate guarded projection failure class. The new guards stay clean all the way up to the later fence/device-loss path.
+
+#### The failure still surfaces at `fence_wait`, and the later breadcrumb signature still collapses to `BLIT_PASS`
+
+The key failure signature is unchanged from the earlier projection-focused QA, just with the tighter probe-specific call site now identified:
+
+- `ERROR: Condition "err != VK_SUCCESS" is true. Returning: FAILED`
+- `at: fence_wait (drivers/vulkan/rendering_device_driver_vulkan.cpp:2983)`
+- GDScript backtrace now pins the first blocking readback to `_log_projection_probe_readback (...)`
+- the compositor still returns through `raster_only_no_writeback_gate`
+- lost-device breadcrumbs still report `Last known breadcrumb: BLIT_PASS`
+
+That means the new GPU-side guard counters do **not** provide evidence of an immediate projection-internal bounds/NaN/tile-overflow guard trip before the later device-loss path becomes visible.
+
+### Updated interpretation
+
+This is a useful negative result.
+
+Compared with bead `oc-15g`, the answer is now sharper:
+
+- disabling readbacks previously showed that CPU readback itself was not required to poison the device
+- this new probe-only rerun shows that even when the smallest useful guard package is read back, the new GPU-side projection guards remain completely clean
+- therefore the current evidence does **not** support the theory that the new shader-side projection guards are catching an immediate projection bounds violation before the crash
+
+That does **not** prove the projection shader is correct. It means the newly instrumented guard classes stayed unset, so the failure still looks more like projection-triggered device-loss / synchronization / lifetime fallout than a promptly observed guarded projection error class.
+
+### Next recommendation
+
+Keep the next work narrowly on what happens after projection dispatch rather than on enumerating more projection-probe fields.
+
+Best next suspects after this QA rerun:
+
+1. whether the probe SSBO itself is actually visible/coherent when read back in this compositor path, since the all-zero probe may reflect “never observed” rather than “definitively no work happened”
+2. post-projection resource lifetime / aliasing / synchronization hazards that are not covered by the current guard classes
+3. deeper engine/backend investigation around why the projection lane can submit and barrier successfully, yet the device is still lost by the next fence and later collapses to `BLIT_PASS`

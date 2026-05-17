@@ -331,6 +331,53 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ---
 
+### Task 14: QA rerun with projection GPU guard diagnostics
+
+**Bead ID:** `oc-bl3`  
+**SubAgent:** `primary` (for `qa`)  
+**Role:** `qa`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-bl3` and keep the investigation projection-only. Rerun the staged repro with the new GPU-side projection guard diagnostics. Prioritize `projection_only` and, if useful, `projection_probe_only` or the smallest readback mode that can surface the probe. Determine whether the new guards stay clean or report an immediate guarded failure class before the later fence/device-loss path. Capture the most important probe fields, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-bl3` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the projection-only staged repro on the updated instrumentation branches and wrote the durable evidence into `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`). To keep the answer comparable to the earlier dev5 evidence package, QA used the preserved repro binary again: `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64` (`4.7.dev5.official.a8643700c`). Important runtime note captured in the doc: an initial noninteractive `--headless` retry fell into the dummy renderer and was discarded as invalid, so the valid runs used the host GPU path (`DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000` with `--display-driver wayland --rendering-driver vulkan`). Exact valid runs: `projection_only + projection_probe_only`; then `projection_only + projection_probe_only + --accurate-breadcrumbs`, both exiting `134`, with artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-guard-vulkan-dev5-20260517-180114/` and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-guard-vulkan-dev5-accurate-20260517-180149/`. The new answer is a useful negative result: the smallest useful readback mode (`projection_probe_only`) now returns the expanded probe package, but every new GPU-side guard field stays clean in both reruns — `probe_error_flags_hex=0x00000000`, `probe_first_failure_stage_name=none`, `probe_first_failure_id=0`, `probe_max_requested_sort_end=0`, `probe_max_requested_tile_id=0`, `probe_sort_overflow_guard_count=0`, `probe_tile_guard_count=0`, with the broader `probe_words` array also all zeros. Despite that, the failure still surfaces at `fence_wait` during `_log_projection_probe_readback(...)`, and the later lost-device breadcrumbs still collapse to `BLIT_PASS`. This means QA did not observe an immediate guarded projection failure class before the later device-loss path; the current evidence keeps suspicion on projection-triggered synchronization/lifetime/backend fallout, or on the possibility that the probe buffer itself is not becoming observably coherent before the device-loss path trips.
+
+---
+
+### Task 15: Investigate projection probe visibility/coherency and post-dispatch sync hazards
+
+**Bead ID:** `oc-lnp`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-lnp` and keep the investigation projection-only. Move the next diagnostic slice onto probe visibility/coherency and post-dispatch synchronization/lifetime hazards. Add small, reversible, high-signal instrumentation that can help distinguish: (1) projection produced outputs but probe/read visibility is incoherent, versus (2) projection outputs or resource usage are entering a sync/lifetime/backend hazard before later fence/device-loss fallout. Keep the staged repro model intact, avoid speculative fixes, update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-lnp` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this slice projection-only and focused it specifically on the visibility/coherency-vs-sync-hazard fork, without attempting a crash fix. On the active GDGS instrumentation branch, added a second projection-side evidence path by binding the existing scratch probe buffer into `gsplat_projection` and mirroring a few high-signal counters/stage bits there (`invocations`, `visible_splats`, stage-bit milestones for entry / visible path / culled write / sort reservation / sort writes, and max requested sort end). This matters because the scratch probe path is already a known-good positive-control buffer/readback in this repro harness, so the next QA pass can compare `projection_probe_only` against a new `scratch_projection_mirror_only` checkpoint to tell whether the all-zero projection probe is a probe-visibility/coherency problem or whether projection is already poisoning broader post-dispatch state before either probe can be observed. To support the second half of that distinction, the pass also added lightweight post-dispatch lifetime breadcrumbs: per-state `last_projection_dispatch_serial` tracking logged at projection begin/end and again from GPU-state cleanup paths (`request_cleanup`, `flush_pending_cleanup`, `cleanup_state`) so QA/audit can see if resource teardown is racing suspiciously close to a failing projection dispatch. The full-package projection readback now includes the scratch-mirror fields too, and the compositor effect exposes the new `Scratch Projection Mirror Only` checkpoint without changing the staged repro model. Validation run: `git diff --check`; `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py` on the touched GDGS scripts/shader; `godot --headless --path . --script ... --check-only --quit` for the touched compositor/cache/renderer scripts on `/home/derrick/.local/bin/godot`; `godot --headless --path . --import` on both `/home/derrick/.local/bin/godot` (`4.6.2.stable`) and `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64` (`4.7.dev5`). No Godot engine source files changed in this pass; the Godot repo changes here are plan/doc handoff updates only.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
