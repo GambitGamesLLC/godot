@@ -32,6 +32,8 @@
 
 #include "core/config/project_settings.h"
 #include "core/io/image.h"
+#include "core/os/os.h"
+#include "core/string/print_string.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/shaders/decal_data_inc.glsl.gen.h"
@@ -277,6 +279,23 @@ bool RendererSceneRenderRD::_compositor_effects_has_flag(const RenderDataRD *p_r
 	return false;
 }
 
+static const char *_gdgs_debug_compositor_callback_type_name(RSE::CompositorEffectCallbackType p_callback_type) {
+	switch (p_callback_type) {
+		case RSE::COMPOSITOR_EFFECT_CALLBACK_TYPE_PRE_OPAQUE:
+			return "pre_opaque";
+		case RSE::COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_OPAQUE:
+			return "post_opaque";
+		case RSE::COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_SKY:
+			return "post_sky";
+		case RSE::COMPOSITOR_EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT:
+			return "pre_transparent";
+		case RSE::COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_TRANSPARENT:
+			return "post_transparent";
+		default:
+			return "unknown";
+	}
+}
+
 bool RendererSceneRenderRD::_has_compositor_effect(RSE::CompositorEffectCallbackType p_callback_type, const RenderDataRD *p_render_data) {
 	RendererCompositorStorage *comp_storage = RendererCompositorStorage::get_singleton();
 
@@ -309,12 +328,29 @@ void RendererSceneRenderRD::_process_compositor_effects(RSE::CompositorEffectCal
 	ERR_FAIL_COND(!comp_storage->is_compositor(p_render_data->compositor));
 
 	Vector<RID> re_rids = comp_storage->compositor_get_compositor_effects(p_render_data->compositor, p_callback_type, true);
+	const char *callback_type_name = _gdgs_debug_compositor_callback_type_name(p_callback_type);
+	const bool is_reflection_probe = p_render_data->reflection_probe.is_valid();
+	const uint32_t view_count = p_render_data->scene_data != nullptr ? p_render_data->scene_data->view_count : 0;
+	const uint64_t callback_batch_begin_usec = OS::get_singleton()->get_ticks_usec();
 
-	for (RID rid : re_rids) {
+	print_line(vformat("[gdgs][godot] compositor callback batch begin type=%s effects=%d compositor_valid=%s reflection_probe=%s view_count=%u", callback_type_name, re_rids.size(), p_render_data->compositor.is_valid() ? "true" : "false", is_reflection_probe ? "true" : "false", view_count));
+	if (re_rids.size() > 1) {
+		print_line(vformat("[gdgs][godot] compositor callback batch warning type=%s chained_effects=%d", callback_type_name, re_rids.size()));
+	}
+
+	for (int i = 0; i < re_rids.size(); i++) {
+		RID rid = re_rids[i];
 		Callable callback = comp_storage->compositor_effect_get_callback(rid);
 		Array arr = { p_callback_type, p_render_data };
+		const uint64_t callback_begin_usec = OS::get_singleton()->get_ticks_usec();
+		print_line(vformat("[gdgs][godot] compositor callback enter type=%s effect_index=%d effect_rid=%llu", callback_type_name, i, rid.get_id()));
 		callback.callv(arr);
+		const uint64_t callback_duration_usec = OS::get_singleton()->get_ticks_usec() - callback_begin_usec;
+		print_line(vformat("[gdgs][godot] compositor callback exit type=%s effect_index=%d effect_rid=%llu duration_usec=%llu", callback_type_name, i, rid.get_id(), callback_duration_usec));
 	}
+
+	const uint64_t callback_batch_duration_usec = OS::get_singleton()->get_ticks_usec() - callback_batch_begin_usec;
+	print_line(vformat("[gdgs][godot] compositor callback batch end type=%s effects=%d duration_usec=%llu", callback_type_name, re_rids.size(), callback_batch_duration_usec));
 }
 
 void RendererSceneRenderRD::_render_buffers_ensure_screen_texture(const RenderDataRD *p_render_data) {
