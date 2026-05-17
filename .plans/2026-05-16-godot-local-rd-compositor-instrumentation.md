@@ -287,6 +287,50 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ---
 
+### Task 12: QA isolate the first toxic projection readback checkpoint
+
+**Bead ID:** `oc-15g`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-15g` and keep the investigation projection-only. Run the minimal readback checkpoint sequence in this order: `disabled`, `histogram_header_only`, `projection_probe_only`, `sort_keys_sentinel_only`, `sort_values_sentinel_only`, `culled_splats_sentinel_only`, and only rerun the first failing one with `--accurate-breadcrumbs` if needed. Determine whether `projection_only` still crashes with readbacks disabled, and if not, which exact readback is the first detonator. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-15g` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA ran the new checkpoint-isolation pass on the same updated instrumentation branches in both repos, again using the preserved dev5 repro runtime for comparability and to avoid the already-documented managed-runtime drift: `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64` (`4.7.dev5.official.a8643700c`). Because the existing stage harness did not yet expose `debug_projection_readback_checkpoint`, QA used a temporary wrapper harness at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` that only threads the new checkpoint enum into the already-established repro scene without modifying repo code. Exact runs: `projection_only + disabled`; `projection_only + disabled + --accurate-breadcrumbs`, both from artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-readback-checkpoint-dev5-20260517-172304/`, and both exited `134`. Per the minimum-runs constraint, QA stopped there because the very first checkpoint in the required order already failed. The important answer is sharper than expected: `projection_only` still crashes even with the entire post-projection readback package disabled, so QA did **not** isolate a toxic readback checkpoint at all. Both logs show the disabled checkpoint path itself completing (`projection_post_dispatch_checkpoint_begin` → `projection_post_dispatch_checkpoint_disabled` → `projection_post_dispatch_checkpoint_end`) before the later failure, while the broader signature remains unchanged: projection dispatch still uses the stable `128`-byte / `32`-float contract with group count `(1060, 1, 1)`, compositor still returns through `raster_only_no_writeback_gate`, failure still first surfaces at `fence_wait`, and lost-device breadcrumbs still collapse to `BLIT_PASS`. That demotes `histogram_header_only`, `projection_probe_only`, `sort_keys_sentinel_only`, `sort_values_sentinel_only`, and `culled_splats_sentinel_only` as candidate first detonators in the current repro. Durable notes and artifact references were added to `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`).
+
+---
+
+### Task 13: Add projection-internal GPU-side guards and sentinel evidence
+
+**Bead ID:** `oc-33u`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-33u` and keep the investigation projection-internal. Add high-signal GPU-side guards, sentinels, or shader-side diagnostics inside the projection lane so QA can determine whether projection is immediately violating bounds or producing obviously bad internal state before later fence/device-loss fallout. Prefer small reversible instrumentation over speculative fixes; keep the staged repro model intact; update this plan with actual results; run relevant validation; commit/push the updates; and close bead `oc-33u` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- projection shader/runtime files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added projection-only GPU-side guard/sentinel instrumentation on the active GDGS instrumentation branch rather than broadening the repro. The projection probe SSBO was expanded from 13 to 24 words so the shader can now persist extra evidence without depending on the full CPU readback package. New words record `error_flags`, total guard aborts, the first failing stage/id/value payload, `max_requested_sort_end`, `max_requested_tile_id`, and per-class counts for non-finite failures, sort-overflow guards, and tile/rect guards. Inside `gsplat_projection.glsl`, the projection lane now records and early-outs on non-finite view/clip/covariance/eigen/image/radius/conic/color/view-depth states, validates rect bounds, safely reserves `sort_buffer_size` via an atomic compare-exchange loop instead of blindly overrunning it, and refuses tile-id writes outside the seeded tile capacity while recording the offending values in the probe. On the GDScript side, the renderer seeds the expanded probe layout and now decodes/logs the new guard fields so future `projection_probe_only` or full-package runs can tell whether projection immediately hit guarded bad state even if later fence/device-loss fallout still happens. Validation run on the touched GDGS files: `git diff --check`; `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd --check-only --quit`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit`; `godot --headless --path . --import`; and `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path . --import`. This keeps the investigation projection-internal, adds small reversible guards instead of speculative fixes, and sets up the next QA pass to ask whether `projection_only` now survives long enough to emit guarded probe evidence or whether the device still dies with all new guard counters remaining clean.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
