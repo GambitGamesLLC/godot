@@ -425,6 +425,50 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ---
 
+### Task 18: QA correlate projection resource lifetime and cleanup hazard evidence
+
+**Bead ID:** `oc-x6n`  
+**SubAgent:** `primary` (for `qa`)  
+**Role:** `qa`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-x6n` and keep the investigation projection-only. Run a focused `projection_only` repro using the new lifetime/cleanup diagnostics and determine whether the projection resource snapshot remains stable from `projection_begin` through `projection_post_dispatch_checkpoint_end`, or whether any cleanup request, pending cleanup flush, rebuild, RID alias event, or resource-identity change involving those exact projection-owned resources occurs before the later `fence_wait` / `BLIT_PASS` device-loss collapse. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-x6n` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA ran the minimum valid host-Vulkan repro on the updated instrumentation branches using the preserved dev5 runtime (`/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`) with `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`, stage `projection_only`, and readback checkpoint `disabled`. Durable notes/artifacts were appended to `REF-07` under artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-vulkan-dev5-20260517-18492290849/`. The useful answer is partial but clear: no `request_cleanup`, `flush_pending_cleanup`, post-dispatch `cleanup_state`, or second `rebuild_gpu_state` event was logged between `projection_begin` and `projection_post_dispatch_checkpoint_end`; `gpu_generation` stayed `1`, `projection_dispatch_serial` stayed `1`, `cleanup_request_serial` stayed `0`, and `cleanup_request_reason` stayed `none` before the later `fence_wait` / `BLIT_PASS` device-loss collapse. However, the exact projection-resource identity comparison requested by this task is blocked on a new instrumentation defect discovered during QA: both `gaussian_gpu_state_cache.gd` and `gaussian_renderer.gd` currently throw `Invalid type in function '_rid_string' ... Cannot convert argument 1 from Callable to RID` inside `_projection_resource_snapshot()`, so every logged `projection_resource_snapshot` degraded to `{}` and QA could not truthfully compare the exact RID snapshot or alias set across `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end`. This closes the QA evidence package for the current branch state because the cleanup-timing correlation question is answered as a negative result, the remaining gap is now explicitly narrowed to the broken snapshot helper itself, and the next recommendation is to repair that helper before spending more runs on the same lifetime lane.
+
+---
+
+### Task 19: Fix the projection resource snapshot helper and rerun lifetime correlation
+
+**Bead ID:** `oc-8ao`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-8ao` and keep the investigation projection-only. Fix the broken `_projection_resource_snapshot()` / RID-string helper path so the resource snapshot and alias diagnostics become trustworthy, while keeping the work diagnostic and reversible. Update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-8ao` with a clear reason if complete. The immediate follow-up QA goal is to rerun the same `projection_only + disabled` lifetime correlation with a functioning snapshot path.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- projection runtime files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Root cause confirmed from the Task 18 QA evidence: the new projection snapshot helper was still passing `state.pipelines[...]` through `_rid_string(rid: RID)`, but in this codepath those entries are `Callable` dispatch closures returned by `state.context.create_pipeline(...)`, not `RID` values. That made `_projection_resource_snapshot()` throw `Cannot convert argument 1 from Callable to RID`, which collapsed every logged `projection_resource_snapshot` to `{}` and blocked the intended lifetime/alias comparison. The fix stayed diagnostic and reversible: in both `addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd` and `addons/gdgs/runtime/render/gaussian_renderer.gd`, coder split pipeline serialization from RID serialization by (1) keeping `_rid_string()` strictly RID-only, (2) adding `_descriptor_set_rid_string()` for the real descriptor-set RIDs, and (3) adding `_pipeline_snapshot_string()` that records pipeline presence as `Callable(valid=true|false)` instead of pretending pipeline closures are RIDs. The snapshot helper was also tightened so alias reporting groups the tracked projection-owned resource RIDs by member name and only reports duplicate groups, which is more truthful for the next lifetime rerun than the earlier flat duplicate list. Validation run: `timeout 15s /home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit` exited `0` with no script parse/type errors from the touched files, plus a small static sanity check confirmed the new helper paths landed in both runtime files. Follow-up QA is still required to rerun the same `projection_only + disabled` Vulkan pass and compare the now-working snapshot payloads at `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end`.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

@@ -640,3 +640,276 @@ Best next suspects after this QA rerun:
 1. whether the probe SSBO itself is actually visible/coherent when read back in this compositor path, since the all-zero probe may reflect “never observed” rather than “definitively no work happened”
 2. post-projection resource lifetime / aliasing / synchronization hazards that are not covered by the current guard classes
 3. deeper engine/backend investigation around why the projection lane can submit and barrier successfully, yet the device is still lost by the next fence and later collapses to `BLIT_PASS`
+
+## Follow-up QA pass for bead `oc-2cr` — projection probe visibility vs scratch mirror visibility
+
+### Scope
+
+Compare the two minimum projection-only checkpoints requested after bead `oc-lnp` added the scratch-mirror instrumentation path:
+
+- `projection_only + projection_probe_only`
+- `projection_only + scratch_projection_mirror_only`
+
+The question for this pass was whether the known-good scratch probe buffer would surface projection activity / stage bits even when the main projection probe remained zero or otherwise unhelpful.
+
+Branches / commits under test:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `61ab50f3`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `7f569a8`
+
+### Runtime used
+
+To stay directly comparable to the earlier valid Vulkan repro package and avoid the already-documented managed-runtime drift / dummy-renderer trap, QA again used the preserved dev5 repro binary on the host GPU path:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`
+- version: `4.7.dev5.official.a8643700c`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Harness note
+
+The existing temporary checkpoint harness at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` had not yet been updated with the new `scratch_projection_mirror_only` enum value. QA patched only that temp harness (not repo code) to map `scratch_projection_mirror_only` to checkpoint value `7`, then reused the same projection-only checkpoint runner flow as the earlier focused QA passes.
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-mirror-vulkan-dev5-20260517-18222280927/`
+
+Key files:
+
+- summary: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-mirror-vulkan-dev5-20260517-18222280927/run_summary.tsv`
+- probe log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-mirror-vulkan-dev5-20260517-18222280927/logs/projection_only__projection_probe_only.normal.log`
+- mirror log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-mirror-vulkan-dev5-20260517-18222280927/logs/projection_only__scratch_projection_mirror_only.normal.log`
+
+### Exact runs performed
+
+1. `projection_only + projection_probe_only` — exit `134`
+2. `projection_only + scratch_projection_mirror_only` — exit `134`
+
+Per the minimum-runs constraint, QA did not add an `--accurate-breadcrumbs` rerun because the two requested checkpoints already produced a directly comparable answer.
+
+### Findings
+
+#### Both checkpoints still reproduce the same later failure signature
+
+Both runs reach the same stable projection launch chain before the later failure:
+
+1. `renderer stage=prepared ... projection_push_constant_bytes=128 ... projection_group_count=1060 ... tile_bounds_capacity=11664 ... sort_capacity=2711230`
+2. `renderer stage=projection_begin ... push_constant_floats=32 ... max_tile_id=11663 ... projection_dispatch_serial=1`
+3. `rd dispatch pipeline=gsplat_projection push_constant_bytes=128 direct=true group_count=(1060, 1, 1)`
+4. `rd barrier complete pipeline=gsplat_projection`
+5. `renderer stage=projection_end ... projection_dispatch_serial=1`
+6. checkpoint-specific readback begin/end markers log
+7. `renderer stage=projection_only_gate`
+8. compositor returns through `raster_only_no_writeback_gate`
+9. failure still later surfaces at `fence_wait`
+10. lost-device breadcrumbs still collapse first to `BLIT_PASS`
+
+So adding the scratch mirror checkpoint does **not** change the later failure location in this repro package.
+
+#### `projection_probe_only` stays all-zero / non-observing
+
+The main projection-probe path still returns an all-zero package even though the readback helper runs to completion:
+
+- `probe_words=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]`
+- `probe_invocations=0`
+- `probe_visible_splats=0`
+- `probe_duplicated_splats=0`
+- `probe_emitted_sort_elements=0`
+- `probe_error_flags_hex=0x00000000`
+- `probe_first_failure_stage_name=none`
+- `probe_guard_abort_count=0`
+- `probe_sort_overflow_guard_count=0`
+- `probe_tile_guard_count=0`
+
+So this pass does not overturn the earlier observation that the main projection probe is still effectively unreadable / non-observing in the failing Vulkan path.
+
+#### The scratch mirror path also stays all-zero; it does not reveal hidden projection activity
+
+The new scratch-mirror-only checkpoint was supposed to answer whether projection activity became visible on the known-good scratch probe buffer even when the main projection probe stayed zero. In this run, it did **not**.
+
+The mirror readback completes, but the scratch buffer is entirely zeroed rather than carrying either the normal scratch positive-control signature or the mirrored projection counters/stage bits:
+
+- `scratch_words=0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000`
+- `scratch_signature_ok=false`
+- `scratch_projection_invocations=0`
+- `scratch_projection_visible_splats=0`
+- `scratch_projection_stage_bits=0`
+- `scratch_projection_stage_bits_hex=0x00000000`
+- `scratch_projection_entered=false`
+- `scratch_projection_visible_path=false`
+- `scratch_projection_culled_write=false`
+- `scratch_projection_sort_reserved=false`
+- `scratch_projection_sort_written=false`
+- `scratch_projection_max_requested_sort_end=0`
+
+That means the known-good scratch buffer path does **not** currently surface projection activity/stage bits that the main projection probe misses. In this failing path, both evidence buffers remain zero-valued.
+
+### Updated interpretation
+
+This is another useful negative result.
+
+The new mirror path does **not** provide the hoped-for separation between “projection worked but the main probe is incoherent” and “projection poisoned broader post-dispatch state before either probe became observably useful.” Instead, both the dedicated projection probe and the scratch-mirror checkpoint return zero-valued evidence while the later failure signature remains unchanged.
+
+That keeps the leading suspicion on projection-triggered synchronization / lifetime / backend fallout or on broader probe/read visibility incoherency that affects both evidence paths under the failing projection workload.
+
+### Next recommendation
+
+Do not spend another QA pass repeating the same two checkpoints unless coder work materially changes the projection-side evidence path.
+
+Best next lane from this result:
+
+1. inspect why the projection dispatch can complete with barrier logging, yet both projection-owned and scratch-mirror readbacks remain zero-valued under the failing workload
+2. keep investigating post-dispatch synchronization / lifetime hazards around the projection path
+3. if a coder adds a third evidence path that avoids the current readback/coherency ambiguity, compare it against these two zero-valued baselines
+
+
+## Follow-up QA pass for bead `oc-x6n` — projection lifetime / cleanup hazard correlation
+
+### Scope
+
+Run the minimum projection-only Vulkan repro after bead `oc-hm0` added projection resource snapshot, cleanup-request, cleanup-flush, cleanup-state, rebuild, and alias breadcrumbs. The question for this pass was whether the exact projection-owned resource set stays stable from `projection_begin` through `projection_post_dispatch_checkpoint_end`, or whether any cleanup / rebuild / alias / identity-change event lands before the later `fence_wait` / `BLIT_PASS` collapse.
+
+Branches / commits under test:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `5c67b6be`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `e610c25`
+
+### Runtime used
+
+To stay comparable to the earlier valid Vulkan evidence and avoid the already-documented managed-runtime drift / dummy-renderer trap, QA again used the preserved dev5 repro binary on the host GPU path:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`
+- version: `4.7.dev5.official.a8643700c`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-vulkan-dev5-20260517-18492290849/`
+
+Key files:
+
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-vulkan-dev5-20260517-18492290849/logs/projection_only__disabled.normal.log`
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-vulkan-dev5-20260517-18492290849/context.txt`
+
+### Exact runs performed
+
+1. `projection_only + disabled` via host Vulkan path — abort / device-loss (`signal 4`; later `fence_wait` + `BLIT_PASS` in log)
+
+Per the minimum-runs constraint, QA did not add an `--accurate-breadcrumbs` rerun because the lifetime/cleanup answer was already clear from the first valid Vulkan pass.
+
+### Findings
+
+#### No cleanup request / flush / post-dispatch rebuild event appears before the later failure
+
+The lifetime/control serials stay flat across the critical projection window:
+
+1. `gpu_state_cache rebuild_gpu_state ... gpu_generation=1 projection_dispatch_serial=0`
+2. `renderer stage=projection_begin ... gpu_generation=1 cleanup_request_serial=0 cleanup_request_reason=none projection_dispatch_serial=1`
+3. `renderer stage=projection_end ... gpu_generation=1 cleanup_request_serial=0 cleanup_request_reason=none projection_dispatch_serial=1`
+4. `renderer stage=projection_post_dispatch_checkpoint_begin ... checkpoint=disabled`
+5. `renderer stage=projection_post_dispatch_checkpoint_disabled ... checkpoint=disabled`
+6. `renderer stage=projection_post_dispatch_checkpoint_end ... checkpoint=disabled gpu_generation=1 projection_dispatch_serial=1`
+7. later `fence_wait` still fails and lost-device breadcrumbs still collapse to `BLIT_PASS`
+
+Within that run, QA did **not** observe:
+
+- any `gpu_state_cache request_cleanup ...`
+- any `gpu_state_cache flush_pending_cleanup ...`
+- any `gpu_state_cache cleanup_state ...` after the initial pre-dispatch rebuild/setup
+- any second `rebuild_gpu_state ...` before the later device-loss path
+
+So the available serial/generation evidence does **not** show cleanup timing or a mid-flight rebuild racing the failing projection dispatch.
+
+#### Exact projection resource snapshot comparison is blocked by an instrumentation bug on this branch state
+
+This pass also found a new instrumentation defect that matters for interpretation.
+
+The snapshot helper invoked from both `gaussian_gpu_state_cache.gd` and `gaussian_renderer.gd` throws before it can emit the intended RID inventory:
+
+- `SCRIPT ERROR: Invalid type in function '_rid_string' ... Cannot convert argument 1 from Callable to RID.`
+- first seen from `GaussianGpuStateCache._projection_resource_snapshot (...)` during `rebuild_gpu_state`
+- repeated from `GaussianRenderer._projection_resource_snapshot (...)` at `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end`
+
+Because of that helper failure, every logged `projection_resource_snapshot` in this QA run degraded to `{}` instead of the intended RID map, so QA could **not** directly compare:
+
+- projection descriptor-set RID
+- scratch descriptor-set RID
+- projection / scratch pipeline RIDs
+- projection probe / scratch probe / histogram / sort / culled / tile / render / depth resource RIDs
+- alias detection output across those exact projection-owned resources
+
+So the run answers the cleanup/rebuild timing part more strongly than the exact resource-identity/alias part.
+
+#### Failure signature remains unchanged
+
+Even with the post-dispatch checkpoint disabled and no cleanup activity observed, the later failure signature is still the same:
+
+- projection launch contract remains `128` bytes / `32` floats / group count `(1060, 1, 1)`
+- `projection_only_gate` is reached
+- compositor returns through `raster_only_no_writeback_gate`
+- later `fence_wait` fails
+- lost-device breadcrumbs still collapse to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass gives a useful partial answer with an explicit caveat.
+
+Supported by the run:
+
+- there is no logged cleanup request, pending-cleanup flush, or second rebuild between `projection_begin` and `projection_post_dispatch_checkpoint_end`
+- `gpu_generation` stays `1`
+- `projection_dispatch_serial` stays `1`
+- `cleanup_request_serial` stays `0`
+- `cleanup_request_reason` stays `none`
+- the later failure still surfaces at `fence_wait` / `BLIT_PASS`
+
+Not supported because of the snapshot-helper bug:
+
+- exact RID-by-RID stability comparison across `projection_begin` → `projection_end` → `projection_post_dispatch_checkpoint_end`
+- direct alias detection / resource-identity change claims for the exact projection-owned resources listed by the new instrumentation
+
+### Next recommendation
+
+Fix the snapshot helper first. Right now the new lifetime lane already suggests that cleanup timing is **not** the first visible problem, but the resource-identity / alias question is only partially answered because the supposed RID snapshot path emits `{}` after a `Callable`→`RID` type error.
+
+Best next step:
+
+1. repair `_projection_resource_snapshot()` so descriptor-set / pipeline / buffer / texture RIDs serialize cleanly instead of faulting on the pipeline entries
+2. rerun the same single `projection_only + disabled` Vulkan pass
+3. compare the exact snapshot payloads at `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end` before broadening further
+
+## Coder follow-up for bead `oc-8ao` — snapshot helper repair landed
+
+### What changed
+
+Coder confirmed the Task 18 failure mode: the new projection snapshot helper was still trying to stringify `state.pipelines[...]` through `_rid_string(rid: RID)`, but those pipeline entries are `Callable` dispatch closures in this GDGS codepath, not `RID` values. That is the direct reason the earlier QA run logged `Cannot convert argument 1 from Callable to RID` and emitted `{}` for every `projection_resource_snapshot`.
+
+The fix landed in both runtime copies of the helper:
+
+- `addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd`
+- `addons/gdgs/runtime/render/gaussian_renderer.gd`
+
+The repair keeps the instrumentation diagnostic and reversible:
+
+- `_rid_string()` stays RID-only
+- `_descriptor_set_rid_string()` serializes the real descriptor-set RIDs
+- `_pipeline_snapshot_string()` now records projection / scratch pipeline presence as `Callable(valid=true|false)` instead of pretending those entries are RIDs
+- alias reporting now groups duplicate tracked resource RIDs by member name via `alias_groups` instead of the earlier flat duplicate list
+
+### Validation recorded by coder
+
+Coder ran the preserved dev5 binary against the GDGS project with a lightweight headless load check:
+
+- `timeout 15s /home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit`
+- exit status: `0`
+
+No script parse/type error from the touched snapshot helper path was reported during that validation run.
+
+### QA impact
+
+This coder pass does **not** replace the earlier QA result; it clears the instrumentation defect that blocked the exact resource-identity comparison. The next QA rerun should repeat the same minimum valid host-Vulkan pass:
+
+1. `projection_only`
+2. readback checkpoint `disabled`
+3. same preserved dev5 runtime / host Vulkan launch path used in the earlier valid repro package
+
+That rerun should now check whether the logged `projection_resource_snapshot` payloads at `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end` remain stable and whether any duplicate RID groups are reported before the later `fence_wait` / `BLIT_PASS` collapse.
