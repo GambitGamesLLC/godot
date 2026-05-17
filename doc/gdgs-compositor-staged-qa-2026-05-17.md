@@ -224,3 +224,86 @@ Until that is repaired, the evidence package supports:
 - the new projection readback/assertion evidence shows `sort_buffer_size=0` within allocated capacity before the later device-loss path
 
 But it does **not yet** support the stronger claim that a valid scratch dispatch has been demonstrated safe.
+
+## Follow-up QA pass for bead `oc-6li` — scratch positive-control fix verified
+
+### Scope
+
+Rerun the minimum staged compositor isolation after bead `oc-x5q` fixed the scratch positive-control packaging/resource path.
+
+Branches / commits under test:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `559b31ec`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `4523691`
+
+### Runtime used
+
+To keep the result directly comparable to the earlier projection-first evidence package, QA used the preserved repro binary again:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`
+- version: `4.7.dev5.official.a8643700c`
+
+This was a deliberate minimum-rerun choice, not a new runtime-drift problem. Bead `oc-x5q` had already validated that the scratch probe resource now resolves on both the managed runtime and the preserved dev5 binary; this QA pass only needed the comparable repro binary to answer the scratch-vs-projection question cleanly.
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-scratch-fixed-dev5-20260517-151908/`
+
+Key files:
+
+- summary: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-scratch-fixed-dev5-20260517-151908/run_summary.tsv`
+- scratch log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-scratch-fixed-dev5-20260517-151908/logs/scratch_only.normal.log`
+- projection log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-scratch-fixed-dev5-20260517-151908/logs/projection_only.normal.log`
+- accurate projection log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-scratch-fixed-dev5-20260517-151908/logs/projection_only.accurate.log`
+
+### Exact stages run
+
+1. `scratch_only` — exit `0`
+2. `projection_only` — exit `134` / device-loss crash
+3. `projection_only --accurate-breadcrumbs` — exit `134` / device-loss crash
+
+### Findings
+
+#### `scratch_only` is now a real compute-dispatch positive control
+
+The scratch stage no longer degrades into a null-pipeline/no-op path. The fresh logs show a valid dispatch, barrier, and nonzero CPU readback signature:
+
+- `renderer stage=scratch_dispatch_begin ... scratch_probe_bytes=16 scratch_shader_valid=true scratch_buffer_valid=true`
+- `rd dispatch pipeline=gsplat_scratch_probe push_constant_bytes=0 direct=true group_count=(1, 1, 1)`
+- `rd barrier complete pipeline=gsplat_scratch_probe`
+- `renderer stage=scratch_post_dispatch ... scratch_words=0x47534744,0x00000001,0x00000001,0x5a5aa5a5 scratch_signature_ok=true scratch_probe_valid=true histogram_valid=true`
+
+That confirms the intended positive-control answer: a real compositor-path compute dispatch can execute successfully in this staged harness, and the expected scratch readback is nonzero and stable.
+
+#### `projection_only` still remains the first meaningful failing stage
+
+The projection pass still reproduces the failure in both the normal and accurate reruns.
+
+Shared high-signal chain from both logs:
+
+1. `renderer stage=projection_begin ... push_constant_bytes=128 ... expected_group_count=1060 ... sort_capacity=2711230`
+2. `rd dispatch pipeline=gsplat_projection push_constant_bytes=128 direct=true group_count=(1060, 1, 1)`
+3. `rd barrier complete pipeline=gsplat_projection`
+4. `renderer stage=projection_end ... projection_group_count=1060`
+5. immediate post-dispatch evidence still logs `sort_buffer_size=0 sort_capacity=2711230 sort_within_capacity=true culled_buffer_valid=true sort_keys_valid=true sort_values_valid=true histogram_valid=true`
+6. the failure still surfaces at `fence_wait`
+7. the last known lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This rerun closes the earlier positive-control gap.
+
+The evidence package now supports the stronger staged conclusion:
+
+- `scratch_only` is a valid known-safe compositor-path compute dispatch on this branch state and runtime.
+- `projection_only` still remains the first meaningful failing stage.
+- therefore the current failure is no longer well-explained by the broad theory that *any* real compute dispatch inside this compositor path is hazardous; the leading suspect list should stay centered on projection-specific work or on synchronization/lifetime fallout triggered specifically after projection.
+
+### Next recommendation
+
+Do not broaden the repro again yet. The next lane should stay projection-focused:
+
+1. projection output writes / bounds assumptions
+2. projection pipeline layout / push-constant contract at the observed `128` bytes / `32` floats
+3. synchronization or resource-lifetime fallout immediately after projection dispatch / readback
+4. only after that, revisit broader engine/backend compositor-path handling if new evidence forces it
