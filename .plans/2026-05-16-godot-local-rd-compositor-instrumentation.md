@@ -202,9 +202,9 @@ So the next lane should be controlled instrumentation and staged simplification,
 ### Task 8: QA rerun after the scratch positive-control fix
 
 **Bead ID:** `oc-6li`  
-**SubAgent:** `primary` (for `qa`)  
-**Role:** `qa`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-6li` and rerun the staged compositor QA after the scratch positive-control fix. Focus on `scratch_only`, `projection_only`, and `projection_only --accurate-breadcrumbs` if needed. Confirm whether the scratch probe now executes as a real compute dispatch with the expected nonzero signature/readback, and whether `projection_only` still remains the first meaningful failing stage. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-6li` with a clear reason if the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -224,9 +224,9 @@ So the next lane should be controlled instrumentation and staged simplification,
 ### Task 9: Deep-inspect projection dispatch contract and bounds/lifetime fallout
 
 **Bead ID:** `oc-wz6`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-wz6` and prepare the next diagnostic slice focused narrowly on the projection pass. Deep-inspect the projection dispatch contract, projection output writes/bounds assumptions, and immediate post-dispatch lifetime/synchronization fallout. Prefer high-signal diagnostics/assertions/readbacks over speculative fixes. If possible, add instrumentation that can distinguish bad projection outputs from later consumption/sync failure without broadening back into later-stage guesswork. Keep changes diagnostic and reversible, update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-wz6` with a clear reason if complete.
 
 **Folders Created/Deleted/Modified:**
@@ -240,6 +240,50 @@ So the next lane should be controlled instrumentation and staged simplification,
 **Status:** ✅ Complete
 
 **Results:** Kept this slice narrowly on projection and its immediate aftermath, without attempting a crash fix. The companion GDGS branch stayed on `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` and landed commit `ba83c1c` (`debug: deepen projection dispatch diagnostics`). New diagnostics/assertions added in the GDGS repo: (1) explicit CPU-side contract assertions for projection-owned upload/layout assumptions (`Splat` stride `240` bytes / `60` floats, `RasterizeData` stride `64` bytes / `16` floats, instance-id upload width, instance-transform upload width, existing `128`-byte / `32`-float push-constant contract, and projection-probe RID validity); (2) a dedicated projection probe SSBO bound only to `gsplat_projection`, seeded before dispatch and atomically filled by the shader with invocation/visibility/duplication counts, emitted sort-element totals, max exclusive sort end, max tile id, max tiles touched, and zero-tile splat count; and (3) stronger immediate post-dispatch readback that now logs the projection probe words plus first-word snapshots of `sort_keys`, `sort_values`, and `culled_splats` after projection, instead of only logging `sort_buffer_size` and RID validity. This matters because the next QA pass can now distinguish several cases that previously collapsed together: “projection emitted nothing but stayed within contract,” “projection duplicated splats and produced plausible bounded outputs,” “projection exceeded sort/tile bounds assumptions before later stages ever touched the data,” or “projection outputs look sane and the device is still lost later, which pushes suspicion toward post-projection lifetime/synchronization fallout instead of raw projection writes.” Validation run for the touched repo-local files: `git diff --check`; `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd --check-only --quit`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit`; and `godot --headless --path . --import`. No Godot engine source files changed in this pass; the Godot repo changes are the plan/doc handoff updates only.
+
+---
+
+### Task 10: QA projection probe readback after deep projection diagnostics
+
+**Bead ID:** `oc-4wb`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-4wb` and rerun the focused projection QA using the new projection-probe/readback instrumentation. Prioritize `projection_only` and `projection_only --accurate-breadcrumbs`, and capture whether duplicated splats or sort-key writes occur at all, whether `probe_max_sort_end` and `probe_max_tile_id` stay within capacity, whether sentinels show outputs were written, and whether the evidence points to immediate projection bounds violation versus later sync/lifetime fallout. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-4wb` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran only the two requested focused repros on the updated instrumentation branches, again using the preserved dev5 repro runtime for comparability and to avoid the already-documented managed-runtime drift: `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64` (`4.7.dev5.official.a8643700c`). Exact runs: `projection_only` and `projection_only --accurate-breadcrumbs`, both from artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-probe-dev5-20260517-154354/`, and both exited `134`. The important new result is tighter than the prior `oc-6li` evidence: the projection dispatch contract still looks stable before readback (`push_constant_bytes=128`, `push_constant_floats=32`, `projection_group_count=1060`, `tile_bounds_capacity=2952`, `sort_capacity=2711230`, dispatch + barrier + `projection_end` all log), but the new immediate post-dispatch readback package never successfully emits `projection_post_dispatch`. Instead, the failure now surfaces inside `_log_projection_post_dispatch_evidence(...)` itself while attempting the first blocking `buffer_get_data(...)` calls (backtrace hits lines `322` histogram readback and `325` projection-probe readback), with `fence_wait` failure and lost-device breadcrumbs still collapsing to `BLIT_PASS`. That means this QA pass did **not** obtain concrete probe/readback values for duplicated splats, emitted sort elements, `probe_max_sort_end`, `probe_max_tile_id`, or the first-word sentinel snapshots of `sort_keys`, `sort_values`, and `culled_splats`; the CPU never received them before the device-loss path tripped. So the evidence package is complete in the narrower sense requested by Task 10: it does **not** show a logged immediate projection bounds violation, and it points more strongly toward projection-triggered synchronization/lifetime/device-loss fallout that becomes visible at the first blocking readback fence. Durable notes and artifact references were appended to `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`).
+
+---
+
+### Task 11: Split projection post-dispatch readbacks into minimal checkpoints
+
+**Bead ID:** `oc-bjw`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-bjw` and keep the investigation projection-only. Split the current post-projection readback package into minimal, individually togglable checkpoints so QA can test whether the device is already lost before any readback, or whether one specific readback is the first detonator. Prioritize isolated stages for: histogram header only, projection probe only, `sort_keys` sentinel only, `sort_values` sentinel only, and `culled_splats` sentinel only. Keep the changes diagnostic and reversible, update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-bjw` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- projection-path source files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this pass projection-only and split the immediate post-dispatch readback bundle into a dedicated, minimal checkpoint control surface instead of broadening instrumentation further. In the GDGS repo, added a new `ProjectionReadbackCheckpoint` debug enum in `addons/gdgs/runtime/render/gaussian_renderer.gd`, threaded it through `addons/gdgs/runtime/render/gaussian_render_manager.gd`, and exposed it on the compositor effect via `addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd` as `debug_projection_readback_checkpoint`. The control keeps the old `full_package` behavior available for comparison, adds an explicit `disabled` / no-readback mode so QA can prove whether projection still detonates before any CPU readback at all, and adds the five requested individually togglable minimal checkpoints: `histogram_header_only`, `projection_probe_only`, `sort_keys_sentinel_only`, `sort_values_sentinel_only`, and `culled_splats_sentinel_only`. Each checkpoint now logs a begin marker before the targeted `buffer_get_data(...)` call and an end marker only if that specific readback returns, which matters because QA can now isolate the first detonating fence/readback instead of losing all evidence inside the old combined package. Validation run for the touched files stayed repo-local and reversible: `git diff --check`; `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/render/gaussian_render_manager.gd addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_render_manager.gd --check-only --quit`; `godot --headless --path . --script addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd --check-only --quit`; and `godot --headless --path . --import`. No crash fix was attempted; this pass is strictly diagnostic and reversible.
 
 ---
 
