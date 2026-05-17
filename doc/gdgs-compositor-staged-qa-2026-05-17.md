@@ -124,3 +124,103 @@ Made less likely by this pass:
 2. projection pipeline layout / push constant contract (`128` bytes in the observed dispatch)
 3. hazards around resources consumed after `projection_only_gate`, even though later GDGS passes are skipped
 4. why device-loss breadcrumbs still flatten to `BLIT_PASS` after the fence failure, despite the tighter stage isolation
+
+## Follow-up QA pass for bead `oc-sib` — scratch control + tighter projection diagnostics
+
+### Scope
+
+Rerun the staged compositor repro after bead `oc-dew` added:
+
+- `scratch_only` trivial dispatch control
+- projection precondition assertions
+- immediate post-projection readback / RID-validity logging
+
+### Runtime note / drift encountered
+
+The current managed `godot` on this machine has drifted to:
+
+- `/home/derrick/.local/bin/godot` → `Godot 4.6.2.stable.official.71f334935`
+
+That runtime is not suitable for this rerun because the updated GDGS branch now tries to load the new scratch probe shader during GPU-state rebuild and immediately logs:
+
+- `No loader found for resource: res://addons/gdgs/runtime/render/shaders/compute/gsplat_scratch_probe.glsl`
+
+To avoid reporting a false stage regression from the wrong runtime, QA used the preserved repro binary instead:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`
+
+### Artifact roots
+
+- normal run: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-scratch-dev5-20260517-124210/`
+- accurate rerun: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-scratch-dev5-accurate-20260517-124210/`
+
+### Exact stages run
+
+1. `callback_only` — exit `0`
+2. `prepared_no_dispatch` — exit `0`
+3. `scratch_only` — exit `0`
+4. `projection_only` — exit `134` / device-loss crash
+5. `projection_only` with `--accurate-breadcrumbs` — exit `134` / device-loss crash
+
+### Findings
+
+#### `callback_only` and `prepared_no_dispatch` still survive
+
+The first two pre-dispatch boundaries remain stable on the dev5 runtime. That preserves the earlier narrowing: callback entry and no-dispatch setup are still not the first trigger.
+
+#### `scratch_only` returns cleanly, but the trivial scratch dispatch did **not** actually execute a valid shader pipeline
+
+This matters. The stage exits `0`, but the logs show the new scratch probe shader failed to load during GPU-state rebuild:
+
+- `No loader found for resource: res://addons/gdgs/runtime/render/shaders/compute/gsplat_scratch_probe.glsl`
+- `SCRIPT ERROR: Cannot call method 'get_spirv' on a null value.`
+- later, during the staged scratch pass:
+  - `rd dispatch pipeline=gsplat_scratch_probe push_constant_bytes=0 direct=true group_count=(1, 1, 1)`
+  - `ERROR: Parameter "pipeline" is null.`
+  - `ERROR: Parameter "uniform_set" is null.`
+  - `ERROR: No compute pipeline was set before attempting to draw.`
+
+The immediate scratch readback stays all zeros on repeated callbacks:
+
+- `scratch_words=0x00000000,0x00000000,0x00000000,0x00000000`
+
+So `scratch_only` is only a partial control result right now: it *survives*, but it does **not** yet prove that a known-good compositor-path compute dispatch can execute safely. The current scratch control is effectively a no-op because the shader/pipeline never materializes.
+
+#### `projection_only` still remains the first failing meaningful stage
+
+Despite the scratch-control limitation above, the first meaningful successful compute dispatch is still `projection_only`, and it still fails in both normal and accurate runs.
+
+Key chain from both reruns:
+
+1. `renderer stage=projection_begin`
+2. `rd dispatch pipeline=gsplat_projection push_constant_bytes=128 direct=true group_count=(1060, 1, 1)`
+3. `rd barrier complete pipeline=gsplat_projection`
+4. `renderer stage=projection_end`
+5. `fence_wait` fails during the immediate post-dispatch readback path
+6. `renderer stage=projection_post_dispatch ... sort_buffer_size=0 sort_capacity=2711230 sort_within_capacity=true culled_buffer_valid=true sort_keys_valid=true sort_values_valid=true histogram_valid=true`
+7. compositor returns through `raster_only_no_writeback_gate`
+8. later lost-device breadcrumbs still collapse to `BLIT_PASS`
+
+### Updated interpretation
+
+This rerun strengthens the earlier projection-first finding, but with an important QA caveat:
+
+- `projection_only` is still the first **meaningful** failing stage.
+- `scratch_only` does not overturn that, but it also does not yet answer the intended “is any tiny compositor-path dispatch hazardous?” question because the scratch shader/pipeline failed to load and the readback stayed zero.
+
+### Next recommendation
+
+Fix or expose the scratch probe resource so the trivial control becomes a *real* dispatch, then rerun only:
+
+1. `scratch_only`
+2. `projection_only`
+3. `projection_only --accurate-breadcrumbs` if projection still fails first
+
+Until that is repaired, the evidence package supports:
+
+- `callback_only` survives
+- `prepared_no_dispatch` survives
+- `projection_only` still fails first
+- the new projection readback/assertion evidence shows `sort_buffer_size=0` within allocated capacity before the later device-loss path
+
+But it does **not yet** support the stronger claim that a valid scratch dispatch has been demonstrated safe.
