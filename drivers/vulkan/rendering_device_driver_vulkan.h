@@ -222,6 +222,8 @@ private:
 	uint32_t breadcrumb_offset = 0u;
 	uint32_t breadcrumb_id = 0u;
 	uint64_t submit_serial = 0;
+	uint32_t current_segment_frame_index = UINT32_MAX;
+	uint32_t current_segment_frames_drawn = 0;
 #endif
 
 public:
@@ -349,6 +351,9 @@ private:
 		uint32_t last_swap_chain_count = 0;
 		uint32_t last_pending_fence_semaphore_count = 0;
 		bool last_present_submission = false;
+		String last_wait_semaphore_summary;
+		String last_signal_semaphore_summary;
+		String last_command_buffer_summary;
 	};
 
 public:
@@ -410,6 +415,15 @@ private:
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
 		Framebuffer *active_framebuffer = nullptr;
 		RenderPassInfo *active_render_pass = nullptr;
+		uint32_t debug_segment_frame_index = UINT32_MAX;
+		uint32_t debug_segment_frames_drawn = 0;
+		uint32_t debug_last_breadcrumb = 0;
+		uint32_t debug_breadcrumb_count = 0;
+		uint32_t debug_label_count = 0;
+		String debug_first_label;
+		String debug_last_label;
+		String debug_label_path;
+		bool debug_label_path_truncated = false;
 	};
 
 public:
@@ -778,6 +792,11 @@ public:
 	void print_lost_device_info();
 	void on_device_lost() const;
 	static String get_vulkan_result(VkResult err);
+	static String _debug_breadcrumb_to_string(uint32_t p_breadcrumb);
+	static String _debug_pipeline_stage_to_string(VkPipelineStageFlags p_stage_flags);
+	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
+	String _debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const;
+	String _debug_signal_semaphore_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains) const;
 
 	/********************/
 	/**** SUBMISSION ****/

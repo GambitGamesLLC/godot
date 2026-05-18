@@ -913,3 +913,276 @@ This coder pass does **not** replace the earlier QA result; it clears the instru
 3. same preserved dev5 runtime / host Vulkan launch path used in the earlier valid repro package
 
 That rerun should now check whether the logged `projection_resource_snapshot` payloads at `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end` remain stable and whether any duplicate RID groups are reported before the later `fence_wait` / `BLIT_PASS` collapse.
+
+## Follow-up QA pass for bead `oc-k2b` — projection lifetime correlation after snapshot-helper fix
+
+### Scope
+
+Rerun the same minimum valid host-Vulkan repro after bead `oc-8ao` repaired the projection snapshot helper so the exact resource snapshot and alias diagnostics could be trusted again. The question for this pass was whether the tracked projection-owned resources stay stable across:
+
+- `projection_begin`
+- `projection_end`
+- `projection_post_dispatch_checkpoint_end`
+
+and whether any duplicate `alias_groups` appear before the later `fence_wait` / `BLIT_PASS` collapse.
+
+Branches / commits under test:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `6b696283`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `60bc52d`
+
+### Runtime used
+
+To stay directly comparable to the earlier valid Vulkan evidence and avoid the already-documented managed-runtime drift / dummy-renderer trap, QA again used the preserved dev5 repro binary on the host GPU path:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`
+- version: `4.7.dev5.official.a8643700c`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-snapshotfix-vulkan-dev5-20260517-191507/`
+
+Key files:
+
+- summary: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-snapshotfix-vulkan-dev5-20260517-191507/run_summary.tsv`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-snapshotfix-vulkan-dev5-20260517-191507/logs/projection_only__disabled.normal.log`
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-snapshotfix-vulkan-dev5-20260517-191507/context.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the preserved dev5 runtime on the host Wayland/Vulkan path — exit `134`
+
+Per the minimum-runs constraint, QA stopped after this single valid repro because it answered the RID-stability / alias question directly.
+
+### Findings
+
+#### The projection resource snapshot is now populated and stays stable across all three checkpoints
+
+The repaired helper now emits the tracked projection-owned resource snapshot instead of `{}`. Across `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end`, the snapshot stays byte-for-byte stable for the tracked members:
+
+- `culled_splats="RID(11171209936915)"`
+- `depth_texture="RID(11227044511803)"`
+- `histogram="RID(11179799871509)"`
+- `projection_pipeline="Callable(valid=true)"`
+- `projection_probe="RID(11218454577181)"`
+- `projection_set="RID(11231339479061)"`
+- `render_texture="RID(11222749544506)"`
+- `scratch_pipeline="Callable(valid=true)"`
+- `scratch_probe="RID(11214159609884)"`
+- `scratch_probe_set="RID(11257109282843)"`
+- `sort_keys="RID(11184094838806)"`
+- `sort_values="RID(11188389806103)"`
+- `tile_bounds="RID(11205569675290)"`
+
+The serial / generation / cleanup fields also stay stable through that same window:
+
+- `gpu_generation=1`
+- `projection_dispatch_serial=1` at `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end`
+- `cleanup_request_serial=0`
+- `cleanup_request_reason=none`
+
+The pre-dispatch rebuild snapshot is consistent with the later per-stage snapshots as well, with only the expected pre-dispatch serial difference:
+
+- `gpu_state_cache rebuild_gpu_state ... gpu_generation=1 projection_dispatch_serial=0 snapshot=...`
+
+#### No duplicate `alias_groups` appear before the later collapse
+
+The repaired alias reporting remains clean at every relevant snapshot site:
+
+- `aliasing_detected=false`
+- `alias_groups={}`
+
+So this rerun did **not** observe any duplicate tracked RID group among the projection-owned resources before the later device-loss path.
+
+#### No cleanup / flush / post-dispatch rebuild event appears before failure
+
+The broader lifetime/cleanup timing answer from bead `oc-x6n` still holds on the repaired helper path. In this rerun, QA again observed:
+
+- one initial `gpu_state_cache rebuild_gpu_state ...`
+- no `request_cleanup`
+- no `flush_pending_cleanup`
+- no post-dispatch `cleanup_state`
+- no second `rebuild_gpu_state` before the later failure
+
+The disabled checkpoint path itself still completes:
+
+1. `projection_post_dispatch_checkpoint_begin ... checkpoint=disabled`
+2. `projection_post_dispatch_checkpoint_disabled ... checkpoint=disabled`
+3. `projection_post_dispatch_checkpoint_end ... checkpoint=disabled`
+4. `projection_only_gate`
+5. `compositor stage=raster_only_no_writeback_gate`
+
+#### Failure signature remains unchanged
+
+Even with the now-working snapshot path, the later failure remains unchanged:
+
+- projection launch contract still logs the stable `128`-byte / `32`-float push-constant contract
+- `projection_begin` → dispatch → barrier → `projection_end` all complete
+- `projection_post_dispatch_checkpoint_end` is reached with the stable snapshot above
+- later `fence_wait` still fails
+- lost-device breadcrumbs still collapse to `BLIT_PASS`
+
+### Updated interpretation
+
+This rerun closes the evidence gap left by bead `oc-x6n`.
+
+The supported answer is now stronger and complete for this lifetime/alias question:
+
+- the tracked projection-owned resources stay stable from `projection_begin` through `projection_post_dispatch_checkpoint_end`
+- no duplicate `alias_groups` appear in the tracked resource set before the later `fence_wait` / `BLIT_PASS` collapse
+- no cleanup request / flush / cleanup-state / second rebuild event is logged in that same window
+
+So this QA pass does **not** support a pre-fence explanation based on obvious tracked-resource RID churn, duplicate aliasing, or cleanup timing within the instrumented projection-owned set. The failure still looks later than that snapshot window, which keeps suspicion on projection-triggered synchronization / backend / lifetime fallout that is not showing up as simple tracked-RID instability.
+
+### Next recommendation
+
+Do not spend more QA runs on the same snapshot-stability question. That lane is now answered for the current tracked resource set.
+
+Best next step:
+
+1. move the next diagnostic slice onto the later synchronization / backend / fence path that follows this stable snapshot window
+2. if additional lifetime suspicion remains, instrument resource ownership or backend state beyond the current tracked RID set rather than repeating the same projection snapshot comparison
+
+## Follow-up QA pass for bead `oc-c1f` — source-built post-projection submit/stall/fence correlation
+
+### Scope
+
+Run the same minimum valid host-Vulkan repro after bead `oc-b8r` landed the new engine-side submit/stall/fence instrumentation, and correlate the first suspicious backend transition *after* the already-stable compositor sync snapshot.
+
+Branches / worktree state under test:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `e9c89177`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `eb3e53f`
+
+Important build note: the fresh Godot instrumentation worktree did not compile as-is because `VectorView<SwapChainID>` does not provide `is_empty()`. QA applied the minimum non-behavioral build unblock in `drivers/vulkan/rendering_device_driver_vulkan.cpp`:
+
+- `fence->last_present_submission = !p_swap_chains.is_empty();`
+- → `fence->last_present_submission = p_swap_chains.size() > 0;`
+
+That one-line fix was required only so the new instrumentation binary could be built and exercised.
+
+### Runtime used
+
+QA used a freshly source-built editor from the Godot worktree on the real host Vulkan path:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- engine version logged by the crash: `Godot Engine v4.7.beta.custom_build (e9c8917768bb2e49a71cc8261ab23ea0dbca6ced)`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-postprojection-sync-sourcebuild-20260517-201958/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-postprojection-sync-sourcebuild-20260517-201958/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-postprojection-sync-sourcebuild-20260517-201958/logs/projection_only__disabled.normal.log`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the freshly source-built Godot binary on the host Wayland/Vulkan path — exit `134`
+
+Per the minimum-runs constraint, QA stopped after this one valid run because it answered the submit/stall/fence transition question directly.
+
+### Findings
+
+#### `render_for_compositor_sync_snapshot` stays stable
+
+The returned sync snapshot matches the stable post-projection checkpoint state exactly:
+
+- `gpu_generation=1`
+- `cleanup_request_serial=0`
+- `cleanup_request_reason=none`
+- `projection_dispatch_serial=1`
+- `projection_resource_snapshot.aliasing_detected=false`
+- `projection_resource_snapshot.alias_groups={}`
+- tracked resource identities remain unchanged from `projection_begin` → `projection_end` → `projection_post_dispatch_checkpoint_end` → `render_for_compositor_sync_snapshot`
+
+So the callback-return seam is still clean. The tracked projection-owned resource set remains stable all the way through `render_for_compositor_sync_snapshot`.
+
+#### The first suspicious post-snapshot transition is the next `queue_submit`, specifically `submit_serial=9`
+
+The post-return ordering is now visible in the source-built engine logs:
+
+1. `projection_post_dispatch_checkpoint_end`
+2. `render_for_compositor_returned`
+3. `render_for_compositor_sync_snapshot`
+4. `raster_only_no_writeback_gate`
+5. frame-0 cleanup wait completes successfully:
+   - `frame_stall_begin frame=0`
+   - `fence_wait_begin submit_serial=5 ... present_submission=true`
+   - `fence_wait_end submit_serial=5`
+6. new frame-1 backend work starts:
+   - `queue_submit submit_serial=8 ... signal_semaphores=1 swap_chains=0 present_submission=false`
+   - `frame_execute_begin frame=1 present_requested=false frame_can_present=false wait_semaphores=1 swap_chains=0`
+   - `queue_submit submit_serial=9 ... wait_semaphores=1 command_buffers=1 signal_semaphores=0 swap_chains=0 pending_fence_image_semaphores=0 present_submission=false`
+   - `frame_execute_submitted frame=1 ...`
+   - `frame_stall_begin frame=1 ...`
+   - `fence_wait_begin submit_serial=9 ...`
+   - `fence_wait_error submit_serial=9 wait_result=-4`
+   - later lost-device breadcrumbs still collapse to `BLIT_PASS`
+
+Why QA calls `queue_submit` the first suspicious transition:
+
+- the stable sync snapshot has already been emitted before it
+- the immediately preceding post-return stall/wait on `submit_serial=5` succeeds cleanly
+- `submit_serial=9` is the first post-snapshot submission whose fence later fails with `VK_ERROR_DEVICE_LOST`
+- the later `frame_stall_begin`, `fence_wait_begin`, and `fence_wait_error` events all belong to that same already-doomed submission chain
+
+So the first suspicious boundary after projection return is no longer a cleanup/rebuild/snapshot change; it is the first new backend submission after the clean snapshot window.
+
+#### Key submit / fence metadata from the failing chain
+
+Successful post-return cleanup wait:
+
+- `fence_wait_begin submit_serial=5`
+- `queue_family=0 queue_index=0`
+- `wait_semaphores=1`
+- `command_buffers=1`
+- `signal_semaphores=1`
+- `swap_chains=1`
+- `pending_fence_image_semaphores=1`
+- `present_submission=true`
+- followed by `fence_wait_end submit_serial=5`
+
+First suspicious post-snapshot submission:
+
+- `queue_submit submit_serial=9`
+- `queue_family=0 queue_index=0`
+- `wait_semaphores=1`
+- `command_buffers=1`
+- `signal_semaphores=0`
+- `swap_chains=0`
+- `pending_fence_image_semaphores=0`
+- `present_submission=false`
+
+Failure surfacing on the matching wait:
+
+- `frame_stall_begin frame=1 fence_signaled=true wait_semaphores=0 swap_chains=0 pending_buffer_downloads=0 pending_texture_downloads=0`
+- `fence_wait_begin submit_serial=9 queue_family=0 queue_index=0 fence_status=1 wait_semaphores=1 command_buffers=1 signal_semaphores=0 swap_chains=0 pending_fence_image_semaphores=0 present_submission=false`
+- Vulkan debug callback: `GPU hung on one of our command buffers (VK_ERROR_DEVICE_LOST)`
+- `fence_wait_error submit_serial=9 queue_family=0 queue_index=0 wait_result=-4`
+
+#### Failure signature is still `fence_wait` first, then later `BLIT_PASS`
+
+This source-built pass preserves the same outer failure shape as the earlier dev5 QA, but now with the engine-side chain visible:
+
+- the stable projection snapshot survives the callback return seam
+- failure still first becomes explicit at `fence_wait_error`
+- the later lost-device breadcrumb report still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This closes the post-projection transition question for the current instrumentation package.
+
+Supported by this run:
+
+- the tracked sync snapshot really does stay stable through `render_for_compositor_sync_snapshot`
+- no tracked resource churn / aliasing / cleanup event appears before the later failure
+- the first suspicious backend transition after that stable snapshot is the next backend `queue_submit`, specifically `submit_serial=9`
+- the fatal error still surfaces at the matching `fence_wait_error`, with the later breadcrumb collapse unchanged
+
+### Next recommendation
+
+Do not spend more QA time re-proving the snapshot stability seam. The next coder/audit slice should focus on what `submit_serial=9` actually contains / inherits, and why that first non-present post-snapshot submission can be queued successfully yet later dies at fence wait.

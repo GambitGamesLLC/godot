@@ -2978,11 +2978,11 @@ RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
 	VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
-	print_line(vformat("[gdgs-vk] fence_wait_begin submit_serial=%d queue_family=%d queue_index=%d fence_status=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)fence_status, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false"));
+	print_line(vformat("[gdgs-vk] fence_wait_begin submit_serial=%d queue_family=%d queue_index=%d fence_status=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s wait_summary=%s signal_summary=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)fence_status, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false", fence->last_wait_semaphore_summary, fence->last_signal_semaphore_summary, fence->last_command_buffer_summary));
 	if (fence_status == VK_NOT_READY) {
 		VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
 		if (err != VK_SUCCESS) {
-			print_line(vformat("[gdgs-vk] fence_wait_error submit_serial=%d queue_family=%d queue_index=%d wait_result=%d", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)err));
+			print_line(vformat("[gdgs-vk] fence_wait_error submit_serial=%d queue_family=%d queue_index=%d wait_result=%d wait_summary=%s signal_summary=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)err, fence->last_wait_semaphore_summary, fence->last_signal_semaphore_summary, fence->last_command_buffer_summary));
 		}
 		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", err));
 	}
@@ -3201,8 +3201,11 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 			fence->last_signal_semaphore_count = signal_semaphores.size();
 			fence->last_swap_chain_count = p_swap_chains.size();
 			fence->last_pending_fence_semaphore_count = command_queue->pending_semaphores_for_fence.size();
-			fence->last_present_submission = !p_swap_chains.is_empty();
-			print_line(vformat("[gdgs-vk] queue_submit submit_serial=%d queue_family=%d queue_index=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false"));
+			fence->last_present_submission = p_swap_chains.size() > 0;
+			fence->last_wait_semaphore_summary = _debug_wait_semaphore_summary(command_queue, p_wait_semaphores);
+			fence->last_signal_semaphore_summary = _debug_signal_semaphore_summary(p_cmd_semaphores, p_swap_chains);
+			fence->last_command_buffer_summary = _debug_command_buffer_summary(p_cmd_buffers);
+			print_line(vformat("[gdgs-vk] queue_submit submit_serial=%d queue_family=%d queue_index=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s wait_summary=%s signal_summary=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false", fence->last_wait_semaphore_summary, fence->last_signal_semaphore_summary, fence->last_command_buffer_summary));
 		}
 
 		device_queue.submit_mutex.lock();
@@ -3406,6 +3409,15 @@ RDD::CommandBufferID RenderingDeviceDriverVulkan::command_buffer_create(CommandP
 
 bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buffer) {
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
+	command_buffer->debug_segment_frame_index = current_segment_frame_index;
+	command_buffer->debug_segment_frames_drawn = current_segment_frames_drawn;
+	command_buffer->debug_last_breadcrumb = BreadcrumbMarker::NONE;
+	command_buffer->debug_breadcrumb_count = 0;
+	command_buffer->debug_label_count = 0;
+	command_buffer->debug_first_label = String();
+	command_buffer->debug_last_label = String();
+	command_buffer->debug_label_path = String();
+	command_buffer->debug_label_path_truncated = false;
 
 	VkCommandBufferBeginInfo cmd_buf_begin_info = {};
 	cmd_buf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -3421,6 +3433,15 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	Framebuffer *framebuffer = (Framebuffer *)(p_framebuffer.id);
 	RenderPassInfo *render_pass = (RenderPassInfo *)(p_render_pass.id);
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
+	command_buffer->debug_segment_frame_index = current_segment_frame_index;
+	command_buffer->debug_segment_frames_drawn = current_segment_frames_drawn;
+	command_buffer->debug_last_breadcrumb = BreadcrumbMarker::NONE;
+	command_buffer->debug_breadcrumb_count = 0;
+	command_buffer->debug_label_count = 0;
+	command_buffer->debug_first_label = String();
+	command_buffer->debug_last_label = String();
+	command_buffer->debug_label_path = String();
+	command_buffer->debug_label_path_truncated = false;
 
 	VkCommandBufferInheritanceInfo inheritance_info = {};
 	inheritance_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -6743,8 +6764,24 @@ void RenderingDeviceDriverVulkan::command_timestamp_write(CommandBufferID p_cmd_
 /****************/
 
 void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buffer, const char *p_label_name, const Color &p_color) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const RenderingContextDriverVulkan::Functions &functions = context_driver->functions_get();
+	command_buffer->debug_label_count++;
+	if (command_buffer->debug_first_label.is_empty()) {
+		command_buffer->debug_first_label = p_label_name;
+	}
+	command_buffer->debug_last_label = p_label_name;
+	if (!command_buffer->debug_label_path_truncated) {
+		if (!command_buffer->debug_label_path.is_empty()) {
+			command_buffer->debug_label_path += " > ";
+		}
+		command_buffer->debug_label_path += p_label_name;
+		if (command_buffer->debug_label_path.length() > 240) {
+			command_buffer->debug_label_path = command_buffer->debug_label_path.substr(0, 240);
+			command_buffer->debug_label_path_truncated = true;
+		}
+	}
+
 	if (!functions.CmdBeginDebugUtilsLabelEXT) {
 		if (functions.CmdDebugMarkerBeginEXT) {
 			// Debug marker extensions.
@@ -6793,7 +6830,10 @@ void RenderingDeviceDriverVulkan::command_insert_breadcrumb(CommandBufferID p_cm
 		return;
 	}
 
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
+	command_buffer->debug_last_breadcrumb = p_data;
+	command_buffer->debug_breadcrumb_count++;
+
 	if (Engine::get_singleton()->is_accurate_breadcrumbs_enabled()) {
 		// Force a full barrier so commands are not executed in parallel.
 		// This will mean that the last breadcrumb to see was actually the
@@ -6925,6 +6965,172 @@ void RenderingDeviceDriverVulkan::on_device_lost() const {
 	}
 
 	_err_print_error(FUNCTION_STR, __FILE__, __LINE__, context_driver->get_driver_and_device_memory_report());
+}
+
+String RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(uint32_t p_breadcrumb) {
+	const uint32_t phase = p_breadcrumb & uint32_t(~((1 << 16) - 1));
+	const uint32_t user_data = p_breadcrumb & ((1 << 16) - 1);
+	String text;
+
+	switch (phase) {
+		case BreadcrumbMarker::NONE:
+			text = "NONE";
+			break;
+		case BreadcrumbMarker::ALPHA_PASS:
+			text = "ALPHA_PASS";
+			break;
+		case BreadcrumbMarker::BLIT_PASS:
+			text = "BLIT_PASS";
+			break;
+		case BreadcrumbMarker::DEBUG_PASS:
+			text = "DEBUG_PASS";
+			break;
+		case BreadcrumbMarker::LIGHTMAPPER_PASS:
+			text = "LIGHTMAPPER_PASS";
+			break;
+		case BreadcrumbMarker::OPAQUE_PASS:
+			text = "OPAQUE_PASS";
+			break;
+		case BreadcrumbMarker::POST_PROCESSING_PASS:
+			text = "POST_PROCESSING_PASS";
+			break;
+		case BreadcrumbMarker::REFLECTION_PROBES:
+			text = "REFLECTION_PROBES";
+			break;
+		case BreadcrumbMarker::SHADOW_PASS_CUBE:
+			text = "SHADOW_PASS_CUBE";
+			break;
+		case BreadcrumbMarker::SHADOW_PASS_DIRECTIONAL:
+			text = "SHADOW_PASS_DIRECTIONAL";
+			break;
+		case BreadcrumbMarker::SKY_PASS:
+			text = "SKY_PASS";
+			break;
+		case BreadcrumbMarker::TRANSPARENT_PASS:
+			text = "TRANSPARENT_PASS";
+			break;
+		case BreadcrumbMarker::UI_PASS:
+			text = "UI_PASS";
+			break;
+		default:
+			text = "UNKNOWN_BREADCRUMB(" + itos(phase) + ")";
+			break;
+	}
+
+	if (user_data != 0) {
+		text += "|user=" + itos(user_data);
+	}
+
+	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_pipeline_stage_to_string(VkPipelineStageFlags p_stage_flags) {
+	if (p_stage_flags == VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) {
+		return "ALL_COMMANDS";
+	}
+	if (p_stage_flags == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) {
+		return "COLOR_ATTACHMENT_OUTPUT";
+	}
+	return "stage(" + itos((uint64_t)p_stage_flags) + ")";
+}
+
+String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const {
+	if (p_cmd_buffers.size() == 0) {
+		return "[]";
+	}
+
+	String text = "[";
+	for (uint32_t i = 0; i < p_cmd_buffers.size(); i++) {
+		const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)(p_cmd_buffers[i].id);
+		if (i > 0) {
+			text += ", ";
+		}
+		text += "{index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)command_buffer->vk_command_buffer);
+		if (command_buffer->debug_segment_frame_index != UINT32_MAX) {
+			text += ",frame=" + itos(command_buffer->debug_segment_frame_index);
+			text += ",frames_drawn=" + itos(command_buffer->debug_segment_frames_drawn);
+		}
+		text += ",labels=" + itos(command_buffer->debug_label_count);
+		if (!command_buffer->debug_first_label.is_empty()) {
+			text += ",first_label=\"" + command_buffer->debug_first_label + "\"";
+		}
+		if (!command_buffer->debug_last_label.is_empty()) {
+			text += ",last_label=\"" + command_buffer->debug_last_label + "\"";
+		}
+		if (!command_buffer->debug_label_path.is_empty()) {
+			text += ",label_path=\"" + command_buffer->debug_label_path;
+			if (command_buffer->debug_label_path_truncated) {
+				text += " > ...";
+			}
+			text += "\"";
+		}
+		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
+		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
+	}
+	text += "]";
+	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const {
+	String text = "[";
+	bool first = true;
+
+	for (uint32_t i = 0; i < p_command_queue->pending_semaphores_for_execute.size(); i++) {
+		const uint32_t semaphore_index = p_command_queue->pending_semaphores_for_execute[i];
+		const SwapChain *swap_chain = p_command_queue->image_semaphores_swap_chains[semaphore_index];
+		if (!first) {
+			text += ", ";
+		}
+		first = false;
+		text += "{source=acquire,index=" + itos(semaphore_index);
+		text += ",vk=" + itos((uint64_t)p_command_queue->image_semaphores[semaphore_index]);
+		text += ",stage=\"COLOR_ATTACHMENT_OUTPUT\"";
+		text += ",swapchain=" + itos((uint64_t)swap_chain->vk_swapchain);
+		text += ",image_index=" + itos(swap_chain->image_index) + "}";
+	}
+
+	for (uint32_t i = 0; i < p_wait_semaphores.size(); i++) {
+		if (!first) {
+			text += ", ";
+		}
+		first = false;
+		text += "{source=external,index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)VkSemaphore(p_wait_semaphores[i].id));
+		text += ",stage=\"ALL_COMMANDS\"}";
+	}
+
+	text += "]";
+	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_signal_semaphore_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains) const {
+	String text = "[";
+	bool first = true;
+
+	for (uint32_t i = 0; i < p_cmd_semaphores.size(); i++) {
+		if (!first) {
+			text += ", ";
+		}
+		first = false;
+		text += "{source=submit,index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)VkSemaphore(p_cmd_semaphores[i].id)) + "}";
+	}
+
+	for (uint32_t i = 0; i < p_swap_chains.size(); i++) {
+		const SwapChain *swap_chain = (const SwapChain *)(p_swap_chains[i].id);
+		if (!first) {
+			text += ", ";
+		}
+		first = false;
+		text += "{source=present,index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)swap_chain->present_semaphores[swap_chain->image_index]);
+		text += ",swapchain=" + itos((uint64_t)swap_chain->vk_swapchain);
+		text += ",image_index=" + itos(swap_chain->image_index) + "}";
+	}
+
+	text += "]";
+	return text;
 }
 
 void RenderingDeviceDriverVulkan::print_lost_device_info() {
@@ -7070,11 +7276,13 @@ inline String RenderingDeviceDriverVulkan::get_vulkan_result(VkResult err) {
 /********************/
 
 void RenderingDeviceDriverVulkan::begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) {
-	// Per-frame segments are not required in Vulkan.
+	current_segment_frame_index = p_frame_index;
+	current_segment_frames_drawn = p_frames_drawn;
 }
 
 void RenderingDeviceDriverVulkan::end_segment() {
-	// Per-frame segments are not required in Vulkan.
+	current_segment_frame_index = UINT32_MAX;
+	current_segment_frames_drawn = 0;
 }
 
 /**************/

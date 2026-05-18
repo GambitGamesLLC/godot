@@ -7256,6 +7256,7 @@ void RenderingDevice::_end_transfer_worker(TransferWorker *p_transfer_worker) {
 }
 
 void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores) {
+	print_line(vformat("[gdgs-rd] transfer_submit_begin frame=%d transfer_worker=%d signal_semaphores=%d command_fence=%s submitted=%s", frame, p_transfer_worker->index, p_signal_semaphores.size(), p_transfer_worker->command_fence ? "true" : "false", p_transfer_worker->submitted ? "true" : "false"));
 	driver->command_queue_execute_and_present(transfer_queue, {}, p_transfer_worker->command_buffer, p_signal_semaphores, p_transfer_worker->command_fence, {});
 
 	for (uint32_t i = 0; i < p_signal_semaphores.size(); i++) {
@@ -8148,6 +8149,7 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 			// Semaphores always need to be signaled if it's not the last command buffer.
 		}
 
+		print_line(vformat("[gdgs-rd] frame_execute_cmd_submit frame=%d command_buffer_index=%d command_buffer_count=%d wait_semaphores=%d signal_semaphore=%s signal_fence=%s swap_chains=%d present_swap_chain=%s", frame, i, command_buffer_count, wait_semaphores.size(), signal_semaphore ? "true" : "false", signal_fence ? "true" : "false", swap_chains.size(), p_present_swap_chain ? "true" : "false"));
 		driver->command_queue_execute_and_present(main_queue, wait_semaphores, command_buffer,
 				signal_semaphore ? signal_semaphore : VectorView<RDD::SemaphoreID>(), signal_fence,
 				swap_chains);

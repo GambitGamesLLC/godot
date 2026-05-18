@@ -513,6 +513,56 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ---
 
+### Task 22: QA correlate the post-projection submit/stall/fence transition
+
+**Bead ID:** `oc-c1f`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-c1f` and keep the investigation projection-only. Run the minimum valid host-Vulkan repro (`projection_only + disabled`) using the new post-projection sync/backend instrumentation. Determine whether `render_for_compositor_sync_snapshot` stays stable, and identify the first suspicious transition after that snapshot: `queue_submit`, `frame_stall_begin`, `fence_wait_begin`, or `fence_wait_error`, before the later `BLIT_PASS` collapse. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-c1f` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA completed the minimum valid host-Vulkan source-built rerun and answered the post-projection transition question directly. Because the fresh Godot instrumentation worktree would not compile as-written (`VectorView<SwapChainID>` has no `is_empty()`), QA applied the minimum build-unblock change in `drivers/vulkan/rendering_device_driver_vulkan.cpp` (`!p_swap_chains.is_empty()` -> `p_swap_chains.size() > 0`) so the new engine-side logs could actually be exercised. QA then built `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` from the current Godot worktree and ran exactly one real-GPU repro: `projection_only + disabled` on the host Wayland/Vulkan path (`DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`) via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`. Durable artifacts were saved under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-postprojection-sync-sourcebuild-20260517-201958/`, with findings documented in `doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+The returned `render_for_compositor_sync_snapshot` stayed stable: `gpu_generation=1`, `cleanup_request_serial=0`, `cleanup_request_reason=none`, `projection_dispatch_serial=1`, `aliasing_detected=false`, `alias_groups={}`, and the tracked `projection_resource_snapshot` remained byte-for-byte stable from `projection_begin` through `projection_post_dispatch_checkpoint_end` into the callback-return snapshot. The first suspicious transition after that stable snapshot is the next backend `queue_submit`, specifically `submit_serial=9` on frame 1 (`queue_family=0`, `queue_index=0`, `wait_semaphores=1`, `command_buffers=1`, `signal_semaphores=0`, `swap_chains=0`, `pending_fence_image_semaphores=0`, `present_submission=false`). The immediately preceding post-return wait on `submit_serial=5` succeeds cleanly; then `submit_serial=9` is queued, `frame_stall_begin frame=1` follows, `fence_wait_begin submit_serial=9` starts, and the first explicit failure appears at `fence_wait_error submit_serial=9 wait_result=-4` with the Vulkan debug callback reporting `GPU hung on one of our command buffers (VK_ERROR_DEVICE_LOST)`. The later lost-device breadcrumb collapse is unchanged and still reports `BLIT_PASS`. Recommended next step: inspect what work / inherited semaphores are bound into the first non-present post-snapshot submission (`submit_serial=9`) rather than spending more time on the already-stable snapshot seam.
+
+---
+
+### Task 23: Map the failing post-projection submissions `submit_serial=8` and `submit_serial=9`
+
+**Bead ID:** `oc-atc`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-atc` and keep the investigation projection-only. The current evidence says the first suspicious backend transition after a stable projection return is `queue_submit submit_serial=9`, with a clean earlier wait on `submit_serial=5` and a nearby `submit_serial=8`. Add small, reversible, high-signal instrumentation that maps what work `submit_serial=8` and `submit_serial=9` actually correspond to, including relevant command-buffer / submission labels, wait-semaphore context, and frame-stage ownership, so QA can tell why `submit_serial=9` queues cleanly but later dies at fence wait. Keep the staged repro model intact, avoid speculative fixes, update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-atc` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- sync/backend diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added focused projection-only submission mapping diagnostics in the Godot Vulkan backend and `RenderingDevice` call sites without changing staged repro behavior or attempting a fix. In `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp`, fences now retain per-submit `wait_summary`, `signal_summary`, and `command_summary` strings so the existing `queue_submit`, `fence_wait_begin`, and `fence_wait_error` logs carry the same submission context all the way through the later stall/fence failure. Command buffers are now stamped at `command_buffer_begin*()` with the active frame segment (`frame` / `frames_drawn`), accumulate first/last label plus a bounded label path from `command_begin_label()`, and retain last breadcrumb/count from `command_insert_breadcrumb()`. At submit time, the driver now logs: acquired-image waits vs external waits, raw semaphore handles for waits/signals, swapchain/image ownership for acquire/present semaphores, and command-buffer summaries including frame ownership, label path, and last breadcrumb. In `servers/rendering/rendering_device.cpp`, small host-side markers were added at `transfer_submit_begin` and `frame_execute_cmd_submit` so QA can correlate ordering: whether a submit came from transfer-worker upload staging or the main frame execution loop, with frame index, command-buffer slot, and whether a signal fence/semaphore was attached.
+
+Why this matters: QA can now directly answer whether `submit_serial=8` is the transfer-worker handoff that seeds `frames[frame].semaphores_to_wait_on`, whether `submit_serial=9` is the subsequent main frame execution submission that consumes that exact semaphore, and what labeled command buffer / stage ownership was attached when the later `VK_ERROR_DEVICE_LOST` fence wait fires. That turns the current “submit 8 / submit 9 / BLIT_PASS later” sequence into an explicit chain of ownership instead of an ordering guess.
+
+Validation completed on the touched code paths with `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp servers/rendering/rendering_device.cpp`, `git diff --check`, and a targeted successful object build: `scons platform=linuxbsd target=editor dev_mode=yes bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o bin/obj/servers/rendering/rendering_device.linuxbsd.editor.x86_64.o -j8`.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
