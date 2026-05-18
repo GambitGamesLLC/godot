@@ -7324,6 +7324,198 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_pre_tail_copy_body_sum
 	return text;
 }
 
+String RenderingDeviceDriverVulkan::_debug_command_buffer_pre_tail_copy_handoff_summary(const CommandBufferInfo *p_command_buffer) {
+	if (p_command_buffer->debug_level_stat_count == 0) {
+		return "{}";
+	}
+
+	int32_t max_level = INT32_MIN;
+	for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+		max_level = MAX(max_level, p_command_buffer->debug_level_stats[i].level);
+	}
+	if (max_level == INT32_MIN) {
+		return "{}";
+	}
+
+	const int32_t tail_start_level = MAX(max_level - 2, 0);
+	const int32_t pre_tail_max_level = tail_start_level - 1;
+	if (pre_tail_max_level < 0) {
+		return "{}";
+	}
+
+	static constexpr int32_t bucket_size = 8;
+	int32_t dominant_bucket_start = INT32_MAX;
+	int32_t dominant_bucket_end = INT32_MIN;
+	uint32_t dominant_bucket_copy_count = 0;
+	uint32_t dominant_bucket_label_count = 0;
+
+	for (int32_t bucket_start = 0; bucket_start <= pre_tail_max_level; bucket_start += bucket_size) {
+		const int32_t bucket_end = MIN(bucket_start + bucket_size - 1, pre_tail_max_level);
+		uint32_t bucket_copy_count = 0;
+		uint32_t bucket_label_count = 0;
+		for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+			const DebugLevelStats &stats = p_command_buffer->debug_level_stats[i];
+			if (stats.level < bucket_start || stats.level > bucket_end) {
+				continue;
+			}
+			bucket_copy_count += stats.copy_count;
+			bucket_label_count += stats.label_count;
+		}
+		if (bucket_label_count == 0) {
+			continue;
+		}
+		if (bucket_copy_count > dominant_bucket_copy_count || (bucket_copy_count == dominant_bucket_copy_count && bucket_label_count > dominant_bucket_label_count)) {
+			dominant_bucket_copy_count = bucket_copy_count;
+			dominant_bucket_label_count = bucket_label_count;
+			dominant_bucket_start = bucket_start;
+			dominant_bucket_end = bucket_end;
+		}
+	}
+
+	if (dominant_bucket_start == INT32_MAX) {
+		return "{}";
+	}
+
+	DebugLevelStats copy_chain_totals;
+	DebugLevelStats consumer_totals;
+	String level_details = "[";
+	bool first_level = true;
+	int32_t first_draw_level = INT32_MAX;
+	String first_draw_label;
+	String last_copy_label;
+
+	for (int32_t level = dominant_bucket_start; level <= dominant_bucket_end; level++) {
+		const DebugLevelStats *matched = nullptr;
+		for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+			const DebugLevelStats &stats = p_command_buffer->debug_level_stats[i];
+			if (stats.level == level) {
+				matched = &stats;
+				break;
+			}
+		}
+		if (matched == nullptr) {
+			continue;
+		}
+
+		if (!first_level) {
+			level_details += ", ";
+		}
+		first_level = false;
+		level_details += "{level=" + itos(level);
+		level_details += ",labels=" + itos(matched->label_count);
+		level_details += ",ops={copy=" + itos(matched->copy_count);
+		level_details += ",compute=" + itos(matched->compute_count);
+		level_details += ",draw=" + itos(matched->draw_count);
+		level_details += ",custom=" + itos(matched->custom_count);
+		level_details += ",mixed=" + itos(matched->mixed_count);
+		level_details += ",unclassified=" + itos(matched->unclassified_count) + "}";
+		if (!matched->first_label.is_empty()) {
+			level_details += ",first_label=\"" + matched->first_label + "\"";
+		}
+		if (!matched->last_label.is_empty()) {
+			level_details += ",last_label=\"" + matched->last_label + "\"";
+		}
+		level_details += "}";
+
+		if (matched->draw_count > 0 && first_draw_level == INT32_MAX) {
+			first_draw_level = level;
+			first_draw_label = matched->first_label;
+		}
+		if (matched->copy_count > 0) {
+			last_copy_label = matched->last_label;
+		}
+	}
+	level_details += "]";
+
+	for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+		const DebugLevelStats &stats = p_command_buffer->debug_level_stats[i];
+		if (stats.level < dominant_bucket_start || stats.level > dominant_bucket_end) {
+			continue;
+		}
+		DebugLevelStats *totals = &copy_chain_totals;
+		if (first_draw_level != INT32_MAX && stats.level >= first_draw_level) {
+			totals = &consumer_totals;
+		}
+		totals->label_count += stats.label_count;
+		totals->copy_count += stats.copy_count;
+		totals->compute_count += stats.compute_count;
+		totals->draw_count += stats.draw_count;
+		totals->custom_count += stats.custom_count;
+		totals->mixed_count += stats.mixed_count;
+		totals->unclassified_count += stats.unclassified_count;
+		if (totals->first_label.is_empty() && !stats.first_label.is_empty()) {
+			totals->first_label = stats.first_label;
+		}
+		if (!stats.last_label.is_empty()) {
+			totals->last_label = stats.last_label;
+		}
+	}
+
+	String text = "{";
+	text += "dominant_bucket_levels=" + itos(dominant_bucket_start) + ".." + itos(dominant_bucket_end);
+	text += ",first_draw_level=";
+	if (first_draw_level == INT32_MAX) {
+		text += "none";
+	} else {
+		text += itos(first_draw_level);
+	}
+	if (!last_copy_label.is_empty()) {
+		text += ",last_copy_label=\"" + last_copy_label + "\"";
+	}
+	if (!first_draw_label.is_empty()) {
+		text += ",first_draw_label=\"" + first_draw_label + "\"";
+	}
+	text += ",copy_chain=";
+	text += "{levels=";
+	if (first_draw_level == INT32_MAX) {
+		text += itos(dominant_bucket_start) + ".." + itos(dominant_bucket_end);
+	} else if (first_draw_level <= dominant_bucket_start) {
+		text += "none";
+	} else {
+		text += itos(dominant_bucket_start) + ".." + itos(first_draw_level - 1);
+	}
+	text += ",labels=" + itos(copy_chain_totals.label_count);
+	text += ",ops={copy=" + itos(copy_chain_totals.copy_count);
+	text += ",compute=" + itos(copy_chain_totals.compute_count);
+	text += ",draw=" + itos(copy_chain_totals.draw_count);
+	text += ",custom=" + itos(copy_chain_totals.custom_count);
+	text += ",mixed=" + itos(copy_chain_totals.mixed_count);
+	text += ",unclassified=" + itos(copy_chain_totals.unclassified_count) + "}";
+	if (!copy_chain_totals.first_label.is_empty()) {
+		text += ",first_label=\"" + copy_chain_totals.first_label + "\"";
+	}
+	if (!copy_chain_totals.last_label.is_empty()) {
+		text += ",last_label=\"" + copy_chain_totals.last_label + "\"";
+	}
+	text += "}";
+	text += ",consumer=";
+	if (first_draw_level == INT32_MAX) {
+		text += "{}";
+	} else {
+		text += "{levels=" + itos(first_draw_level) + ".." + itos(dominant_bucket_end);
+		text += ",labels=" + itos(consumer_totals.label_count);
+		text += ",ops={copy=" + itos(consumer_totals.copy_count);
+		text += ",compute=" + itos(consumer_totals.compute_count);
+		text += ",draw=" + itos(consumer_totals.draw_count);
+		text += ",custom=" + itos(consumer_totals.custom_count);
+		text += ",mixed=" + itos(consumer_totals.mixed_count);
+		text += ",unclassified=" + itos(consumer_totals.unclassified_count) + "}";
+		if (!consumer_totals.first_label.is_empty()) {
+			text += ",first_label=\"" + consumer_totals.first_label + "\"";
+		}
+		if (!consumer_totals.last_label.is_empty()) {
+			text += ",last_label=\"" + consumer_totals.last_label + "\"";
+		}
+		text += "}";
+	}
+	text += ",levels=" + level_details;
+	if (p_command_buffer->debug_level_stats_overflow) {
+		text += ",overflow=true";
+	}
+	text += "}";
+	return text;
+}
+
 void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
 	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
 		p_command_buffer->debug_label_tail_path += " > ";
@@ -7457,6 +7649,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 		text += ",label_segments=" + _debug_command_buffer_label_segments_summary(command_buffer);
 		text += ",late_tail_split=" + _debug_command_buffer_late_tail_summary(command_buffer);
 		text += ",pre_tail_copy_body_split=" + _debug_command_buffer_pre_tail_copy_body_summary(command_buffer);
+		text += ",pre_tail_copy_handoff=" + _debug_command_buffer_pre_tail_copy_handoff_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}

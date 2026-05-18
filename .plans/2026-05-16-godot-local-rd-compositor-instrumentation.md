@@ -753,6 +753,49 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 ---
 
+### Task 32: QA classify the dominant pre-tail Copy-body buckets on failing `submit_serial=9`
+
+**Bead ID:** `oc-699`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-699` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new `pre_tail_copy_body_split=` backend summary on failing `submit_serial=9`. Determine which 8-level pre-tail bucket dominates the Copy-heavy body, record that bucket’s label/op counts and first/last labels, compare the result against the earlier `late_tail_split=` and `label_segments` evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-699` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the minimum valid host-Vulkan source-built repro on 2026-05-18 using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-body-vulkan-sourcebuild-corrected-20260518-093650 no_present compositor projection_only disabled 120` (artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-body-vulkan-sourcebuild-corrected-20260518-093650/`). The fresh `submit_serial=9` command summary preserved the settled seam (`submit_serial=8` transfer handoff -> `submit_serial=9` frame-1 main submit -> later `fence_wait_error submit_serial=9` -> eventual `BLIT_PASS` collapse) and added the requested `pre_tail_copy_body_split=` classification. The dominant 8-level pre-tail bucket is `levels=8..15` with `labels=14` and `ops={copy=13,compute=0,draw=1,custom=0,mixed=0,unclassified=0}`; its first/last labels are `Command Graph (L8) (Copy)` and `Render Depth Pre-Pass (L15) (Draw)`. That result sharpens the earlier evidence instead of contradicting it: `late_tail_split=` still shows the late `L86..L88` tail is only `8` labels wide (`copy=3, compute=1, draw=3, mixed=1`), while the older `label_segments=` summary still shows the overall frame-1 submission is dominated by Copy work (`21` early Copy + `73` middle Copy labels before the tiny late tail). The new bucket breakdown therefore says the first densest 8-level hotspot inside that already-dominant pre-tail body is the `L8..L15` copy band, not the demoted late transparent/tonemap epilogue. Durable evidence was recorded in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`, and bead `oc-699` can close on this classification result.
+
+---
+
+### Task 33: Split the `L8..L15` Copy hotspot and the handoff into `Render Depth Pre-Pass (L15)`
+
+**Bead ID:** `oc-vmd`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-vmd` and keep the investigation projection-only on the refreshed source-built Godot binary. Add small, reversible, high-signal instrumentation that splits the newly identified `L8..L15` Copy-dominated hotspot inside failing `submit_serial=9`, with particular attention to the handoff into `Render Depth Pre-Pass (L15) (Draw)`. The goal is to identify whether the tighter backend-owned seam lives inside the `L8..L14` copy chain itself or at the transition into the first `L15` draw consumer. Prefer command-graph / backend ownership evidence over shader-side probes, keep the staged repro model intact, run relevant validation, update this plan with actual results, commit/push the changes, and close bead `oc-vmd` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- backend seam diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added one more compact Vulkan backend seam summary on top of `pre_tail_copy_body_split=` without changing renderer behavior or reopening shader-side probes. `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` now append `pre_tail_copy_handoff=` into `command_summary=` at submit / fence-wait time. The new summary reuses the existing dominant 8-level pre-tail bucket selection, then splits that bucket at the first level containing a draw label. For the current `submit_serial=9` lane this is designed to answer a tighter backend-owned question than the old bucket summary alone: whether the densest hotspot remains inside the copy-only prefix (`L8..L14` in the currently known shape) or at the first draw-consuming handoff into `Render Depth Pre-Pass (L15) (Draw)`. The payload reports the dominant bucket range, first draw level, last copy label, first draw label, aggregate copy-chain vs consumer counts, and per-level details inside that bucket so the next QA pass can classify the seam directly from the source-built binary logs. Validation run: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check`; incremental object-target check `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; refreshed editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "pre_tail_copy_handoff="` to confirm the new log string landed in the runnable source-built binary. Commit/push details will be appended after landing the branch update.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
