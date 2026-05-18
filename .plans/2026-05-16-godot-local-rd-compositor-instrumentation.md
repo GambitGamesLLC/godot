@@ -994,6 +994,7 @@ The key current read is: the projection dispatch still appears to be the first b
 - `e968db74` - `Add Vulkan submit mapping diagnostics for GDGS compositor stall`
 - `dc6b26d1` - `Add transfer-to-frame semaphore provenance diagnostics`
 - `68cad1f9` - `debug: add submit 9 late-tail seam diagnostics`
+- `c9d03c87` - `debug: classify GDGS depth prepass boundary`
 
 **Lessons Learned:**
 - The live repro is definitively on the global/global RenderingDevice path, not the earlier local/global theory.
