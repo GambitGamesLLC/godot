@@ -839,6 +839,49 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 ---
 
+### Task 36: QA classify the `L15` copy-setup prefix versus first draw-consumer boundary
+
+**Bead ID:** `oc-is3`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-is3` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new `level_draw_handoff=` backend summary on failing `submit_serial=9`. Determine whether the tighter backend-owned seam inside level `15` resolves to the copy-setup prefix itself or to the first draw-consumer boundary (`Render Depth Pre-Pass (L15) (Draw)`), compare the result against the earlier `pre_tail_copy_handoff=` / `pre_tail_copy_body_split=` / `late_tail_split=` evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-is3` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan source-built repro on 2026-05-18 using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-level-draw-handoff-vulkan-sourcebuild-20260518-115554 no_present compositor projection_only disabled 120` (artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-level-draw-handoff-vulkan-sourcebuild-20260518-115554/`). The new `level_draw_handoff=` summary on failing `submit_serial=9` resolves level `15` directly into `copy_setup_prefix={labels=6, ops={copy=6,...}, last_copy_label="Command Graph (L15) (Copy)"}` versus `draw_consumer_boundary={has_draw=true, first_draw_label="Render Depth Pre-Pass (L15) (Draw)", from_first_draw={labels=1, ops={draw=1,...}}}`. Compared against the earlier `pre_tail_copy_handoff=` / `pre_tail_copy_body_split=` / `late_tail_split=` stack, that means the broad copy-dominated story still holds, but the *tightest* backend-owned seam now resolves to the first `L15` draw-consumer boundary rather than to the `L15` copy/setup prefix itself. The same run preserved the established baselines: `submit_serial=8` remains the transfer-worker handoff, `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`, `render_for_compositor_sync_snapshot` stays stable before the frame-1 submit chain, the first explicit failure still surfaces at `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`. Durable notes and artifact references were appended to `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`).
+
+---
+
+### Task 37: Split the `Render Depth Pre-Pass (L15) (Draw)` consumer seam and its immediate dependency chain
+
+**Bead ID:** `oc-an8`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-an8` and keep the investigation projection-only on the refreshed source-built Godot binary. Add small, reversible, high-signal instrumentation that splits or classifies the backend-owned work attached to `Render Depth Pre-Pass (L15) (Draw)` inside failing `submit_serial=9`, plus the immediate setup/dependency chain that feeds that first draw consumer boundary. The goal is to identify whether the remaining seam lives exactly on the depth-prepass draw consumer itself or on the immediately inherited setup/dependency work that precedes it. Prefer command-graph / backend ownership evidence over shader-side probes, keep the staged repro model intact, run relevant validation, update this plan with actual results, commit/push the changes, and close bead `oc-an8` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- backend seam diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added one more compact Vulkan backend seam summary on top of `level_draw_handoff=` without changing renderer behavior or reopening shader-side probes. `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` now retain a compact per-label trace for each command buffer and append a new `depth_prepass_consumer_seam=` payload into `command_summary=` at submit / fence-wait time. The new summary targets the first exact `Render Depth Pre-Pass (L15) (Draw)` label and reports: the full contiguous non-draw feeder chain immediately preceding that draw boundary, the same-level `L15` setup prefix, the inherited prior-level dependency chain that still feeds that consumer, and the previous draw label before the feeder chain begins. This is designed to answer a tighter backend-owned question than the old level-only summaries: whether the remaining seam lives exactly on the first depth-prepass draw consumer, or on the contiguous inherited non-draw setup/dependency work that reaches into it from earlier labels/levels. Validation run: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check`; incremental object rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; refreshed editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "depth_prepass_consumer_seam="`; and a quick rebuilt-binary sanity launch `timeout 20s ./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version`. This pass stays small, reversible, source-built, and projection-only.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

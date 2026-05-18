@@ -7578,6 +7578,184 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_level_draw_handoff_sum
 	return text;
 }
 
+
+String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer_summary(const CommandBufferInfo *p_command_buffer) {
+	int64_t draw_entry_index = -1;
+	for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.level == 15 && entry.label == "Render Depth Pre-Pass (L15) (Draw)") {
+			draw_entry_index = i;
+			break;
+		}
+	}
+	if (draw_entry_index == -1) {
+		return "{}";
+	}
+
+	const DebugLabelEntry &draw_entry = p_command_buffer->debug_label_entries[draw_entry_index];
+	const int32_t draw_level = draw_entry.level;
+
+	struct ChainSummary {
+		uint32_t labels = 0;
+		uint32_t copy = 0;
+		uint32_t compute = 0;
+		uint32_t draw = 0;
+		uint32_t custom = 0;
+		uint32_t mixed = 0;
+		uint32_t unclassified = 0;
+		int32_t first_level = INT32_MAX;
+		int32_t last_level = INT32_MIN;
+		uint32_t first_label_index = 0;
+		uint32_t last_label_index = 0;
+		String first_label;
+		String last_label;
+	};
+
+	const auto accumulate_entry = [](const DebugLabelEntry &p_entry, ChainSummary &r_summary) {
+		r_summary.labels++;
+		if (r_summary.labels == 1) {
+			r_summary.last_label = p_entry.label;
+			r_summary.last_level = p_entry.level;
+			r_summary.last_label_index = p_entry.label_index;
+		}
+		r_summary.first_label = p_entry.label;
+		r_summary.first_level = p_entry.level;
+		r_summary.first_label_index = p_entry.label_index;
+		if (p_entry.operation_tag == "Copy") {
+			r_summary.copy++;
+		} else if (p_entry.operation_tag == "Compute") {
+			r_summary.compute++;
+		} else if (p_entry.operation_tag == "Draw") {
+			r_summary.draw++;
+		} else if (p_entry.operation_tag == "Custom") {
+			r_summary.custom++;
+		} else if (p_entry.operation_tag == "Unclassified") {
+			r_summary.unclassified++;
+		} else {
+			r_summary.mixed++;
+		}
+	};
+
+	ChainSummary feeder_chain;
+	ChainSummary inherited_dependency_chain;
+	ChainSummary same_level_setup;
+	int64_t chain_start_index = draw_entry_index;
+
+	for (int64_t i = draw_entry_index - 1; i >= 0; i--) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.operation_tag == "Draw") {
+			break;
+		}
+		chain_start_index = i;
+		accumulate_entry(entry, feeder_chain);
+		if (entry.level == draw_level) {
+			accumulate_entry(entry, same_level_setup);
+		} else if (entry.level < draw_level) {
+			accumulate_entry(entry, inherited_dependency_chain);
+		}
+	}
+
+	String text = "{";
+	text += "draw_label_index=" + itos(draw_entry.label_index);
+	text += ",draw_label=\"" + draw_entry.label + "\"";
+	text += ",draw_level=" + itos(draw_level);
+	text += ",contiguous_non_draw_feeder={label_indexes=";
+	if (feeder_chain.labels == 0) {
+		text += "none";
+	} else {
+		text += itos(feeder_chain.first_label_index) + ".." + itos(feeder_chain.last_label_index);
+	}
+	text += ",levels=";
+	if (feeder_chain.labels == 0) {
+		text += "none";
+	} else if (feeder_chain.first_level == feeder_chain.last_level) {
+		text += itos(feeder_chain.first_level);
+	} else {
+		text += itos(feeder_chain.first_level) + ".." + itos(feeder_chain.last_level);
+	}
+	text += ",labels=" + itos(feeder_chain.labels);
+	text += ",ops={copy=" + itos(feeder_chain.copy);
+	text += ",compute=" + itos(feeder_chain.compute);
+	text += ",draw=" + itos(feeder_chain.draw);
+	text += ",custom=" + itos(feeder_chain.custom);
+	text += ",mixed=" + itos(feeder_chain.mixed);
+	text += ",unclassified=" + itos(feeder_chain.unclassified) + "}";
+	if (!feeder_chain.first_label.is_empty()) {
+		text += ",first_label=\"" + feeder_chain.first_label + "\"";
+	}
+	if (!feeder_chain.last_label.is_empty()) {
+		text += ",last_label=\"" + feeder_chain.last_label + "\"";
+	}
+	text += "}";
+	text += ",same_level_setup={label_indexes=";
+	if (same_level_setup.labels == 0) {
+		text += "none";
+	} else {
+		text += itos(same_level_setup.first_label_index) + ".." + itos(same_level_setup.last_label_index);
+	}
+	text += ",labels=" + itos(same_level_setup.labels);
+	text += ",ops={copy=" + itos(same_level_setup.copy);
+	text += ",compute=" + itos(same_level_setup.compute);
+	text += ",draw=" + itos(same_level_setup.draw);
+	text += ",custom=" + itos(same_level_setup.custom);
+	text += ",mixed=" + itos(same_level_setup.mixed);
+	text += ",unclassified=" + itos(same_level_setup.unclassified) + "}";
+	if (!same_level_setup.first_label.is_empty()) {
+		text += ",first_label=\"" + same_level_setup.first_label + "\"";
+	}
+	if (!same_level_setup.last_label.is_empty()) {
+		text += ",last_label=\"" + same_level_setup.last_label + "\"";
+	}
+	text += "}";
+	text += ",inherited_dependency_chain={label_indexes=";
+	if (inherited_dependency_chain.labels == 0) {
+		text += "none";
+	} else {
+		text += itos(inherited_dependency_chain.first_label_index) + ".." + itos(inherited_dependency_chain.last_label_index);
+	}
+	text += ",levels=";
+	if (inherited_dependency_chain.labels == 0) {
+		text += "none";
+	} else if (inherited_dependency_chain.first_level == inherited_dependency_chain.last_level) {
+		text += itos(inherited_dependency_chain.first_level);
+	} else {
+		text += itos(inherited_dependency_chain.first_level) + ".." + itos(inherited_dependency_chain.last_level);
+	}
+	text += ",labels=" + itos(inherited_dependency_chain.labels);
+	text += ",ops={copy=" + itos(inherited_dependency_chain.copy);
+	text += ",compute=" + itos(inherited_dependency_chain.compute);
+	text += ",draw=" + itos(inherited_dependency_chain.draw);
+	text += ",custom=" + itos(inherited_dependency_chain.custom);
+	text += ",mixed=" + itos(inherited_dependency_chain.mixed);
+	text += ",unclassified=" + itos(inherited_dependency_chain.unclassified) + "}";
+	if (!inherited_dependency_chain.first_label.is_empty()) {
+		text += ",first_label=\"" + inherited_dependency_chain.first_label + "\"";
+	}
+	if (!inherited_dependency_chain.last_label.is_empty()) {
+		text += ",last_label=\"" + inherited_dependency_chain.last_label + "\"";
+	}
+	text += "}";
+	text += ",previous_draw_label=";
+	String previous_draw_label;
+	for (int64_t i = chain_start_index - 1; i >= 0; i--) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.operation_tag == "Draw") {
+			previous_draw_label = entry.label;
+			break;
+		}
+	}
+	if (previous_draw_label.is_empty()) {
+		text += "none";
+	} else {
+		text += "\"" + previous_draw_label + "\"";
+	}
+	if (p_command_buffer->debug_label_entries_overflow) {
+		text += ",entry_overflow=true";
+	}
+	text += "}";
+	return text;
+}
+
 void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
 	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
 		p_command_buffer->debug_label_tail_path += " > ";
@@ -7599,6 +7777,16 @@ void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo 
 	}
 	const int32_t level = _debug_extract_label_level(p_label_name);
 	const uint32_t label_index = p_command_buffer->debug_label_count > 0 ? (p_command_buffer->debug_label_count - 1) : 0;
+
+	if (p_command_buffer->debug_label_entry_count < 192) {
+		DebugLabelEntry &entry = p_command_buffer->debug_label_entries[p_command_buffer->debug_label_entry_count++];
+		entry.label = p_label_name;
+		entry.operation_tag = operation_tag;
+		entry.level = level;
+		entry.label_index = label_index;
+	} else {
+		p_command_buffer->debug_label_entries_overflow = true;
+	}
 
 	DebugLabelSegment *segment = nullptr;
 	if (p_command_buffer->debug_label_segment_count > 0) {
@@ -7751,6 +7939,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 		text += ",pre_tail_copy_body_split=" + _debug_command_buffer_pre_tail_copy_body_summary(command_buffer);
 		text += ",pre_tail_copy_handoff=" + _debug_command_buffer_pre_tail_copy_handoff_summary(command_buffer);
 		text += ",level_draw_handoff=" + _debug_command_buffer_level_draw_handoff_summary(command_buffer);
+		text += ",depth_prepass_consumer_seam=" + _debug_command_buffer_depth_prepass_consumer_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}

@@ -464,6 +464,13 @@ private:
 		uint32_t unclassified_from_first_draw = 0;
 	};
 
+	struct DebugLabelEntry {
+		String label;
+		String operation_tag;
+		int32_t level = INT32_MAX;
+		uint32_t label_index = 0;
+	};
+
 	struct CommandBufferInfo {
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
 		Framebuffer *active_framebuffer = nullptr;
@@ -482,6 +489,9 @@ private:
 		bool debug_label_segment_overflow = false;
 		uint32_t debug_label_segment_count = 0;
 		DebugLabelSegment debug_label_segments[8];
+		bool debug_label_entries_overflow = false;
+		uint32_t debug_label_entry_count = 0;
+		DebugLabelEntry debug_label_entries[192];
 		bool debug_level_stats_overflow = false;
 		uint32_t debug_level_stat_count = 0;
 		DebugLevelStats debug_level_stats[128];
@@ -861,6 +871,7 @@ public:
 	static String _debug_command_buffer_pre_tail_copy_body_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_pre_tail_copy_handoff_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_level_draw_handoff_summary(const CommandBufferInfo *p_command_buffer);
+	static String _debug_command_buffer_depth_prepass_consumer_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer);
 	void _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
 	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
