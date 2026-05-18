@@ -1015,6 +1015,27 @@ Actual runtime result on the failing `submit_serial=9` seam: the wrapper remaine
 
 ---
 
+### Task 44: Inspect broader pass-level ownership around the depth-prepass wrapper on failing `submit_serial=9`
+
+**Bead ID:** `oc-iml`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-iml` and keep the investigation projection-only on the refreshed source-built Godot binary. The exact `Render Depth Pre-Pass (L15) (Draw)` wrapper is now exhausted as a label-local seam: it shows no direct payload, nested labeled payload, or secondary-command payload. Add small, reversible, high-signal instrumentation that widens one rung to broader render-pass / pass-level ownership around that wrapper so we can see what pass/container work survives around it before the later `fence_wait_error submit_serial=9 wait_result=-4` / `BLIT_PASS` collapse. Prefer render-pass ownership / command-buffer/pass-level attribution over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-iml` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- backend seam diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added command-buffer render-pass scope tracking in `drivers/vulkan/rendering_device_driver_vulkan.{h,cpp}` and surfaced it in a new `depth_prepass_pass_scope=` summary beside the existing `depth_prepass_consumer_seam=` payload. The new scope tracker records per-render-pass owner labels, labels-started-inside-scope counts, pass-local backend command counts, and immediate neighboring pass scopes so the exhausted `Render Depth Pre-Pass (L15) (Draw)` wrapper can be viewed one rung wider at pass/container scope. Rebuilt the source editor with `scons platform=linuxbsd target=editor dev_build=yes -j8` and reran the projection-only staged repro on the host Wayland/Vulkan path using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`; the refreshed log at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-pass-scope-vulkan-sourcebuild-20260518-17052753266/stdout.log` still aborts with `fence_wait_error submit_serial=9 wait_result=-4` then `BLIT_PASS`, but now shows `depth_prepass_pass_scope={scope_count=5,target={index=0,owner_begin="Render Depth Pre-Pass (L15) (Draw)",owner_end="Render Depth Pre-Pass (L15) (Draw)",labels_started=0,draw_labels_started=0,...},previous=none,next={index=1,owner_begin="Render Opaque Pass (L16) (Draw)",...}}`. In other words: the exact L15 wrapper is still a bare begin/end render-pass scope with no labels or direct payload started inside it, and the next surviving pass/container boundary after it is already `Render Opaque Pass (L16) (Draw)`. This keeps the staged repro intact while widening the attribution seam from label-local ownership to pass-scope ownership.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

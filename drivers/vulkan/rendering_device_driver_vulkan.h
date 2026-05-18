@@ -535,6 +535,48 @@ private:
 		String last_descendant_secondary_breadcrumb;
 	};
 
+	struct DebugRenderPassScope {
+		uint32_t scope_index = 0;
+		uint32_t begin_owner_entry_index = UINT32_MAX;
+		uint32_t begin_owner_label_index = 0;
+		int32_t begin_owner_level = INT32_MAX;
+		String begin_owner_label;
+		uint32_t end_owner_entry_index = UINT32_MAX;
+		uint32_t end_owner_label_index = 0;
+		int32_t end_owner_level = INT32_MAX;
+		String end_owner_label;
+		uint32_t begin_breadcrumb = 0;
+		uint32_t end_breadcrumb = 0;
+		uint32_t labels_started = 0;
+		uint32_t draw_labels_started = 0;
+		uint32_t first_label_entry_index = UINT32_MAX;
+		uint32_t last_label_entry_index = UINT32_MAX;
+		uint32_t first_label_index = 0;
+		uint32_t last_label_index = 0;
+		int32_t first_label_level = INT32_MAX;
+		int32_t last_label_level = INT32_MIN;
+		String first_label;
+		String last_label;
+		uint32_t render_pass_begin_count = 0;
+		uint32_t next_subpass_count = 0;
+		uint32_t render_pass_end_count = 0;
+		uint32_t render_pipeline_bind_count = 0;
+		uint32_t render_uniform_bind_count = 0;
+		uint32_t vertex_buffer_bind_count = 0;
+		uint32_t vertex_buffer_binding_total = 0;
+		uint32_t index_buffer_bind_count = 0;
+		uint32_t draw_count = 0;
+		uint32_t draw_indexed_count = 0;
+		uint32_t draw_indirect_count = 0;
+		uint32_t draw_indexed_indirect_count = 0;
+		uint32_t execute_secondary_count = 0;
+		uint32_t secondary_command_buffer_count = 0;
+		uint32_t secondary_label_count = 0;
+		uint32_t secondary_draw_label_count = 0;
+		String first_backend_command;
+		String last_backend_command;
+	};
+
 	struct CommandBufferInfo {
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
 		Framebuffer *active_framebuffer = nullptr;
@@ -566,6 +608,10 @@ private:
 		bool debug_level_stats_overflow = false;
 		uint32_t debug_level_stat_count = 0;
 		DebugLevelStats debug_level_stats[128];
+		bool debug_render_pass_scope_overflow = false;
+		uint32_t debug_render_pass_scope_count = 0;
+		uint32_t debug_active_render_pass_scope_index = UINT32_MAX;
+		DebugRenderPassScope debug_render_pass_scopes[64];
 	};
 
 public:
@@ -944,8 +990,10 @@ public:
 	static String _debug_command_buffer_pre_tail_copy_handoff_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_level_draw_handoff_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_depth_prepass_consumer_summary(const CommandBufferInfo *p_command_buffer);
+	static String _debug_command_buffer_depth_prepass_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer);
 	uint32_t _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
+	void _debug_record_active_render_pass_scope_command(CommandBufferInfo *p_command_buffer, const char *p_command_name);
 	void _debug_record_label_backend_command(CommandBufferInfo *p_command_buffer, const char *p_command_name);
 	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
 	String _debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const;

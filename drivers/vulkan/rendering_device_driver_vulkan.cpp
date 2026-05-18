@@ -3441,6 +3441,9 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_active_label_stack_size = 0;
 	command_buffer->debug_level_stats_overflow = false;
 	command_buffer->debug_level_stat_count = 0;
+	command_buffer->debug_render_pass_scope_overflow = false;
+	command_buffer->debug_render_pass_scope_count = 0;
+	command_buffer->debug_active_render_pass_scope_index = UINT32_MAX;
 
 	VkCommandBufferBeginInfo cmd_buf_begin_info = {};
 	cmd_buf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -3481,6 +3484,9 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_active_label_stack_size = 0;
 	command_buffer->debug_level_stats_overflow = false;
 	command_buffer->debug_level_stat_count = 0;
+	command_buffer->debug_render_pass_scope_overflow = false;
+	command_buffer->debug_render_pass_scope_count = 0;
+	command_buffer->debug_active_render_pass_scope_index = UINT32_MAX;
 
 	VkCommandBufferInheritanceInfo inheritance_info = {};
 	inheritance_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -3515,6 +3521,22 @@ void RenderingDeviceDriverVulkan::command_buffer_execute_secondary(CommandBuffer
 
 	vkCmdExecuteCommands(command_buffer->vk_command_buffer, p_secondary_cmd_buffers.size(), secondary_command_buffers.ptr());
 	_debug_record_label_backend_command(command_buffer, "execute_secondary");
+	if (command_buffer->debug_active_render_pass_scope_index != UINT32_MAX && command_buffer->debug_active_render_pass_scope_index < command_buffer->debug_render_pass_scope_count) {
+		DebugRenderPassScope &scope = command_buffer->debug_render_pass_scopes[command_buffer->debug_active_render_pass_scope_index];
+		scope.secondary_command_buffer_count += p_secondary_cmd_buffers.size();
+		for (uint32_t i = 0; i < p_secondary_cmd_buffers.size(); i++) {
+			CommandBufferInfo *secondary_command_buffer = (CommandBufferInfo *)(p_secondary_cmd_buffers[i].id);
+			uint32_t secondary_draw_labels = 0;
+			for (uint32_t j = 0; j < secondary_command_buffer->debug_label_entry_count; j++) {
+				const DebugLabelEntry &secondary_entry = secondary_command_buffer->debug_label_entries[j];
+				if (secondary_entry.operation_tag == "Draw") {
+					secondary_draw_labels++;
+				}
+			}
+			scope.secondary_label_count += secondary_command_buffer->debug_label_count;
+			scope.secondary_draw_label_count += secondary_draw_labels;
+		}
+	}
 	if (command_buffer->debug_active_label_stack_size > 0) {
 		const uint32_t active_entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
 		if (active_entry_index < command_buffer->debug_label_entry_count) {
@@ -5636,6 +5658,27 @@ void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cm
 	command_buffer->active_framebuffer = framebuffer;
 	command_buffer->active_render_pass = render_pass;
 	command_buffer->active_render_subpass = 0;
+	if (command_buffer->debug_render_pass_scope_count < 64) {
+		const uint32_t scope_index = command_buffer->debug_render_pass_scope_count++;
+		DebugRenderPassScope &scope = command_buffer->debug_render_pass_scopes[scope_index];
+		scope = DebugRenderPassScope();
+		scope.scope_index = scope_index;
+		scope.begin_breadcrumb = command_buffer->debug_last_breadcrumb;
+		if (command_buffer->debug_active_label_stack_size > 0) {
+			const uint32_t owner_entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+			if (owner_entry_index < command_buffer->debug_label_entry_count) {
+				const DebugLabelEntry &owner_entry = command_buffer->debug_label_entries[owner_entry_index];
+				scope.begin_owner_entry_index = owner_entry_index;
+				scope.begin_owner_label_index = owner_entry.label_index;
+				scope.begin_owner_level = owner_entry.level;
+				scope.begin_owner_label = owner_entry.label;
+			}
+		}
+		command_buffer->debug_active_render_pass_scope_index = scope_index;
+	} else {
+		command_buffer->debug_render_pass_scope_overflow = true;
+		command_buffer->debug_active_render_pass_scope_index = UINT32_MAX;
+	}
 	_debug_record_label_backend_command(command_buffer, "begin_render_pass");
 
 #if PRINT_NATIVE_COMMANDS
@@ -5672,6 +5715,21 @@ void RenderingDeviceDriverVulkan::command_end_render_pass(CommandBufferID p_cmd_
 	}
 
 	_debug_record_label_backend_command(command_buffer, "end_render_pass");
+	if (command_buffer->debug_active_render_pass_scope_index != UINT32_MAX && command_buffer->debug_active_render_pass_scope_index < command_buffer->debug_render_pass_scope_count) {
+		DebugRenderPassScope &scope = command_buffer->debug_render_pass_scopes[command_buffer->debug_active_render_pass_scope_index];
+		scope.end_breadcrumb = command_buffer->debug_last_breadcrumb;
+		if (command_buffer->debug_active_label_stack_size > 0) {
+			const uint32_t owner_entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+			if (owner_entry_index < command_buffer->debug_label_entry_count) {
+				const DebugLabelEntry &owner_entry = command_buffer->debug_label_entries[owner_entry_index];
+				scope.end_owner_entry_index = owner_entry_index;
+				scope.end_owner_label_index = owner_entry.label_index;
+				scope.end_owner_level = owner_entry.level;
+				scope.end_owner_label = owner_entry.label;
+			}
+		}
+	}
+	command_buffer->debug_active_render_pass_scope_index = UINT32_MAX;
 	command_buffer->active_render_pass = nullptr;
 	command_buffer->active_framebuffer = nullptr;
 	command_buffer->active_render_subpass = 0;
@@ -6887,6 +6945,24 @@ void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buff
 		}
 	}
 	const uint32_t label_entry_index = _debug_record_command_label(command_buffer, String(p_label_name));
+	if (label_entry_index != UINT32_MAX && command_buffer->debug_active_render_pass_scope_index != UINT32_MAX && command_buffer->debug_active_render_pass_scope_index < command_buffer->debug_render_pass_scope_count) {
+		DebugRenderPassScope &scope = command_buffer->debug_render_pass_scopes[command_buffer->debug_active_render_pass_scope_index];
+		const DebugLabelEntry &entry = command_buffer->debug_label_entries[label_entry_index];
+		scope.labels_started++;
+		if (scope.first_label.is_empty()) {
+			scope.first_label = entry.label;
+			scope.first_label_level = entry.level;
+			scope.first_label_index = entry.label_index;
+			scope.first_label_entry_index = label_entry_index;
+		}
+		scope.last_label = entry.label;
+		scope.last_label_level = entry.level;
+		scope.last_label_index = entry.label_index;
+		scope.last_label_entry_index = label_entry_index;
+		if (entry.operation_tag == "Draw") {
+			scope.draw_labels_started++;
+		}
+	}
 	if (label_entry_index != UINT32_MAX) {
 		const DebugLabelEntry &new_entry = command_buffer->debug_label_entries[label_entry_index];
 		for (uint32_t i = 0; i < command_buffer->debug_active_label_stack_size; i++) {
@@ -8120,6 +8196,125 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer
 	return text;
 }
 
+String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_pass_scope_summary(const CommandBufferInfo *p_command_buffer) {
+	int32_t draw_entry_index = -1;
+	for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.label == "Render Depth Pre-Pass (L15) (Draw)") {
+			draw_entry_index = (int32_t)i;
+			break;
+		}
+	}
+	if (draw_entry_index == -1) {
+		return "{status=missing_draw_boundary,scope_count=" + itos(p_command_buffer->debug_render_pass_scope_count) + "}";
+	}
+
+	int32_t target_scope_index = -1;
+	for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+		if ((scope.begin_owner_entry_index != UINT32_MAX && scope.begin_owner_entry_index == (uint32_t)draw_entry_index) ||
+				(scope.end_owner_entry_index != UINT32_MAX && scope.end_owner_entry_index == (uint32_t)draw_entry_index)) {
+			target_scope_index = (int32_t)i;
+			break;
+		}
+	}
+	if (target_scope_index == -1) {
+		for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
+			const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+			if (scope.begin_owner_label == "Render Depth Pre-Pass (L15) (Draw)" || scope.end_owner_label == "Render Depth Pre-Pass (L15) (Draw)") {
+				target_scope_index = (int32_t)i;
+				break;
+			}
+		}
+	}
+	if (target_scope_index == -1) {
+		return "{status=missing_scope_owner,scope_count=" + itos(p_command_buffer->debug_render_pass_scope_count) + "}";
+	}
+
+	const auto scope_summary = [](const DebugRenderPassScope &scope) {
+		String text = "{index=" + itos(scope.scope_index);
+		text += ",owner_begin=";
+		if (scope.begin_owner_label.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + scope.begin_owner_label + "\"";
+		}
+		text += ",owner_end=";
+		if (scope.end_owner_label.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + scope.end_owner_label + "\"";
+		}
+		text += ",labels_started=" + itos(scope.labels_started);
+		text += ",draw_labels_started=" + itos(scope.draw_labels_started);
+		text += ",label_indexes=";
+		if (scope.labels_started == 0) {
+			text += "none";
+		} else {
+			text += itos(scope.first_label_index) + ".." + itos(scope.last_label_index);
+		}
+		text += ",levels=";
+		if (scope.labels_started == 0) {
+			text += "none";
+		} else if (scope.first_label_level == scope.last_label_level) {
+			text += itos(scope.first_label_level);
+		} else {
+			text += itos(scope.first_label_level) + ".." + itos(scope.last_label_level);
+		}
+		if (!scope.first_label.is_empty()) {
+			text += ",first_label=\"" + scope.first_label + "\"";
+		}
+		if (!scope.last_label.is_empty()) {
+			text += ",last_label=\"" + scope.last_label + "\"";
+		}
+		text += ",commands={render_pass_begin=" + itos(scope.render_pass_begin_count);
+		text += ",next_subpass=" + itos(scope.next_subpass_count);
+		text += ",render_pass_end=" + itos(scope.render_pass_end_count);
+		text += ",pipeline_binds=" + itos(scope.render_pipeline_bind_count);
+		text += ",uniform_binds=" + itos(scope.render_uniform_bind_count);
+		text += ",vertex_buffer_binds=" + itos(scope.vertex_buffer_bind_count);
+		text += ",vertex_buffer_binding_total=" + itos(scope.vertex_buffer_binding_total);
+		text += ",index_buffer_binds=" + itos(scope.index_buffer_bind_count);
+		text += ",draw_calls=" + itos(scope.draw_count);
+		text += ",draw_indexed_calls=" + itos(scope.draw_indexed_count);
+		text += ",draw_indirect_calls=" + itos(scope.draw_indirect_count);
+		text += ",draw_indexed_indirect_calls=" + itos(scope.draw_indexed_indirect_count);
+		text += ",execute_secondary_calls=" + itos(scope.execute_secondary_count);
+		text += ",secondary_command_buffers=" + itos(scope.secondary_command_buffer_count);
+		text += ",secondary_labels=" + itos(scope.secondary_label_count);
+		text += ",secondary_draw_labels=" + itos(scope.secondary_draw_label_count) + "}";
+		if (!scope.first_backend_command.is_empty()) {
+			text += ",first_backend_command=\"" + scope.first_backend_command + "\"";
+		}
+		if (!scope.last_backend_command.is_empty()) {
+			text += ",last_backend_command=\"" + scope.last_backend_command + "\"";
+		}
+		text += ",begin_breadcrumb=\"" + RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(scope.begin_breadcrumb) + "\"";
+		text += ",end_breadcrumb=\"" + RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(scope.end_breadcrumb) + "\"}";
+		return text;
+	};
+
+	String text = "{scope_count=" + itos(p_command_buffer->debug_render_pass_scope_count);
+	text += ",target=" + scope_summary(p_command_buffer->debug_render_pass_scopes[target_scope_index]);
+	text += ",previous=";
+	if (target_scope_index > 0) {
+		text += scope_summary(p_command_buffer->debug_render_pass_scopes[target_scope_index - 1]);
+	} else {
+		text += "none";
+	}
+	text += ",next=";
+	if ((uint32_t)(target_scope_index + 1) < p_command_buffer->debug_render_pass_scope_count) {
+		text += scope_summary(p_command_buffer->debug_render_pass_scopes[target_scope_index + 1]);
+	} else {
+		text += "none";
+	}
+	if (p_command_buffer->debug_render_pass_scope_overflow) {
+		text += ",scope_overflow=true";
+	}
+	text += "}";
+	return text;
+}
+
 uint32_t RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
 	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
 		p_command_buffer->debug_label_tail_path += " > ";
@@ -8273,7 +8468,51 @@ uint32_t RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferI
 	return label_entry_index;
 }
 
+void RenderingDeviceDriverVulkan::_debug_record_active_render_pass_scope_command(CommandBufferInfo *p_command_buffer, const char *p_command_name) {
+	if (p_command_buffer->debug_active_render_pass_scope_index == UINT32_MAX || p_command_buffer->debug_active_render_pass_scope_index >= p_command_buffer->debug_render_pass_scope_count) {
+		return;
+	}
+
+	DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[p_command_buffer->debug_active_render_pass_scope_index];
+	const String command_name = String(p_command_name);
+	if (scope.first_backend_command.is_empty()) {
+		scope.first_backend_command = command_name;
+	}
+	scope.last_backend_command = command_name;
+
+	if (command_name == "begin_render_pass") {
+		scope.render_pass_begin_count++;
+	} else if (command_name == "end_render_pass") {
+		scope.render_pass_end_count++;
+	} else if (command_name == "next_render_subpass") {
+		scope.next_subpass_count++;
+	} else if (command_name == "bind_render_pipeline") {
+		scope.render_pipeline_bind_count++;
+	} else if (command_name == "bind_render_uniform_sets") {
+		scope.render_uniform_bind_count++;
+	} else if (command_name == "bind_vertex_buffers") {
+		scope.vertex_buffer_bind_count++;
+		scope.vertex_buffer_binding_total += p_command_buffer->debug_vertex_binding_count;
+	} else if (command_name == "bind_index_buffer") {
+		scope.index_buffer_bind_count++;
+	} else if (command_name == "draw") {
+		scope.draw_count++;
+	} else if (command_name == "draw_indexed") {
+		scope.draw_count++;
+		scope.draw_indexed_count++;
+	} else if (command_name == "draw_indirect") {
+		scope.draw_count++;
+		scope.draw_indirect_count++;
+	} else if (command_name == "draw_indexed_indirect") {
+		scope.draw_count++;
+		scope.draw_indexed_indirect_count++;
+	} else if (command_name == "execute_secondary") {
+		scope.execute_secondary_count++;
+	}
+}
+
 void RenderingDeviceDriverVulkan::_debug_record_label_backend_command(CommandBufferInfo *p_command_buffer, const char *p_command_name) {
+	_debug_record_active_render_pass_scope_command(p_command_buffer, p_command_name);
 	if (p_command_buffer->debug_active_label_stack_size == 0) {
 		return;
 	}
@@ -8387,6 +8626,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 		text += ",pre_tail_copy_handoff=" + _debug_command_buffer_pre_tail_copy_handoff_summary(command_buffer);
 		text += ",level_draw_handoff=" + _debug_command_buffer_level_draw_handoff_summary(command_buffer);
 		text += ",depth_prepass_consumer_seam=" + _debug_command_buffer_depth_prepass_consumer_summary(command_buffer);
+		text += ",depth_prepass_pass_scope=" + _debug_command_buffer_depth_prepass_pass_scope_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}
