@@ -221,6 +221,7 @@ private:
 	BufferID breadcrumb_buffer;
 	uint32_t breadcrumb_offset = 0u;
 	uint32_t breadcrumb_id = 0u;
+	uint64_t submit_serial = 0;
 #endif
 
 public:
@@ -339,6 +340,15 @@ private:
 	struct Fence {
 		VkFence vk_fence = VK_NULL_HANDLE;
 		CommandQueue *queue_signaled_from = nullptr;
+		uint64_t last_submit_serial = 0;
+		uint32_t last_queue_family = 0;
+		uint32_t last_queue_index = 0;
+		uint32_t last_wait_semaphore_count = 0;
+		uint32_t last_command_buffer_count = 0;
+		uint32_t last_signal_semaphore_count = 0;
+		uint32_t last_swap_chain_count = 0;
+		uint32_t last_pending_fence_semaphore_count = 0;
+		bool last_present_submission = false;
 	};
 
 public:

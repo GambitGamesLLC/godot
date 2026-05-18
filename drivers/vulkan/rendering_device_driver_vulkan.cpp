@@ -2978,11 +2978,16 @@ RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
 	VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
+	print_line(vformat("[gdgs-vk] fence_wait_begin submit_serial=%d queue_family=%d queue_index=%d fence_status=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)fence_status, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false"));
 	if (fence_status == VK_NOT_READY) {
 		VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+		if (err != VK_SUCCESS) {
+			print_line(vformat("[gdgs-vk] fence_wait_error submit_serial=%d queue_family=%d queue_index=%d wait_result=%d", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)err));
+		}
 		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", err));
 	}
 
+	print_line(vformat("[gdgs-vk] fence_wait_end submit_serial=%d queue_family=%d queue_index=%d fence_status=%d", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)fence_status));
 	VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence);
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't reset Vulkan fence (VkResult error %d).", err));
 
@@ -3186,6 +3191,19 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		submit_info.pCommandBuffers = command_buffers.ptr();
 		submit_info.signalSemaphoreCount = signal_semaphores.size();
 		submit_info.pSignalSemaphores = signal_semaphores.ptr();
+
+		if (fence != nullptr) {
+			fence->last_submit_serial = ++submit_serial;
+			fence->last_queue_family = command_queue->queue_family;
+			fence->last_queue_index = command_queue->queue_index;
+			fence->last_wait_semaphore_count = wait_semaphores.size();
+			fence->last_command_buffer_count = command_buffers.size();
+			fence->last_signal_semaphore_count = signal_semaphores.size();
+			fence->last_swap_chain_count = p_swap_chains.size();
+			fence->last_pending_fence_semaphore_count = command_queue->pending_semaphores_for_fence.size();
+			fence->last_present_submission = !p_swap_chains.is_empty();
+			print_line(vformat("[gdgs-vk] queue_submit submit_serial=%d queue_family=%d queue_index=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false"));
+		}
 
 		device_queue.submit_mutex.lock();
 		err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);

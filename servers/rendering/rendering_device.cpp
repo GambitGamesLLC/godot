@@ -8164,6 +8164,7 @@ void RenderingDevice::_execute_frame(bool p_present) {
 	// Check whether this frame should present the swap chains and in which queue.
 	const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.is_empty();
 	const bool separate_present_queue = main_queue != present_queue;
+	print_line(vformat("[gdgs-rd] frame_execute_begin frame=%d present_requested=%s frame_can_present=%s separate_present_queue=%s wait_semaphores=%d swap_chains=%d pending_buffer_downloads=%d pending_texture_downloads=%d", frame, p_present ? "true" : "false", frame_can_present ? "true" : "false", separate_present_queue ? "true" : "false", frames[frame].semaphores_to_wait_on.size(), frames[frame].swap_chains_to_present.size(), frames[frame].download_buffer_get_data_requests.size(), frames[frame].download_texture_get_data_requests.size()));
 
 	// The semaphore is required if the frame can be presented and a separate present queue is used;
 	// since the separate queue will wait for that semaphore before presenting.
@@ -8176,6 +8177,7 @@ void RenderingDevice::_execute_frame(bool p_present) {
 	// Indicate the fence has been signaled so the next time the frame's contents need to be
 	// used, the CPU needs to wait on the work to be completed.
 	frames[frame].fence_signaled = true;
+	print_line(vformat("[gdgs-rd] frame_execute_submitted frame=%d present_swap_chain=%s fence_signaled=%s wait_semaphores=%d swap_chains=%d", frame, present_swap_chain ? "true" : "false", frames[frame].fence_signaled ? "true" : "false", frames[frame].semaphores_to_wait_on.size(), frames[frame].swap_chains_to_present.size()));
 
 	if (frame_can_present) {
 		if (separate_present_queue) {
@@ -8191,8 +8193,10 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 	thread_local PackedByteArray packed_byte_array;
 
 	if (frames[p_frame].fence_signaled) {
+		print_line(vformat("[gdgs-rd] frame_stall_begin frame=%d fence_signaled=%s wait_semaphores=%d swap_chains=%d pending_buffer_downloads=%d pending_texture_downloads=%d", p_frame, frames[p_frame].fence_signaled ? "true" : "false", frames[p_frame].semaphores_to_wait_on.size(), frames[p_frame].swap_chains_to_present.size(), frames[p_frame].download_buffer_get_data_requests.size(), frames[p_frame].download_texture_get_data_requests.size()));
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
-		driver->fence_wait(frames[p_frame].fence);
+		Error fence_wait_error = driver->fence_wait(frames[p_frame].fence);
+		print_line(vformat("[gdgs-rd] frame_stall_end frame=%d fence_wait_error=%d pending_buffer_downloads=%d pending_texture_downloads=%d", p_frame, (int)fence_wait_error, frames[p_frame].download_buffer_get_data_requests.size(), frames[p_frame].download_texture_get_data_requests.size()));
 		frames[p_frame].fence_signaled = false;
 
 		// Flush any pending requests for asynchronous buffer downloads.

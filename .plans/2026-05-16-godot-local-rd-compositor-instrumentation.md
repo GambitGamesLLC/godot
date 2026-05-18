@@ -1,7 +1,7 @@
 # Godot
 
-**Date:** 2026-05-16  
-**Status:** In Progress  
+**Date:** 2026-05-16
+**Status:** In Progress
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -41,10 +41,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 1: Map instrumentation points and staged isolation order in Godot/GDGS boundary
 
-**Bead ID:** `oc-xzt`  
-**SubAgent:** `primary` (for `research`)  
-**Role:** `research`  
-**References:** `REF-01`, `REF-02`, `REF-03`, `REF-04`, `REF-05`, `REF-06`  
+**Bead ID:** `oc-xzt`
+**SubAgent:** `primary` (for `research`)
+**Role:** `research`
+**References:** `REF-01`, `REF-02`, `REF-03`, `REF-04`, `REF-05`, `REF-06`
 **Prompt:** Using the current Godot source checkout and cleaned repro evidence, map the exact instrumentation points and staged workload-isolation order for the local-RD/compositor boundary. Specify where to add breadcrumbs/assertions and what order to re-enable workload slices (`no dispatch`, trivial dispatch, projection, radix, boundaries, render, etc.).
 
 **Folders Created/Deleted/Modified:**
@@ -62,10 +62,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 2: Prepare the local instrumentation branch/package
 
-**Bead ID:** `oc-jev`  
+**Bead ID:** `oc-jev`
 **SubAgent:** `primary` (for `coder`)
 **Role:** `coder`
-**References:** `REF-01`, `REF-02`, `REF-03`, `REF-04`, `REF-05`  
+**References:** `REF-01`, `REF-02`, `REF-03`, `REF-04`, `REF-05`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-jev`, create a dedicated instrumentation branch from the current handoff state, and prepare the first diagnostic package for the surviving GDGS compositor repro. Use `REF-06` as the source of truth. Keep the changes diagnostic and reversible, not a speculative fix. Add callback entry/exit breadcrumbs in `RendererSceneRenderRD::_process_compositor_effects(...)`, add stage gates/logging in `addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd` and `addons/gdgs/runtime/render/gaussian_renderer.gd`, add dispatch-name / push-constant-size / group-count logging in `addons/gdgs/runtime/render/gaussian_rendering_device_context.gd`, and add seam-correction logging proving the current repro is global/global rather than local/global. Run relevant repo-local validation you can for the touched areas, commit the instrumentation package, push the branch to the Gambit fork, and close bead `oc-jev` with a clear reason if the package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -89,10 +89,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 3: Run staged GDGS compositor repro with the new instrumentation package
 
-**Bead ID:** `oc-hf4`  
+**Bead ID:** `oc-hf4`
 **SubAgent:** `primary` (for `qa`)
 **Role:** `qa`
-**References:** `REF-01`, `REF-04`, `REF-05`, `REF-06`  
+**References:** `REF-01`, `REF-04`, `REF-05`, `REF-06`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-hf4` and run the staged GDGS compositor repro using the new instrumentation branches. Capture the first meaningful new evidence from the documented isolation order: callback-only, no-dispatch, trivial-dispatch if available, projection-only, radix-only, boundaries-only, render-last, then compositor writeback/presentation only if earlier stages stabilize. Use `--accurate-breadcrumbs` on at least one rerun per meaningful stage boundary. Record exactly which stage first reproduces the crash or survives, preserve logs/artifacts/notes in repo-owned docs as needed, update this plan with actual findings, and close bead `oc-hf4` with a clear reason if the QA evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -111,10 +111,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 4: Audit whether the instrumentation package is the right first experiment
 
-**Bead ID:** `oc-76q`  
-**SubAgent:** `primary` (for `auditor`)  
-**Role:** `auditor`  
-**References:** `REF-01`, `REF-02`, `REF-03`, `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-76q`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-01`, `REF-02`, `REF-03`, `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** Independently audit the instrumentation package and the staged QA findings after bead `oc-hf4` completes. Confirm that the experiment was run in the right order, that the new evidence actually separates plugin misuse from engine/backend failure, and that the next suspect list follows from the observed results rather than old assumptions.
 
 **Folders Created/Deleted/Modified:**
@@ -132,7 +132,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 5: Deepen projection-pass diagnostics and add the missing trivial scratch dispatch control
 
-**Bead ID:** `oc-dew`  
+**Bead ID:** `oc-dew`
 **SubAgent:** `primary` (for `coder`)
 **Role:** `coder`
 **References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
@@ -201,7 +201,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 8: QA rerun after the scratch positive-control fix
 
-**Bead ID:** `oc-6li`  
+**Bead ID:** `oc-6li`
 **SubAgent:** `primary` (for `qa`)
 **Role:** `qa`
 **References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
@@ -223,7 +223,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 9: Deep-inspect projection dispatch contract and bounds/lifetime fallout
 
-**Bead ID:** `oc-wz6`  
+**Bead ID:** `oc-wz6`
 **SubAgent:** `primary` (for `coder`)
 **Role:** `coder`
 **References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
@@ -333,10 +333,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 14: QA rerun with projection GPU guard diagnostics
 
-**Bead ID:** `oc-bl3`  
-**SubAgent:** `primary` (for `qa`)  
-**Role:** `qa`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-bl3`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-bl3` and keep the investigation projection-only. Rerun the staged repro with the new GPU-side projection guard diagnostics. Prioritize `projection_only` and, if useful, `projection_probe_only` or the smallest readback mode that can surface the probe. Determine whether the new guards stay clean or report an immediate guarded failure class before the later fence/device-loss path. Capture the most important probe fields, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-bl3` with a clear reason if the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -355,10 +355,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 15: Investigate projection probe visibility/coherency and post-dispatch sync hazards
 
-**Bead ID:** `oc-lnp`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-lnp`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-lnp` and keep the investigation projection-only. Move the next diagnostic slice onto probe visibility/coherency and post-dispatch synchronization/lifetime hazards. Add small, reversible, high-signal instrumentation that can help distinguish: (1) projection produced outputs but probe/read visibility is incoherent, versus (2) projection outputs or resource usage are entering a sync/lifetime/backend hazard before later fence/device-loss fallout. Keep the staged repro model intact, avoid speculative fixes, update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-lnp` with a clear reason if complete.
 
 **Folders Created/Deleted/Modified:**
@@ -380,10 +380,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 16: QA compare projection probe visibility against scratch mirror visibility
 
-**Bead ID:** `oc-2cr`  
-**SubAgent:** `primary` (for `qa`)  
-**Role:** `qa`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-2cr`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-2cr` and keep the investigation projection-only. Use the new `scratch_projection_mirror_only` checkpoint and compare it against `projection_probe_only`. Determine whether projection activity/stage bits become visible in the known-good scratch mirror path even when the main projection probe remains zero or unreadable. Capture the most important mirror/probe fields, preserve durable notes/artifact references, update this plan with actual findings, and close bead `oc-2cr` with a clear reason if the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -402,10 +402,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 17: Inspect projection post-dispatch resource lifetime and cleanup hazards
 
-**Bead ID:** `oc-hm0`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-hm0`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-hm0` and keep the investigation projection-only. Focus on post-dispatch resource lifetime, cleanup timing, aliasing, and synchronization/backend hazard evidence around the projection outputs and associated buffers. Add small, reversible, high-signal instrumentation that can show whether cleanup/reuse/rebinding or lifetime transitions line up suspiciously close to the failing projection dispatch and later fence/device-loss fallout. Keep the staged repro model intact, avoid speculative fixes, update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-hm0` with a clear reason if complete.
 
 **Folders Created/Deleted/Modified:**
@@ -427,10 +427,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 18: QA correlate projection resource lifetime and cleanup hazard evidence
 
-**Bead ID:** `oc-x6n`  
-**SubAgent:** `primary` (for `qa`)  
-**Role:** `qa`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-x6n`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-x6n` and keep the investigation projection-only. Run a focused `projection_only` repro using the new lifetime/cleanup diagnostics and determine whether the projection resource snapshot remains stable from `projection_begin` through `projection_post_dispatch_checkpoint_end`, or whether any cleanup request, pending cleanup flush, rebuild, RID alias event, or resource-identity change involving those exact projection-owned resources occurs before the later `fence_wait` / `BLIT_PASS` device-loss collapse. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-x6n` with a clear reason if the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -449,10 +449,10 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 ### Task 19: Fix the projection resource snapshot helper and rerun lifetime correlation
 
-**Bead ID:** `oc-8ao`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-8ao`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-8ao` and keep the investigation projection-only. Fix the broken `_projection_resource_snapshot()` / RID-string helper path so the resource snapshot and alias diagnostics become trustworthy, while keeping the work diagnostic and reversible. Update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-8ao` with a clear reason if complete. The immediate follow-up QA goal is to rerun the same `projection_only + disabled` lifetime correlation with a functioning snapshot path.
 
 **Folders Created/Deleted/Modified:**
@@ -466,6 +466,50 @@ So the next lane should be controlled instrumentation and staged simplification,
 **Status:** ✅ Complete
 
 **Results:** Root cause confirmed from the Task 18 QA evidence: the new projection snapshot helper was still passing `state.pipelines[...]` through `_rid_string(rid: RID)`, but in this codepath those entries are `Callable` dispatch closures returned by `state.context.create_pipeline(...)`, not `RID` values. That made `_projection_resource_snapshot()` throw `Cannot convert argument 1 from Callable to RID`, which collapsed every logged `projection_resource_snapshot` to `{}` and blocked the intended lifetime/alias comparison. The fix stayed diagnostic and reversible: in both `addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd` and `addons/gdgs/runtime/render/gaussian_renderer.gd`, coder split pipeline serialization from RID serialization by (1) keeping `_rid_string()` strictly RID-only, (2) adding `_descriptor_set_rid_string()` for the real descriptor-set RIDs, and (3) adding `_pipeline_snapshot_string()` that records pipeline presence as `Callable(valid=true|false)` instead of pretending pipeline closures are RIDs. The snapshot helper was also tightened so alias reporting groups the tracked projection-owned resource RIDs by member name and only reports duplicate groups, which is more truthful for the next lifetime rerun than the earlier flat duplicate list. Validation run: `timeout 15s /home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit` exited `0` with no script parse/type errors from the touched files, plus a small static sanity check confirmed the new helper paths landed in both runtime files. Follow-up QA is still required to rerun the same `projection_only + disabled` Vulkan pass and compare the now-working snapshot payloads at `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end`.
+
+---
+
+### Task 20: QA rerun projection lifetime correlation after the snapshot-helper fix
+
+**Bead ID:** `oc-k2b`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-k2b` and keep the investigation projection-only. Rerun the same minimum valid host-Vulkan repro (`projection_only + disabled`) after the snapshot-helper fix. Compare `projection_resource_snapshot` across `projection_begin`, `projection_end`, and `projection_post_dispatch_checkpoint_end`, and determine whether the tracked projection-owned resources stay stable and whether any duplicate `alias_groups` appear before the later `fence_wait` / `BLIT_PASS` collapse. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-k2b` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan repro after the snapshot-helper repair using the preserved dev5 runtime `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64` on the host GPU path (`DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`) with stage `projection_only` and readback checkpoint `disabled`. Durable notes/artifacts were appended to `REF-07` under artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-projection-lifetime-snapshotfix-vulkan-dev5-20260517-191507/`. This rerun closes the resource-snapshot evidence gap left by bead `oc-x6n`: the repaired helper now emits a full `projection_resource_snapshot`, and that snapshot stays stable from `projection_begin` through `projection_end` and `projection_post_dispatch_checkpoint_end`. Across those three points, the tracked projection-owned resources held the same identities (`culled_splats=RID(11171209936915)`, `depth_texture=RID(11227044511803)`, `histogram=RID(11179799871509)`, `projection_probe=RID(11218454577181)`, `projection_set=RID(11231339479061)`, `render_texture=RID(11222749544506)`, `scratch_probe=RID(11214159609884)`, `scratch_probe_set=RID(11257109282843)`, `sort_keys=RID(11184094838806)`, `sort_values=RID(11188389806103)`, `tile_bounds=RID(11205569675290)`, with both `projection_pipeline` and `scratch_pipeline` still `Callable(valid=true)`), `aliasing_detected` stayed `false`, and `alias_groups` stayed `{}`. The lifecycle/correlation fields also stayed flat in the same window: `gpu_generation=1`, `projection_dispatch_serial=1` at all three stage checkpoints, `cleanup_request_serial=0`, and `cleanup_request_reason=none`, with no `request_cleanup`, `flush_pending_cleanup`, post-dispatch `cleanup_state`, or second `rebuild_gpu_state` logged before the later failure. Despite that stable snapshot window, the broader failure signature is unchanged: the disabled checkpoint path completes, `projection_only_gate` and `raster_only_no_writeback_gate` still log, and the device is still later lost at `fence_wait` with breadcrumbs collapsing to `BLIT_PASS`. This closes the QA bead with a complete evidence package for the requested lifetime/alias question: the tracked projection-owned resource set is stable and non-aliased before the later collapse, so the next recommendation is to move the investigation farther down the synchronization/backend/fence path rather than rerunning the same snapshot-stability check.
+
+---
+
+### Task 21: Instrument the post-projection sync and backend hazard path
+
+**Bead ID:** `oc-b8r`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-b8r` and keep the investigation projection-only. The current evidence says the projection dispatch is the first bad event, but not because of CPU readbacks, tracked cleanup churn, or tracked RID aliasing. Add small, reversible, high-signal instrumentation around the post-projection synchronization/backend path after `projection_post_dispatch_checkpoint_end` so QA can narrow where the GPU/backend path first becomes unhealthy before the later `fence_wait` / `BLIT_PASS` collapse. Prefer engine-adjacent or plugin-side sync/lifecycle evidence over repeating earlier bounds/probe work. Update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-b8r` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- sync/backend diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept the investigation projection-only and added two small diagnostic seams instead of more bounds/probe churn. On the GDGS side, `gaussian_renderer.gd` now returns a `debug_sync_snapshot` alongside the compositor textures, carrying `gpu_generation`, `projection_dispatch_serial`, `cleanup_request_serial`, `cleanup_request_reason`, and the full `projection_resource_snapshot` after `projection_post_dispatch_checkpoint_end`; `gaussian_compositor_effect.gd` logs that snapshot immediately at `render_for_compositor_returned`, which lets QA confirm whether the post-projection state that was stable inside the renderer still survives the callback-return seam right before the compositor exits at `raster_only_no_writeback_gate`. On the Godot side, `rendering_device.cpp` now logs `frame_execute_begin`, `frame_execute_submitted`, `frame_stall_begin`, and `frame_stall_end` with frame-local wait-semaphore, swapchain, and pending-download counts, while `rendering_device_driver_vulkan.{h,cpp}` records per-fence submission metadata (`submit_serial`, queue family/index, wait semaphore count, command buffer count, signal semaphore count, swapchain count, pending fence image semaphores, present-submission flag) and prints it at `queue_submit`, `fence_wait_begin`, `fence_wait_end`, and `fence_wait_error`. This gives QA a tighter chain from `projection_post_dispatch_checkpoint_end` -> compositor return seam -> frame submission -> fence wait, without changing sync behavior or introducing speculative fixes. Validation run: GDGS GDScript parse/load sanity via `timeout 20s .../Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit` exited `0`, and targeted `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp servers/rendering/rendering_device.cpp` passed for the Godot C++ edits. Recommended next QA question: in the first failing `projection_only` rerun with these logs enabled, does the returned `debug_sync_snapshot` stay identical through `render_for_compositor_sync_snapshot`, and if so, what is the first suspicious engine/backend transition — `queue_submit`, `frame_stall_begin`, or `fence_wait_begin/error` — before the familiar `BLIT_PASS` collapse?
 
 ---
 
