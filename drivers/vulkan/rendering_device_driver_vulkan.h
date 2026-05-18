@@ -992,6 +992,7 @@ public:
 	static String _debug_command_buffer_depth_prepass_consumer_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_depth_prepass_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_opaque_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
+	static String _debug_command_buffer_tonemap_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer);
 	uint32_t _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
 	void _debug_record_active_render_pass_scope_command(CommandBufferInfo *p_command_buffer, const char *p_command_name);

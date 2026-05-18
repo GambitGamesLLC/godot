@@ -8475,6 +8475,199 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_opaque_pass_scope_summ
 	return text;
 }
 
+String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_summary(const CommandBufferInfo *p_command_buffer) {
+	int32_t target_scope_index = -1;
+	for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+		if (scope.begin_owner_label == "Tonemap (L87) (Draw)" || scope.end_owner_label == "Tonemap (L87) (Draw)") {
+			target_scope_index = (int32_t)i;
+			break;
+		}
+	}
+	if (target_scope_index == -1) {
+		return "{status=missing_tonemap_scope,scope_count=" + itos(p_command_buffer->debug_render_pass_scope_count) + "}";
+	}
+
+	const auto scope_summary = [](const DebugRenderPassScope &scope) {
+		String text = "{index=" + itos(scope.scope_index);
+		text += ",owner_begin=";
+		if (scope.begin_owner_label.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + scope.begin_owner_label + "\"";
+		}
+		text += ",owner_end=";
+		if (scope.end_owner_label.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + scope.end_owner_label + "\"";
+		}
+		text += ",labels_started=" + itos(scope.labels_started);
+		text += ",draw_labels_started=" + itos(scope.draw_labels_started);
+		text += ",label_indexes=";
+		if (scope.labels_started == 0) {
+			text += "none";
+		} else {
+			text += itos(scope.first_label_index) + ".." + itos(scope.last_label_index);
+		}
+		text += ",levels=";
+		if (scope.labels_started == 0) {
+			text += "none";
+		} else if (scope.first_label_level == scope.last_label_level) {
+			text += itos(scope.first_label_level);
+		} else {
+			text += itos(scope.first_label_level) + ".." + itos(scope.last_label_level);
+		}
+		if (!scope.first_label.is_empty()) {
+			text += ",first_label=\"" + scope.first_label + "\"";
+		}
+		if (!scope.last_label.is_empty()) {
+			text += ",last_label=\"" + scope.last_label + "\"";
+		}
+		text += ",commands={render_pass_begin=" + itos(scope.render_pass_begin_count);
+		text += ",next_subpass=" + itos(scope.next_subpass_count);
+		text += ",render_pass_end=" + itos(scope.render_pass_end_count);
+		text += ",pipeline_binds=" + itos(scope.render_pipeline_bind_count);
+		text += ",uniform_binds=" + itos(scope.render_uniform_bind_count);
+		text += ",vertex_buffer_binds=" + itos(scope.vertex_buffer_bind_count);
+		text += ",vertex_buffer_binding_total=" + itos(scope.vertex_buffer_binding_total);
+		text += ",index_buffer_binds=" + itos(scope.index_buffer_bind_count);
+		text += ",draw_calls=" + itos(scope.draw_count);
+		text += ",draw_indexed_calls=" + itos(scope.draw_indexed_count);
+		text += ",draw_indirect_calls=" + itos(scope.draw_indirect_count);
+		text += ",draw_indexed_indirect_calls=" + itos(scope.draw_indexed_indirect_count);
+		text += ",execute_secondary_calls=" + itos(scope.execute_secondary_count);
+		text += ",secondary_command_buffers=" + itos(scope.secondary_command_buffer_count);
+		text += ",secondary_labels=" + itos(scope.secondary_label_count);
+		text += ",secondary_draw_labels=" + itos(scope.secondary_draw_label_count) + "}";
+		if (!scope.first_backend_command.is_empty()) {
+			text += ",first_backend_command=\"" + scope.first_backend_command + "\"";
+		}
+		if (!scope.last_backend_command.is_empty()) {
+			text += ",last_backend_command=\"" + scope.last_backend_command + "\"";
+		}
+		text += ",begin_breadcrumb=\"" + RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(scope.begin_breadcrumb) + "\"";
+		text += ",end_breadcrumb=\"" + RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(scope.end_breadcrumb) + "\"}";
+		return text;
+	};
+	const auto scope_class = [](const DebugRenderPassScope &scope) {
+		const bool has_workload = scope.labels_started > 0 || scope.draw_labels_started > 0 || scope.next_subpass_count > 0 || scope.render_pipeline_bind_count > 0 || scope.render_uniform_bind_count > 0 || scope.vertex_buffer_bind_count > 0 || scope.index_buffer_bind_count > 0 || scope.draw_count > 0 || scope.execute_secondary_count > 0 || scope.secondary_command_buffer_count > 0 || scope.secondary_label_count > 0 || scope.secondary_draw_label_count > 0;
+		if (!has_workload && scope.render_pass_begin_count > 0 && scope.render_pass_end_count > 0) {
+			return String("render_pass_wrapper");
+		}
+		if (scope.draw_count > 0) {
+			return String("draw_payload");
+		}
+		if (scope.execute_secondary_count > 0 || scope.secondary_command_buffer_count > 0 || scope.secondary_label_count > 0 || scope.secondary_draw_label_count > 0) {
+			return String("secondary_payload");
+		}
+		if (scope.labels_started > 0 || scope.next_subpass_count > 0 || scope.render_pipeline_bind_count > 0 || scope.render_uniform_bind_count > 0 || scope.vertex_buffer_bind_count > 0 || scope.index_buffer_bind_count > 0) {
+			return String("pass_local_workload");
+		}
+		return String("empty");
+	};
+	const auto scope_is_meaningful = [&](const DebugRenderPassScope &scope) {
+		return scope_class(scope) != "render_pass_wrapper" && scope_class(scope) != "empty";
+	};
+
+	int32_t wrapper_chain_start = target_scope_index;
+	for (int32_t i = target_scope_index - 1; i >= 0; i--) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+		if (scope_class(scope) != "render_pass_wrapper") {
+			break;
+		}
+		wrapper_chain_start = i;
+	}
+
+	int32_t previous_meaningful_scope_index = -1;
+	for (int32_t i = target_scope_index - 1; i >= 0; i--) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+		if (scope_is_meaningful(scope)) {
+			previous_meaningful_scope_index = i;
+			break;
+		}
+	}
+
+	int32_t next_meaningful_scope_index = -1;
+	for (uint32_t i = target_scope_index + 1; i < p_command_buffer->debug_render_pass_scope_count; i++) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+		if (scope_is_meaningful(scope)) {
+			next_meaningful_scope_index = (int32_t)i;
+			break;
+		}
+	}
+
+	const DebugRenderPassScope &target_scope = p_command_buffer->debug_render_pass_scopes[target_scope_index];
+	String text = "{scope_count=" + itos(p_command_buffer->debug_render_pass_scope_count);
+	text += ",target=" + scope_summary(target_scope);
+	text += ",target_class=\"" + scope_class(target_scope) + "\"";
+	text += ",first_meaningful_scope_is_target=";
+	text += previous_meaningful_scope_index == -1 ? "true" : "false";
+	text += ",previous_wrapper_chain_into_target={start_index=" + itos(wrapper_chain_start);
+	text += ",end_index=" + itos(target_scope_index - 1);
+	text += ",scope_count=" + itos(target_scope_index - wrapper_chain_start);
+	text += ",owner_begin_chain=";
+	if (wrapper_chain_start == target_scope_index) {
+		text += "[]";
+	} else {
+		text += "[";
+		for (int32_t i = wrapper_chain_start; i < target_scope_index; i++) {
+			if (i > wrapper_chain_start) {
+				text += ", ";
+			}
+			text += "\"" + p_command_buffer->debug_render_pass_scopes[i].begin_owner_label + "\"";
+		}
+		text += "]";
+	}
+	text += "}";
+	text += ",previous_meaningful_before_target=";
+	if (previous_meaningful_scope_index == -1) {
+		text += "none";
+	} else {
+		text += scope_summary(p_command_buffer->debug_render_pass_scopes[previous_meaningful_scope_index]);
+	}
+	text += ",workload_signature={direct_draw_calls=" + itos(target_scope.draw_count);
+	text += ",direct_draw_indexed_calls=" + itos(target_scope.draw_indexed_count);
+	text += ",direct_draw_indirect_calls=" + itos(target_scope.draw_indirect_count);
+	text += ",direct_draw_indexed_indirect_calls=" + itos(target_scope.draw_indexed_indirect_count);
+	text += ",pipeline_binds=" + itos(target_scope.render_pipeline_bind_count);
+	text += ",uniform_binds=" + itos(target_scope.render_uniform_bind_count);
+	text += ",vertex_buffer_binds=" + itos(target_scope.vertex_buffer_bind_count);
+	text += ",vertex_buffer_binding_total=" + itos(target_scope.vertex_buffer_binding_total);
+	text += ",index_buffer_binds=" + itos(target_scope.index_buffer_bind_count);
+	text += ",labels_started=" + itos(target_scope.labels_started);
+	text += ",draw_labels_started=" + itos(target_scope.draw_labels_started);
+	text += ",secondary_command_buffers=" + itos(target_scope.secondary_command_buffer_count);
+	text += ",secondary_draw_labels=" + itos(target_scope.secondary_draw_label_count);
+	text += ",begin_breadcrumb=\"" + RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(target_scope.begin_breadcrumb) + "\"";
+	text += ",end_breadcrumb=\"" + RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(target_scope.end_breadcrumb) + "\"}";
+	text += ",next_meaningful_after_target=";
+	if (next_meaningful_scope_index == -1) {
+		text += "none";
+	} else {
+		text += "{distance_scopes=" + itos(next_meaningful_scope_index - target_scope_index);
+		text += ",class=\"" + scope_class(p_command_buffer->debug_render_pass_scopes[next_meaningful_scope_index]) + "\"";
+		text += ",scope=" + scope_summary(p_command_buffer->debug_render_pass_scopes[next_meaningful_scope_index]) + "}";
+	}
+	text += ",previous=";
+	if (target_scope_index > 0) {
+		text += scope_summary(p_command_buffer->debug_render_pass_scopes[target_scope_index - 1]);
+	} else {
+		text += "none";
+	}
+	text += ",next=";
+	if ((uint32_t)(target_scope_index + 1) < p_command_buffer->debug_render_pass_scope_count) {
+		text += scope_summary(p_command_buffer->debug_render_pass_scopes[target_scope_index + 1]);
+	} else {
+		text += "none";
+	}
+	if (p_command_buffer->debug_render_pass_scope_overflow) {
+		text += ",scope_overflow=true";
+	}
+	text += "}";
+	return text;
+}
+
 uint32_t RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
 	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
 		p_command_buffer->debug_label_tail_path += " > ";
@@ -8788,6 +8981,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 		text += ",depth_prepass_consumer_seam=" + _debug_command_buffer_depth_prepass_consumer_summary(command_buffer);
 		text += ",depth_prepass_pass_scope=" + _debug_command_buffer_depth_prepass_pass_scope_summary(command_buffer);
 		text += ",opaque_pass_scope=" + _debug_command_buffer_opaque_pass_scope_summary(command_buffer);
+		text += ",tonemap_pass_scope=" + _debug_command_buffer_tonemap_pass_scope_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}
