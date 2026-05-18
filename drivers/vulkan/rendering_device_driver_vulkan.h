@@ -841,6 +841,7 @@ public:
 	static String _debug_extract_label_operation_tag(const String &p_label_name);
 	static int32_t _debug_extract_label_level(const String &p_label_name);
 	static String _debug_command_buffer_label_segments_summary(const CommandBufferInfo *p_command_buffer);
+	static String _debug_command_buffer_pre_tail_copy_body_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer);
 	void _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
 	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;

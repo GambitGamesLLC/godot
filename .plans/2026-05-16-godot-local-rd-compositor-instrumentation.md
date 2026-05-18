@@ -710,6 +710,49 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 ---
 
+### Task 30: QA classify the pre-tail body versus late tail on failing `submit_serial=9`
+
+**Bead ID:** `oc-bge`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-bge` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new `late_tail_split=` backend summary on failing `submit_serial=9`. Determine whether the tighter backend-owned hazard seam is the dominant pre-tail copy body or the short late `L86` / `L87` / `L88` tail, compare the aggregate body-versus-tail counts with the earlier `label_segments` / `label_tail` evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-bge` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan repro on the refreshed source-built editor and recorded the durable evidence in `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`). Exact runtime path used: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`, launched on the host GPU path (`DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`) against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`, case `projection_only__disabled`. Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-late-tail-sourcebuild-20260518-083603/`. The new `late_tail_split=` summary on failing `submit_serial=9` materially tightens the same classification established by bead `oc-uvd`: the plausible backend-owned seam is still the dominant pre-tail Copy body rather than the short late `L86` / `L87` / `L88` tail. Quantitatively, the command buffer splits into `pre_tail_labels=94` with `pre_tail_ops={copy=91,compute=0,draw=2,custom=0,mixed=0,unclassified=1}` versus only `tail_labels=8` with `tail_ops={copy=3,compute=1,draw=3,custom=0,mixed=1,unclassified=0}`. The per-level late tail stays tiny and matches the earlier `label_tail` evidence exactly: level `86` carries `5` labels (`copy=3, compute=1, draw=1`), level `87` carries `2` labels (`mixed=1, draw=1`), and level `88` carries the final single draw label. Compared against the earlier `label_segments` answer from `oc-uvd` (`Copy` blocks of `21` and `73` labels, then only `1+1+1+2` labels across the late draw/compute/mixed/draw epilogue), this new backend-owned split confirms that the frame-1 main command buffer is overwhelmingly copy-dominated before the final transparent / tonemap / draw tail. The broader provenance/failure signature is unchanged in the same run: `submit_serial=8` remains the transfer-worker handoff, `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`, the stable `render_for_compositor_sync_snapshot` still precedes the failing submit, the first explicit failure still surfaces at `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`. Recommended next step from this QA pass: split or classify the large pre-tail Copy body itself before spending more time on the already-quantified late `L86` / `L87` / `L88` epilogue.
+
+---
+
+### Task 31: Split the dominant pre-tail Copy body inside failing `submit_serial=9`
+
+**Bead ID:** `oc-ynq`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ynq` and keep the investigation projection-only on the refreshed source-built Godot binary. Add small, reversible, high-signal instrumentation that breaks apart or classifies the dominant pre-tail Copy body inside failing `submit_serial=9`. The goal is to identify whether that large Copy-dominated body contains a narrower backend-owned seam or subrange that better explains the later `fence_wait_error` / `BLIT_PASS` collapse. Prefer command-graph / backend ownership evidence over shader-side probes, keep the staged repro model intact, run relevant validation, update this plan with actual results, commit/push the changes, and close bead `oc-ynq` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- backend seam diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added one more compact Vulkan backend summary on top of `late_tail_split=` without changing renderer behavior or reopening shader-side probes. `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` now append `pre_tail_copy_body_split=` into `command_summary=` at submit / fence-wait time. The new summary keeps the existing late-tail definition (`max_level-2 .. max_level`) but breaks only the pre-tail body into fixed 8-level bands, reporting per-band label/op counts plus first/last labels and highlighting the dominant pre-tail bucket. This keeps the staged repro model intact while giving QA a narrower backend-owned question than the old `pre_tail_labels=94` lump: whether the copy-heavy body concentrates into a smaller level subrange, and if so which first/last labels frame that bucket. Validation run: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check`; incremental object rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; full refreshed editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "pre_tail_copy_body_split="` to confirm the new log string landed in the runnable source-built binary. This pass stays small, reversible, source-built, and projection-only.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

@@ -7207,6 +7207,123 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_late_tail_summary(cons
 	return text;
 }
 
+String RenderingDeviceDriverVulkan::_debug_command_buffer_pre_tail_copy_body_summary(const CommandBufferInfo *p_command_buffer) {
+	if (p_command_buffer->debug_level_stat_count == 0) {
+		return "{}";
+	}
+
+	int32_t max_level = INT32_MIN;
+	for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+		max_level = MAX(max_level, p_command_buffer->debug_level_stats[i].level);
+	}
+	if (max_level == INT32_MIN) {
+		return "{}";
+	}
+
+	const int32_t tail_start_level = MAX(max_level - 2, 0);
+	const int32_t pre_tail_max_level = tail_start_level - 1;
+	if (pre_tail_max_level < 0) {
+		return "{}";
+	}
+
+	static constexpr int32_t bucket_size = 8;
+	DebugLevelStats dominant_bucket;
+	int32_t dominant_bucket_start = INT32_MAX;
+	int32_t dominant_bucket_end = INT32_MIN;
+	String bucket_summaries = "[";
+	bool first_bucket = true;
+
+	for (int32_t bucket_start = 0; bucket_start <= pre_tail_max_level; bucket_start += bucket_size) {
+		const int32_t bucket_end = MIN(bucket_start + bucket_size - 1, pre_tail_max_level);
+		DebugLevelStats bucket_totals;
+		String first_label;
+		String last_label;
+
+		for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+			const DebugLevelStats &stats = p_command_buffer->debug_level_stats[i];
+			if (stats.level < bucket_start || stats.level > bucket_end) {
+				continue;
+			}
+			bucket_totals.label_count += stats.label_count;
+			bucket_totals.copy_count += stats.copy_count;
+			bucket_totals.compute_count += stats.compute_count;
+			bucket_totals.draw_count += stats.draw_count;
+			bucket_totals.custom_count += stats.custom_count;
+			bucket_totals.mixed_count += stats.mixed_count;
+			bucket_totals.unclassified_count += stats.unclassified_count;
+			if (first_label.is_empty() && !stats.first_label.is_empty()) {
+				first_label = stats.first_label;
+			}
+			if (!stats.last_label.is_empty()) {
+				last_label = stats.last_label;
+			}
+		}
+
+		if (bucket_totals.label_count == 0) {
+			continue;
+		}
+
+		if (!first_bucket) {
+			bucket_summaries += ", ";
+		}
+		first_bucket = false;
+		bucket_summaries += "{levels=" + itos(bucket_start) + ".." + itos(bucket_end);
+		bucket_summaries += ",labels=" + itos(bucket_totals.label_count);
+		bucket_summaries += ",ops={copy=" + itos(bucket_totals.copy_count);
+		bucket_summaries += ",compute=" + itos(bucket_totals.compute_count);
+		bucket_summaries += ",draw=" + itos(bucket_totals.draw_count);
+		bucket_summaries += ",custom=" + itos(bucket_totals.custom_count);
+		bucket_summaries += ",mixed=" + itos(bucket_totals.mixed_count);
+		bucket_summaries += ",unclassified=" + itos(bucket_totals.unclassified_count) + "}";
+		if (!first_label.is_empty()) {
+			bucket_summaries += ",first_label=\"" + first_label + "\"";
+		}
+		if (!last_label.is_empty()) {
+			bucket_summaries += ",last_label=\"" + last_label + "\"";
+		}
+		bucket_summaries += "}";
+
+		if (bucket_totals.copy_count > dominant_bucket.copy_count || (bucket_totals.copy_count == dominant_bucket.copy_count && bucket_totals.label_count > dominant_bucket.label_count)) {
+			dominant_bucket = bucket_totals;
+			dominant_bucket_start = bucket_start;
+			dominant_bucket_end = bucket_end;
+			dominant_bucket.first_label = first_label;
+			dominant_bucket.last_label = last_label;
+		}
+	}
+	bucket_summaries += "]";
+
+	String text = "{";
+	text += "bucket_size=" + itos(bucket_size);
+	text += ",pre_tail_levels=0.." + itos(pre_tail_max_level);
+	text += ",dominant_bucket=";
+	if (dominant_bucket_start == INT32_MAX) {
+		text += "{}";
+	} else {
+		text += "{levels=" + itos(dominant_bucket_start) + ".." + itos(dominant_bucket_end);
+		text += ",labels=" + itos(dominant_bucket.label_count);
+		text += ",ops={copy=" + itos(dominant_bucket.copy_count);
+		text += ",compute=" + itos(dominant_bucket.compute_count);
+		text += ",draw=" + itos(dominant_bucket.draw_count);
+		text += ",custom=" + itos(dominant_bucket.custom_count);
+		text += ",mixed=" + itos(dominant_bucket.mixed_count);
+		text += ",unclassified=" + itos(dominant_bucket.unclassified_count) + "}";
+		if (!dominant_bucket.first_label.is_empty()) {
+			text += ",first_label=\"" + dominant_bucket.first_label + "\"";
+		}
+		if (!dominant_bucket.last_label.is_empty()) {
+			text += ",last_label=\"" + dominant_bucket.last_label + "\"";
+		}
+		text += "}";
+	}
+	text += ",buckets=" + bucket_summaries;
+	if (p_command_buffer->debug_level_stats_overflow) {
+		text += ",overflow=true";
+	}
+	text += "}";
+	return text;
+}
+
 void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
 	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
 		p_command_buffer->debug_label_tail_path += " > ";
@@ -7339,6 +7456,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 		}
 		text += ",label_segments=" + _debug_command_buffer_label_segments_summary(command_buffer);
 		text += ",late_tail_split=" + _debug_command_buffer_late_tail_summary(command_buffer);
+		text += ",pre_tail_copy_body_split=" + _debug_command_buffer_pre_tail_copy_body_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}

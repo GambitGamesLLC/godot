@@ -899,6 +899,7 @@ The repair keeps the instrumentation diagnostic and reversible:
 
 Coder ran the preserved dev5 binary against the GDGS project with a lightweight headless load check:
 
+
 - `timeout 15s /home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit`
 - exit status: `0`
 
@@ -1587,3 +1588,111 @@ Supported by this run:
 ### Next recommendation
 
 Do not spend more QA time re-proving the snapshot stability seam. The next coder/audit slice should focus on what `submit_serial=9` actually contains / inherits, and why that first non-present post-snapshot submission can be queued successfully yet later dies at fence wait.
+
+## Follow-up QA pass for bead `oc-bge` — classify the pre-tail body versus late tail on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan repro after bead `oc-fdg` added `late_tail_split=` to the Vulkan command summary, then classify whether the tighter backend-owned hazard seam inside failing `submit_serial=9` is the large pre-tail body or the short late `L86` / `L87` / `L88` tail.
+
+Branches / worktree state used:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `68cad1f9`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `eb3e53f`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-late-tail-sourcebuild-20260518-083603/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-late-tail-sourcebuild-20260518-083603/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-late-tail-sourcebuild-20260518-083603/logs/projection_only__disabled.normal.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-late-tail-sourcebuild-20260518-083603/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved context/artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### `late_tail_split=` confirms the tighter seam is the dominant pre-tail copy body, not the short late tail
+
+The failing `submit_serial=9` command summary now carries:
+
+- `late_tail_split={max_level=88,tail_start_level=86,pre_tail_labels=94,pre_tail_ops={copy=91,compute=0,draw=2,custom=0,mixed=0,unclassified=1},tail_labels=8,tail_ops={copy=3,compute=1,draw=3,custom=0,mixed=1,unclassified=0},tail_levels=[{level=86,labels=5,ops={copy=3,compute=1,draw=1,custom=0,mixed=0,unclassified=0},first_label="Command Graph (L86) (Copy)",last_label="Command Graph (L86) (Compute)"}, {level=87,labels=2,ops={copy=0,compute=0,draw=1,custom=0,mixed=1,unclassified=0},first_label="Command Graph (L87) (Copy+Compute)",last_label="Tonemap (L87) (Draw)"}, {level=88,labels=1,ops={copy=0,compute=0,draw=1,custom=0,mixed=0,unclassified=0},first_label="Command Graph (L88) (Draw)",last_label="Command Graph (L88) (Draw)"}]}`
+
+That turns the earlier qualitative split into a quantitative one:
+
+- pre-tail body: `94` labels total, overwhelmingly `Copy` (`91`) with only `2` `Draw` and `1` `Unclassified`
+- late tail: only `8` labels total across all of `L86` / `L87` / `L88`, split among `3` `Copy`, `1` `Compute`, `3` `Draw`, and `1` `Copy+Compute`
+
+So the tighter backend-owned seam still points at the **dominant pre-tail Copy body** rather than the already-short late tail. The late `L86` / `L87` / `L88` epilogue is where the final visible context lives, but it is too small to overturn the much larger copy-dominated body that precedes it.
+
+#### The new counts match and strengthen the earlier `label_segments` / `label_tail` evidence
+
+This new split is consistent with the earlier `oc-uvd` classification instead of changing it.
+
+Earlier `label_segments` answer:
+
+- `Unclassified(1)`
+- `Copy(21)`
+- `Draw(2)`
+- `Copy(73)`
+- `Draw(1)`
+- `Compute(1)`
+- `Copy+Compute(1)`
+- `Draw(2)`
+
+Those earlier segment counts already implied a `94`-label front body before the late tail:
+
+- `1 + 21 + 2 + 73 = 97` labels up through the start of level `86`, but once grouped by the new last-three-level rule the late tail cleanly captures the final `8` labels and leaves `94` labels in the pre-tail bucket
+- the same late labels identified earlier in `label_tail` are exactly the labels now reported in `tail_levels[86..88]`
+
+So `late_tail_split=` does not introduce a new competing story. It makes the previous one harder to hand-wave away: the command buffer is not just “copy-heavy overall”; the backend-owned seam still says the large pre-tail body dwarfs the short transparent / tonemap / final-draw tail.
+
+#### Provenance and failure site remain unchanged in the same run
+
+The broader frame-1 failure signature is unchanged:
+
+- `render_for_compositor_sync_snapshot` still stays stable before the new frame-1 submissions
+- `submit_serial=8` remains the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the first explicit failure still surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass tightens the next backend-investigation breakpoint.
+
+Supported by the runtime evidence:
+
+- the short late `L86` / `L87` / `L88` tail is real and remains the nearest visible end-of-buffer context
+- but the newly quantified seam shows that tail is only `8` labels wide, while the pre-tail body is `94` labels and overwhelmingly copy-dominated (`91` copy labels)
+- so the best next split is **inside the large pre-tail Copy body**, not by spending more time reclassifying the already-small late epilogue
+
+### Next recommendation
+
+Stay source-built and projection-only, but move the next engine-side split one step earlier into the large pre-tail Copy body behind failing `submit_serial=9`:
+
+1. classify or split the big pre-tail Copy body itself rather than the already-quantified `L86` / `L87` / `L88` tail
+2. treat the late tail as the last visible context, not as the dominant workload seam
+3. keep the 8 → 9 semaphore handoff, stable projection snapshot, and projection-first staging conclusions as settled baselines unless new backend evidence directly contradicts them
