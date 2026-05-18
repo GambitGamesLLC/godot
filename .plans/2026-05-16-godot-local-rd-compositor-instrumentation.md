@@ -1036,6 +1036,49 @@ Actual runtime result on the failing `submit_serial=9` seam: the wrapper remaine
 
 ---
 
+### Task 45: QA inspect whether the first meaningful pass after the empty L15 wrapper is the L16 opaque scope on failing `submit_serial=9`
+
+**Bead ID:** `oc-8ie`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-8ie` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new `depth_prepass_pass_scope=` payload on failing `submit_serial=9`. Determine whether the first meaningful surviving pass/container after the empty `Render Depth Pre-Pass (L15) (Draw)` wrapper is consistently the neighboring `Render Opaque Pass (L16) (Draw)` scope, or whether another non-label-owned pass-level seam appears between those scopes. Compare the result against the earlier `depth_prepass_pass_scope=` / `depth_prepass_consumer_seam=` evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-8ie` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan source-built repro on 2026-05-18 using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-pass-scope-qa-vulkan-sourcebuild-20260518-172050 no_present compositor projection_only disabled 120` (artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-pass-scope-qa-vulkan-sourcebuild-20260518-172050/`). The refreshed `depth_prepass_pass_scope=` payload on failing `submit_serial=9` reported `scope_count=5`, `target={index=0,owner_begin="Render Depth Pre-Pass (L15) (Draw)",owner_end="Render Depth Pre-Pass (L15) (Draw)",labels_started=0,draw_labels_started=0,...}`, `previous=none`, and `next={index=1,owner_begin="Render Opaque Pass (L16) (Draw)",owner_end="Render Opaque Pass (L16) (Draw)",labels_started=0,draw_labels_started=0,...}`. That confirms the first meaningful surviving pass/container after the empty L15 wrapper is still the neighboring `Render Opaque Pass (L16) (Draw)` scope; QA did **not** observe any intervening non-label-owned pass-level seam between those scopes. This stays consistent with the earlier `depth_prepass_consumer_seam=` evidence that the L15 boundary is an empty `render_pass_wrapper` and with the coder-side validation that originally surfaced the same L16 adjacency. The outer repro envelope was unchanged in the same artifact: stable `render_for_compositor_sync_snapshot`, coherent `submit_serial=8` → `submit_serial=9` semaphore provenance, explicit `fence_wait_error submit_serial=9 wait_result=-4`, and later `BLIT_PASS`. Durable notes were appended to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`, and the evidence package is complete enough to close bead `oc-8ie`.
+
+---
+
+### Task 46: Inspect ownership and workload inside the L16 opaque pass after the empty L15 wrapper on failing `submit_serial=9`
+
+**Bead ID:** `oc-20r`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-20r` and keep the investigation projection-only on the refreshed source-built Godot binary. The empty `Render Depth Pre-Pass (L15) (Draw)` wrapper has now been demoted, and `Render Opaque Pass (L16) (Draw)` is the first meaningful surviving neighboring pass/container. Add small, reversible, high-signal instrumentation that inspects ownership and workload inside or around that L16 opaque pass so we can see whether the first meaningful surviving seam now actually lives there. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-20r` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- backend seam diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrow `opaque_pass_scope=` command-buffer summary in `drivers/vulkan/rendering_device_driver_vulkan.{h,cpp}` that centers the failing `submit_serial=9` inspection on `Render Opaque Pass (L16) (Draw)`. The new payload reuses render-pass ownership breadcrumbs already captured by the Vulkan backend, classifies the L16 scope (`render_pass_wrapper` vs payload-bearing), reports its immediate previous/next pass scopes, tracks the contiguous wrapper-only chain starting at L16, and reports the first meaningful pass scope at or after L16 if one exists. Validation stayed on the refreshed source-built editor (`scons platform=linuxbsd target=editor dev_build=yes -j8`, then `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`) and reran the same host-Wayland Vulkan repro with `projection_only__disabled` via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`; the durable artifact root is `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-opaque-pass-scope-vulkan-sourcebuild-20260518-182242/`. On the failing `submit_serial=9` command summary, the new evidence showed `opaque_pass_scope={scope_count=5,target={index=1,owner_begin="Render Opaque Pass (L16) (Draw)",owner_end="Render Opaque Pass (L16) (Draw)",...},target_class="render_pass_wrapper",previous={index=0,owner_begin="Render Depth Pre-Pass (L15) (Draw)",...},next={index=2,owner_begin="Render 3D Transparent Pass (L86) (Draw)",...},wrapper_chain_from_target={start_index=1,end_index=2,scope_count=2,owner_begin_chain=["Render Opaque Pass (L16) (Draw)", "Render 3D Transparent Pass (L86) (Draw)"]},first_meaningful_at_or_after_target={distance_scopes=2,class="draw_payload",scope={index=3,owner_begin="Tonemap (L87) (Draw)",commands={render_pass_begin=1,render_pass_end=1,pipeline_binds=1,uniform_binds=1,draw_calls=1,...}}}}`. So the answer for bead `oc-20r` is that L16 does **not** currently own the first meaningful surviving payload seam: the opaque pass is still an empty render-pass wrapper, the wrapper-only chain continues through the `Render 3D Transparent Pass (L86) (Draw)` scope, and the first pass-scope workload that survives this slice is the `Tonemap (L87) (Draw)` scope two pass scopes later. The outer failure signature stayed unchanged in the same run (`fence_wait_error submit_serial=9 wait_result=-4` followed by later `BLIT_PASS` lost-device breadcrumbs). The implementation and documentation handoff for this bead landed in commit `e5245702` (`debug: inspect opaque pass scope ownership`), and bead `oc-20r` can close as complete on that basis.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
@@ -1064,6 +1107,7 @@ The key current read is: the projection dispatch still appears to be the first b
 - `68cad1f9` - `debug: add submit 9 late-tail seam diagnostics`
 - `c9d03c87` - `debug: classify GDGS depth prepass boundary`
 - `63e70bc0` - `debug: add render pass scope breadcrumbs`
+- `e5245702` - `debug: inspect opaque pass scope ownership`
 
 **Lessons Learned:**
 - The live repro is definitively on the global/global RenderingDevice path, not the earlier local/global theory.

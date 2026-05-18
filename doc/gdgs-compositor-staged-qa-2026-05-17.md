@@ -2382,6 +2382,98 @@ Supported by the runtime evidence:
 
 Keep the investigation source-built and projection-only, but stop trying to force this exact label-local summary to behave like a direct draw packet. The next useful slice should look at render-pass-owned work beneath this wrapper or at broader pass-level ownership/state that survives past the wrapper into the later `submit_serial=9` / `BLIT_PASS` failure envelope.
 
+## Follow-up QA pass for bead `oc-8ie` — inspect whether the first meaningful pass after the empty L15 wrapper is the L16 opaque scope
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-iml` added `depth_prepass_pass_scope=` to the Vulkan command summary. The question for this pass was whether the first meaningful surviving pass/container after the empty `Render Depth Pre-Pass (L15) (Draw)` wrapper stayed the neighboring `Render Opaque Pass (L16) (Draw)` scope, or whether some other non-label-owned pass-level seam appeared between them.
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `c7c0508b`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-pass-scope-qa-vulkan-sourcebuild-20260518-172050/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-pass-scope-qa-vulkan-sourcebuild-20260518-172050/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-pass-scope-qa-vulkan-sourcebuild-20260518-172050/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-pass-scope-qa-vulkan-sourcebuild-20260518-172050/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### The first meaningful surviving pass/container after the empty L15 wrapper is still `Render Opaque Pass (L16) (Draw)`
+
+The refreshed `depth_prepass_pass_scope=` payload on failing `submit_serial=9` reports:
+
+- `scope_count=5`
+- `target={index=0,owner_begin="Render Depth Pre-Pass (L15) (Draw)",owner_end="Render Depth Pre-Pass (L15) (Draw)",labels_started=0,draw_labels_started=0,label_indexes=none,levels=none,commands={render_pass_begin=1,next_subpass=0,render_pass_end=1,pipeline_binds=0,uniform_binds=0,vertex_buffer_binds=0,vertex_buffer_binding_total=0,index_buffer_binds=0,draw_calls=0,draw_indexed_calls=0,draw_indirect_calls=0,draw_indexed_indirect_calls=0,execute_secondary_calls=0,secondary_command_buffers=0,secondary_labels=0,secondary_draw_labels=0},first_backend_command="begin_render_pass",last_backend_command="end_render_pass",begin_breadcrumb="NONE",end_breadcrumb="NONE"}`
+- `previous=none`
+- `next={index=1,owner_begin="Render Opaque Pass (L16) (Draw)",owner_end="Render Opaque Pass (L16) (Draw)",labels_started=0,draw_labels_started=0,label_indexes=none,levels=none,commands={render_pass_begin=1,next_subpass=0,render_pass_end=1,pipeline_binds=0,uniform_binds=0,vertex_buffer_binds=0,vertex_buffer_binding_total=0,index_buffer_binds=0,draw_calls=0,draw_indexed_calls=0,draw_indirect_calls=0,draw_indexed_indirect_calls=0,execute_secondary_calls=0,secondary_command_buffers=0,secondary_labels=0,secondary_draw_labels=0},first_backend_command="begin_render_pass",last_backend_command="end_render_pass",begin_breadcrumb="NONE",end_breadcrumb="NONE"}`
+
+So the answer for bead `oc-8ie` is consistent with the earlier coder-side validation: after the empty `Render Depth Pre-Pass (L15) (Draw)` wrapper, the first surviving neighboring pass/container is still the `Render Opaque Pass (L16) (Draw)` scope. This rerun did **not** surface any intermediate non-label-owned pass-level seam between those two scopes.
+
+#### The surviving seam remains wrapper-shaped rather than revealing a hidden pass-local payload between L15 and L16
+
+The same run still shows:
+
+- `depth_prepass_consumer_seam.draw_boundary_backend_attachment.consumer_class="render_pass_wrapper"`
+- no direct label-local payload on the L15 wrapper
+- no nested-scope payload under that exact wrapper
+- no immediate downstream non-draw attachment after L15 before the next draw boundary
+
+Combined with the new pass-scope summary, that means the widened pass/container view did not uncover an unseen pass-level bridge between L15 and L16. The first meaningful survivor after the exhausted L15 wrapper is simply the next opaque pass wrapper at L16.
+
+#### Provenance and outer failure signature remain unchanged
+
+The same valid repro keeps the established source-built baseline intact:
+
+- `render_for_compositor_sync_snapshot` still stays stable before the frame-1 submit chain
+- `submit_serial=8` is still the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass closes the QA question for bead `oc-8ie`.
+
+Supported by the runtime evidence:
+
+- the exact `Render Depth Pre-Pass (L15) (Draw)` seam still resolves to an empty render-pass wrapper scope
+- the widened pass-scope view does **not** reveal an intermediate pass-level seam between L15 and L16
+- the first meaningful surviving neighboring pass/container after the empty L15 wrapper is still the adjacent `Render Opaque Pass (L16) (Draw)` scope
+- both L15 and that neighboring L16 scope currently present as wrapper-shaped pass scopes rather than as direct payload-bearing labels in this command-summary slice
+
+### Next recommendation
+
+Keep the investigation source-built and projection-only, but stop expecting the exhausted L15 wrapper to reveal a hidden between-pass seam. The next useful slice should move either onto broader pass-scope ownership around the neighboring opaque-pass container or onto another backend attribution seam that survives outside these wrapper-only pass scopes while still leading into the later `submit_serial=9` / `BLIT_PASS` failure envelope.
+
 ---
 
 ## 2026-05-18 — bead `oc-023` coder validation (`nested_scope=` beneath the depth-prepass wrapper)
