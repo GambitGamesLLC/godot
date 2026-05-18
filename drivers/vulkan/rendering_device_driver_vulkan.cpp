@@ -7639,6 +7639,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer
 	ChainSummary feeder_chain;
 	ChainSummary inherited_dependency_chain;
 	ChainSummary same_level_setup;
+	ChainSummary post_draw_attachment;
+	ChainSummary same_level_followup;
+	ChainSummary higher_level_followup;
 	int64_t chain_start_index = draw_entry_index;
 
 	for (int64_t i = draw_entry_index - 1; i >= 0; i--) {
@@ -7652,6 +7655,19 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer
 			accumulate_entry(entry, same_level_setup);
 		} else if (entry.level < draw_level) {
 			accumulate_entry(entry, inherited_dependency_chain);
+		}
+	}
+
+	for (uint32_t i = draw_entry_index + 1; i < p_command_buffer->debug_label_entry_count; i++) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.operation_tag == "Draw") {
+			break;
+		}
+		accumulate_entry(entry, post_draw_attachment);
+		if (entry.level == draw_level) {
+			accumulate_entry(entry, same_level_followup);
+		} else if (entry.level > draw_level) {
+			accumulate_entry(entry, higher_level_followup);
 		}
 	}
 
@@ -7748,6 +7764,96 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer
 		text += "none";
 	} else {
 		text += "\"" + previous_draw_label + "\"";
+	}
+	text += ",post_draw_non_draw_attachment={label_indexes=";
+	if (post_draw_attachment.labels == 0) {
+		text += "none";
+	} else {
+		text += itos(post_draw_attachment.first_label_index) + ".." + itos(post_draw_attachment.last_label_index);
+	}
+	text += ",levels=";
+	if (post_draw_attachment.labels == 0) {
+		text += "none";
+	} else if (post_draw_attachment.first_level == post_draw_attachment.last_level) {
+		text += itos(post_draw_attachment.first_level);
+	} else {
+		text += itos(post_draw_attachment.first_level) + ".." + itos(post_draw_attachment.last_level);
+	}
+	text += ",labels=" + itos(post_draw_attachment.labels);
+	text += ",ops={copy=" + itos(post_draw_attachment.copy);
+	text += ",compute=" + itos(post_draw_attachment.compute);
+	text += ",draw=" + itos(post_draw_attachment.draw);
+	text += ",custom=" + itos(post_draw_attachment.custom);
+	text += ",mixed=" + itos(post_draw_attachment.mixed);
+	text += ",unclassified=" + itos(post_draw_attachment.unclassified) + "}";
+	if (!post_draw_attachment.first_label.is_empty()) {
+		text += ",first_label=\"" + post_draw_attachment.first_label + "\"";
+	}
+	if (!post_draw_attachment.last_label.is_empty()) {
+		text += ",last_label=\"" + post_draw_attachment.last_label + "\"";
+	}
+	text += "}";
+	text += ",same_level_followup={label_indexes=";
+	if (same_level_followup.labels == 0) {
+		text += "none";
+	} else {
+		text += itos(same_level_followup.first_label_index) + ".." + itos(same_level_followup.last_label_index);
+	}
+	text += ",labels=" + itos(same_level_followup.labels);
+	text += ",ops={copy=" + itos(same_level_followup.copy);
+	text += ",compute=" + itos(same_level_followup.compute);
+	text += ",draw=" + itos(same_level_followup.draw);
+	text += ",custom=" + itos(same_level_followup.custom);
+	text += ",mixed=" + itos(same_level_followup.mixed);
+	text += ",unclassified=" + itos(same_level_followup.unclassified) + "}";
+	if (!same_level_followup.first_label.is_empty()) {
+		text += ",first_label=\"" + same_level_followup.first_label + "\"";
+	}
+	if (!same_level_followup.last_label.is_empty()) {
+		text += ",last_label=\"" + same_level_followup.last_label + "\"";
+	}
+	text += "}";
+	text += ",higher_level_followup={label_indexes=";
+	if (higher_level_followup.labels == 0) {
+		text += "none";
+	} else {
+		text += itos(higher_level_followup.first_label_index) + ".." + itos(higher_level_followup.last_label_index);
+	}
+	text += ",levels=";
+	if (higher_level_followup.labels == 0) {
+		text += "none";
+	} else if (higher_level_followup.first_level == higher_level_followup.last_level) {
+		text += itos(higher_level_followup.first_level);
+	} else {
+		text += itos(higher_level_followup.first_level) + ".." + itos(higher_level_followup.last_level);
+	}
+	text += ",labels=" + itos(higher_level_followup.labels);
+	text += ",ops={copy=" + itos(higher_level_followup.copy);
+	text += ",compute=" + itos(higher_level_followup.compute);
+	text += ",draw=" + itos(higher_level_followup.draw);
+	text += ",custom=" + itos(higher_level_followup.custom);
+	text += ",mixed=" + itos(higher_level_followup.mixed);
+	text += ",unclassified=" + itos(higher_level_followup.unclassified) + "}";
+	if (!higher_level_followup.first_label.is_empty()) {
+		text += ",first_label=\"" + higher_level_followup.first_label + "\"";
+	}
+	if (!higher_level_followup.last_label.is_empty()) {
+		text += ",last_label=\"" + higher_level_followup.last_label + "\"";
+	}
+	text += "}";
+	text += ",next_draw_label=";
+	String next_draw_label;
+	for (uint32_t i = draw_entry_index + 1; i < p_command_buffer->debug_label_entry_count; i++) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.operation_tag == "Draw") {
+			next_draw_label = entry.label;
+			break;
+		}
+	}
+	if (next_draw_label.is_empty()) {
+		text += "none";
+	} else {
+		text += "\"" + next_draw_label + "\"";
 	}
 	if (p_command_buffer->debug_label_entries_overflow) {
 		text += ",entry_overflow=true";
