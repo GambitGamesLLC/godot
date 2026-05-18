@@ -3416,6 +3416,13 @@ RDD::CommandBufferID RenderingDeviceDriverVulkan::command_buffer_create(CommandP
 
 bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buffer) {
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
+	command_buffer->active_framebuffer = nullptr;
+	command_buffer->active_render_pass = nullptr;
+	command_buffer->active_render_subpass = 0;
+	command_buffer->debug_render_pipeline_bound = false;
+	command_buffer->debug_vertex_binding_count = 0;
+	command_buffer->debug_index_buffer_bound = false;
+	command_buffer->debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
 	command_buffer->debug_segment_frame_index = current_segment_frame_index;
 	command_buffer->debug_segment_frames_drawn = current_segment_frames_drawn;
 	command_buffer->debug_last_breadcrumb = BreadcrumbMarker::NONE;
@@ -3429,6 +3436,9 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_label_tail_path_truncated = false;
 	command_buffer->debug_label_segment_overflow = false;
 	command_buffer->debug_label_segment_count = 0;
+	command_buffer->debug_label_entries_overflow = false;
+	command_buffer->debug_label_entry_count = 0;
+	command_buffer->debug_active_label_stack_size = 0;
 	command_buffer->debug_level_stats_overflow = false;
 	command_buffer->debug_level_stat_count = 0;
 
@@ -3446,6 +3456,13 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	Framebuffer *framebuffer = (Framebuffer *)(p_framebuffer.id);
 	RenderPassInfo *render_pass = (RenderPassInfo *)(p_render_pass.id);
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
+	command_buffer->active_framebuffer = framebuffer;
+	command_buffer->active_render_pass = render_pass;
+	command_buffer->active_render_subpass = p_subpass;
+	command_buffer->debug_render_pipeline_bound = false;
+	command_buffer->debug_vertex_binding_count = 0;
+	command_buffer->debug_index_buffer_bound = false;
+	command_buffer->debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
 	command_buffer->debug_segment_frame_index = current_segment_frame_index;
 	command_buffer->debug_segment_frames_drawn = current_segment_frames_drawn;
 	command_buffer->debug_last_breadcrumb = BreadcrumbMarker::NONE;
@@ -3459,6 +3476,9 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_label_tail_path_truncated = false;
 	command_buffer->debug_label_segment_overflow = false;
 	command_buffer->debug_label_segment_count = 0;
+	command_buffer->debug_label_entries_overflow = false;
+	command_buffer->debug_label_entry_count = 0;
+	command_buffer->debug_active_label_stack_size = 0;
 	command_buffer->debug_level_stats_overflow = false;
 	command_buffer->debug_level_stat_count = 0;
 
@@ -3494,6 +3514,31 @@ void RenderingDeviceDriverVulkan::command_buffer_execute_secondary(CommandBuffer
 	}
 
 	vkCmdExecuteCommands(command_buffer->vk_command_buffer, p_secondary_cmd_buffers.size(), secondary_command_buffers.ptr());
+	_debug_record_label_backend_command(command_buffer, "execute_secondary");
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			entry.secondary_command_buffer_count += p_secondary_cmd_buffers.size();
+			for (uint32_t i = 0; i < p_secondary_cmd_buffers.size(); i++) {
+				CommandBufferInfo *secondary_command_buffer = (CommandBufferInfo *)(p_secondary_cmd_buffers[i].id);
+				entry.secondary_label_count += secondary_command_buffer->debug_label_count;
+				for (uint32_t j = 0; j < secondary_command_buffer->debug_label_entry_count; j++) {
+					const DebugLabelEntry &secondary_entry = secondary_command_buffer->debug_label_entries[j];
+					if (secondary_entry.operation_tag == "Draw") {
+						entry.secondary_draw_label_count++;
+					}
+				}
+				if (entry.first_secondary_label.is_empty() && !secondary_command_buffer->debug_first_label.is_empty()) {
+					entry.first_secondary_label = secondary_command_buffer->debug_first_label;
+				}
+				if (!secondary_command_buffer->debug_last_label.is_empty()) {
+					entry.last_secondary_label = secondary_command_buffer->debug_last_label;
+				}
+				entry.last_secondary_breadcrumb = _debug_breadcrumb_to_string(secondary_command_buffer->debug_last_breadcrumb);
+			}
+		}
+	}
 }
 
 /********************/
@@ -5569,6 +5614,8 @@ void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cm
 
 	command_buffer->active_framebuffer = framebuffer;
 	command_buffer->active_render_pass = render_pass;
+	command_buffer->active_render_subpass = 0;
+	_debug_record_label_backend_command(command_buffer, "begin_render_pass");
 
 #if PRINT_NATIVE_COMMANDS
 	print_line(vformat("vkCmdBeginRenderPass Pass 0x%uX Framebuffer 0x%uX", p_render_pass.id, p_framebuffer.id));
@@ -5603,8 +5650,10 @@ void RenderingDeviceDriverVulkan::command_end_render_pass(CommandBufferID p_cmd_
 		vkCmdEndRenderPass(command_buffer->vk_command_buffer);
 	}
 
+	_debug_record_label_backend_command(command_buffer, "end_render_pass");
 	command_buffer->active_render_pass = nullptr;
 	command_buffer->active_framebuffer = nullptr;
+	command_buffer->active_render_subpass = 0;
 
 #if PRINT_NATIVE_COMMANDS
 	print_line("vkCmdEndRenderPass");
@@ -5612,9 +5661,11 @@ void RenderingDeviceDriverVulkan::command_end_render_pass(CommandBufferID p_cmd_
 }
 
 void RenderingDeviceDriverVulkan::command_next_render_subpass(CommandBufferID p_cmd_buffer, CommandBufferType p_cmd_buffer_type) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	VkSubpassContents vk_subpass_contents = p_cmd_buffer_type == COMMAND_BUFFER_TYPE_PRIMARY ? VK_SUBPASS_CONTENTS_INLINE : VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS;
 	vkCmdNextSubpass(command_buffer->vk_command_buffer, vk_subpass_contents);
+	command_buffer->active_render_subpass++;
+	_debug_record_label_backend_command(command_buffer, "next_render_subpass");
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_viewport(CommandBufferID p_cmd_buffer, VectorView<Rect2i> p_viewports) {
@@ -5663,8 +5714,10 @@ void RenderingDeviceDriverVulkan::command_render_clear_attachments(CommandBuffer
 }
 
 void RenderingDeviceDriverVulkan::command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)p_pipeline.id);
+	command_buffer->debug_render_pipeline_bound = true;
+	_debug_record_label_backend_command(command_buffer, "bind_render_pipeline");
 }
 
 void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
@@ -5696,49 +5749,56 @@ void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBuffer
 		}
 	}
 
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
 	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
+	_debug_record_label_backend_command(command_buffer, "bind_render_uniform_sets");
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdDraw(command_buffer->vk_command_buffer, p_vertex_count, p_instance_count, p_base_vertex, p_first_instance);
+	_debug_record_label_backend_command(command_buffer, "draw");
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdDrawIndexed(command_buffer->vk_command_buffer, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
+	_debug_record_label_backend_command(command_buffer, "draw_indexed");
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *buf_info = (const BufferInfo *)p_indirect_buffer.id;
 	vkCmdDrawIndexedIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
+	_debug_record_label_backend_command(command_buffer, "draw_indexed_indirect");
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *indirect_buf_info = (const BufferInfo *)p_indirect_buffer.id;
 	const BufferInfo *count_buf_info = (const BufferInfo *)p_count_buffer.id;
 	vkCmdDrawIndexedIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
+	_debug_record_label_backend_command(command_buffer, "draw_indexed_indirect");
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *buf_info = (const BufferInfo *)p_indirect_buffer.id;
 	vkCmdDrawIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
+	_debug_record_label_backend_command(command_buffer, "draw_indirect");
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *indirect_buf_info = (const BufferInfo *)p_indirect_buffer.id;
 	const BufferInfo *count_buf_info = (const BufferInfo *)p_count_buffer.id;
 	vkCmdDrawIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
+	_debug_record_label_backend_command(command_buffer, "draw_indirect");
 }
 
 void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	VkBuffer *vk_buffers = ALLOCA_ARRAY(VkBuffer, p_binding_count);
 	uint64_t *vk_offsets = ALLOCA_ARRAY(uint64_t, p_binding_count);
 	for (uint32_t i = 0; i < p_binding_count; i++) {
@@ -5753,12 +5813,17 @@ void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBuff
 		vk_offsets[i] = offset;
 	}
 	vkCmdBindVertexBuffers(command_buffer->vk_command_buffer, 0, p_binding_count, vk_buffers, vk_offsets);
+	command_buffer->debug_vertex_binding_count = p_binding_count;
+	_debug_record_label_backend_command(command_buffer, "bind_vertex_buffers");
 }
 
 void RenderingDeviceDriverVulkan::command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
 	vkCmdBindIndexBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+	command_buffer->debug_index_buffer_bound = true;
+	command_buffer->debug_index_format = p_format;
+	_debug_record_label_backend_command(command_buffer, "bind_index_buffer");
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color &p_constants) {
@@ -6800,7 +6865,10 @@ void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buff
 			command_buffer->debug_label_path_truncated = true;
 		}
 	}
-	_debug_record_command_label(command_buffer, String(p_label_name));
+	const uint32_t label_entry_index = _debug_record_command_label(command_buffer, String(p_label_name));
+	if (label_entry_index != UINT32_MAX && command_buffer->debug_active_label_stack_size < 32) {
+		command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size++] = label_entry_index;
+	}
 
 	if (!functions.CmdBeginDebugUtilsLabelEXT) {
 		if (functions.CmdDebugMarkerBeginEXT) {
@@ -6829,7 +6897,10 @@ void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buff
 }
 
 void RenderingDeviceDriverVulkan::command_end_label(CommandBufferID p_cmd_buffer) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		command_buffer->debug_active_label_stack_size--;
+	}
 	const RenderingContextDriverVulkan::Functions &functions = context_driver->functions_get();
 	if (!functions.CmdEndDebugUtilsLabelEXT) {
 		if (functions.CmdDebugMarkerEndEXT) {
@@ -7052,6 +7123,10 @@ String RenderingDeviceDriverVulkan::_debug_pipeline_stage_to_string(VkPipelineSt
 		return "COLOR_ATTACHMENT_OUTPUT";
 	}
 	return "stage(" + itos((uint64_t)p_stage_flags) + ")";
+}
+
+String RenderingDeviceDriverVulkan::_debug_index_format_to_string(IndexBufferFormat p_format) {
+	return p_format == INDEX_BUFFER_FORMAT_UINT16 ? "uint16" : "uint32";
 }
 
 String RenderingDeviceDriverVulkan::_debug_extract_label_operation_tag(const String &p_label_name) {
@@ -7855,6 +7930,63 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer
 	} else {
 		text += "\"" + next_draw_label + "\"";
 	}
+	text += ",draw_boundary_backend_attachment={consumer_class=";
+	String consumer_class = "draw";
+	if (draw_entry.draw_count == 0 && draw_entry.render_pass_begin_count > 0 && draw_entry.render_pass_end_count > 0) {
+		consumer_class = "render_pass_wrapper";
+	} else if (draw_entry.draw_indexed_count > 0 && draw_entry.draw_indirect_count == 0 && draw_entry.draw_indexed_indirect_count == 0 && draw_entry.draw_count == draw_entry.draw_indexed_count) {
+		consumer_class = "indexed_draw";
+	} else if (draw_entry.draw_indexed_indirect_count > 0 && draw_entry.draw_count == draw_entry.draw_indexed_indirect_count) {
+		consumer_class = "indexed_indirect_draw";
+	} else if (draw_entry.draw_indirect_count > 0 && draw_entry.draw_count == draw_entry.draw_indirect_count) {
+		consumer_class = "indirect_draw";
+	}
+	text += "\"" + consumer_class + "\"";
+	text += ",begin_state={render_pass_active=" + String(draw_entry.begin_active_render_pass ? "true" : "false");
+	text += ",framebuffer_active=" + String(draw_entry.begin_active_framebuffer ? "true" : "false");
+	text += ",subpass=" + itos(draw_entry.begin_subpass_index);
+	text += ",render_pipeline_bound=" + String(draw_entry.begin_render_pipeline_bound ? "true" : "false");
+	text += ",vertex_binding_count=" + itos(draw_entry.begin_vertex_binding_count);
+	text += ",index_buffer_bound=" + String(draw_entry.begin_index_buffer_bound ? "true" : "false");
+	text += ",index_format=";
+	if (draw_entry.begin_index_buffer_bound) {
+		text += "\"" + _debug_index_format_to_string(draw_entry.begin_index_format) + "\"";
+	} else {
+		text += "none";
+	}
+	text += ",begin_breadcrumb=\"" + _debug_breadcrumb_to_string(draw_entry.begin_breadcrumb) + "\"}";
+	text += ",label_commands={render_pass_begin=" + itos(draw_entry.render_pass_begin_count);
+	text += ",next_subpass=" + itos(draw_entry.next_subpass_count);
+	text += ",render_pass_end=" + itos(draw_entry.render_pass_end_count);
+	text += ",pipeline_binds=" + itos(draw_entry.render_pipeline_bind_count);
+	text += ",uniform_binds=" + itos(draw_entry.render_uniform_bind_count);
+	text += ",vertex_buffer_binds=" + itos(draw_entry.vertex_buffer_bind_count);
+	text += ",vertex_buffer_binding_total=" + itos(draw_entry.vertex_buffer_binding_total);
+	text += ",index_buffer_binds=" + itos(draw_entry.index_buffer_bind_count);
+	text += ",draw_calls=" + itos(draw_entry.draw_count);
+	text += ",draw_indexed_calls=" + itos(draw_entry.draw_indexed_count);
+	text += ",draw_indirect_calls=" + itos(draw_entry.draw_indirect_count);
+	text += ",draw_indexed_indirect_calls=" + itos(draw_entry.draw_indexed_indirect_count);
+	text += ",execute_secondary_calls=" + itos(draw_entry.execute_secondary_count);
+	text += ",secondary_command_buffers=" + itos(draw_entry.secondary_command_buffer_count);
+	text += ",secondary_labels=" + itos(draw_entry.secondary_label_count);
+	text += ",secondary_draw_labels=" + itos(draw_entry.secondary_draw_label_count);
+	if (!draw_entry.first_secondary_label.is_empty()) {
+		text += ",first_secondary_label=\"" + draw_entry.first_secondary_label + "\"";
+	}
+	if (!draw_entry.last_secondary_label.is_empty()) {
+		text += ",last_secondary_label=\"" + draw_entry.last_secondary_label + "\"";
+	}
+	if (!draw_entry.last_secondary_breadcrumb.is_empty()) {
+		text += ",last_secondary_breadcrumb=\"" + draw_entry.last_secondary_breadcrumb + "\"";
+	}
+	if (!draw_entry.first_backend_command.is_empty()) {
+		text += ",first_backend_command=\"" + draw_entry.first_backend_command + "\"";
+	}
+	if (!draw_entry.last_backend_command.is_empty()) {
+		text += ",last_backend_command=\"" + draw_entry.last_backend_command + "\"";
+	}
+	text += "}}";
 	if (p_command_buffer->debug_label_entries_overflow) {
 		text += ",entry_overflow=true";
 	}
@@ -7862,7 +7994,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer
 	return text;
 }
 
-void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
+uint32_t RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
 	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
 		p_command_buffer->debug_label_tail_path += " > ";
 	}
@@ -7883,13 +8015,24 @@ void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo 
 	}
 	const int32_t level = _debug_extract_label_level(p_label_name);
 	const uint32_t label_index = p_command_buffer->debug_label_count > 0 ? (p_command_buffer->debug_label_count - 1) : 0;
+	uint32_t label_entry_index = UINT32_MAX;
 
 	if (p_command_buffer->debug_label_entry_count < 192) {
+		label_entry_index = p_command_buffer->debug_label_entry_count;
 		DebugLabelEntry &entry = p_command_buffer->debug_label_entries[p_command_buffer->debug_label_entry_count++];
+		entry = DebugLabelEntry();
 		entry.label = p_label_name;
 		entry.operation_tag = operation_tag;
 		entry.level = level;
 		entry.label_index = label_index;
+		entry.begin_active_render_pass = p_command_buffer->active_render_pass != nullptr;
+		entry.begin_active_framebuffer = p_command_buffer->active_framebuffer != nullptr;
+		entry.begin_subpass_index = p_command_buffer->active_render_subpass;
+		entry.begin_render_pipeline_bound = p_command_buffer->debug_render_pipeline_bound;
+		entry.begin_vertex_binding_count = p_command_buffer->debug_vertex_binding_count;
+		entry.begin_index_buffer_bound = p_command_buffer->debug_index_buffer_bound;
+		entry.begin_index_format = p_command_buffer->debug_index_format;
+		entry.begin_breadcrumb = p_command_buffer->debug_last_breadcrumb;
 	} else {
 		p_command_buffer->debug_label_entries_overflow = true;
 	}
@@ -7999,6 +8142,56 @@ void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo 
 				}
 			}
 		}
+	}
+
+	return label_entry_index;
+}
+
+void RenderingDeviceDriverVulkan::_debug_record_label_backend_command(CommandBufferInfo *p_command_buffer, const char *p_command_name) {
+	if (p_command_buffer->debug_active_label_stack_size == 0) {
+		return;
+	}
+
+	const uint32_t entry_index = p_command_buffer->debug_active_label_stack[p_command_buffer->debug_active_label_stack_size - 1];
+	if (entry_index >= p_command_buffer->debug_label_entry_count) {
+		return;
+	}
+
+	DebugLabelEntry &entry = p_command_buffer->debug_label_entries[entry_index];
+	const String command_name = String(p_command_name);
+	if (entry.first_backend_command.is_empty()) {
+		entry.first_backend_command = command_name;
+	}
+	entry.last_backend_command = command_name;
+
+	if (command_name == "begin_render_pass") {
+		entry.render_pass_begin_count++;
+	} else if (command_name == "end_render_pass") {
+		entry.render_pass_end_count++;
+	} else if (command_name == "next_render_subpass") {
+		entry.next_subpass_count++;
+	} else if (command_name == "bind_render_pipeline") {
+		entry.render_pipeline_bind_count++;
+	} else if (command_name == "bind_render_uniform_sets") {
+		entry.render_uniform_bind_count++;
+	} else if (command_name == "bind_vertex_buffers") {
+		entry.vertex_buffer_bind_count++;
+		entry.vertex_buffer_binding_total += p_command_buffer->debug_vertex_binding_count;
+	} else if (command_name == "bind_index_buffer") {
+		entry.index_buffer_bind_count++;
+	} else if (command_name == "draw") {
+		entry.draw_count++;
+	} else if (command_name == "draw_indexed") {
+		entry.draw_count++;
+		entry.draw_indexed_count++;
+	} else if (command_name == "draw_indirect") {
+		entry.draw_count++;
+		entry.draw_indirect_count++;
+	} else if (command_name == "draw_indexed_indirect") {
+		entry.draw_count++;
+		entry.draw_indexed_indirect_count++;
+	} else if (command_name == "execute_secondary") {
+		entry.execute_secondary_count++;
 	}
 }
 

@@ -2098,3 +2098,180 @@ Supported by the runtime evidence:
 ### Next recommendation
 
 Keep the investigation source-built and projection-only, but stop spending cycles reclassifying the already-settled copy-chain ancestry. The next useful slice should inspect what backend-owned work or dependency attached to `Render Depth Pre-Pass (L15) (Draw)` makes that first consumer boundary the tightest surviving seam.
+
+## Follow-up QA pass for bead `oc-c1s` — classify the immediate downstream attachment after `Render Depth Pre-Pass (L15) (Draw)`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-73t` extended `depth_prepass_consumer_seam=` with the immediate downstream attachment fields:
+
+- `post_draw_non_draw_attachment`
+- `same_level_followup`
+- `higher_level_followup`
+- `next_draw_label`
+
+The question for this pass was whether the surviving backend-owned seam stayed pinned exactly on `Render Depth Pre-Pass (L15) (Draw)` or whether there was meaningful immediate non-draw backend work after that draw that was actually the tighter seam.
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-downstream-vulkan-sourcebuild-20260518-14412705680/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-downstream-vulkan-sourcebuild-20260518-14412705680/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-downstream-vulkan-sourcebuild-20260518-14412705680/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-downstream-vulkan-sourcebuild-20260518-14412705680/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command used:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-downstream-vulkan-sourcebuild-20260518-14412705680 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### The seam does **not** shift downstream; it stays pinned on `Render Depth Pre-Pass (L15) (Draw)`
+
+The expanded `depth_prepass_consumer_seam=` payload on failing `submit_serial=9` now carries the direct downstream answer:
+
+- `draw_label="Render Depth Pre-Pass (L15) (Draw)"`
+- `post_draw_non_draw_attachment={label_indexes=none,levels=none,labels=0,ops={copy=0,compute=0,draw=0,custom=0,mixed=0,unclassified=0}}`
+- `same_level_followup={label_indexes=none,labels=0,ops={copy=0,compute=0,draw=0,custom=0,mixed=0,unclassified=0}}`
+- `higher_level_followup={label_indexes=none,levels=none,labels=0,ops={copy=0,compute=0,draw=0,custom=0,mixed=0,unclassified=0}}`
+- `next_draw_label="Render Opaque Pass (L16) (Draw)"`
+
+That means there is no immediate non-draw backend attachment after the first depth-prepass draw before the next draw boundary appears. The surviving seam therefore does **not** tighten further onto a downstream non-draw follow-up; it stays exactly on the first `Render Depth Pre-Pass (L15) (Draw)` consumer boundary.
+
+#### Earlier feeder-chain and handoff evidence stays intact, but nothing beats the draw boundary itself
+
+The same payload still preserves the earlier ancestry context:
+
+- `contiguous_non_draw_feeder={label_indexes=0..21,levels=-1..15,labels=22,ops={copy=21,compute=0,draw=0,custom=0,mixed=0,unclassified=1},first_label="Command Graph (L-1)",last_label="Command Graph (L15) (Copy)"}`
+- `same_level_setup={label_indexes=16..21,labels=6,ops={copy=6,...},first_label="Command Graph (L15) (Copy)",last_label="Command Graph (L15) (Copy)"}`
+- `inherited_dependency_chain={label_indexes=0..15,levels=-1..14,labels=16,ops={copy=15,compute=0,draw=0,custom=0,mixed=0,unclassified=1},first_label="Command Graph (L-1)",last_label="Command Graph (L14) (Copy)"}`
+- `previous_draw_label=none`
+
+So the older `level_draw_handoff=` / `pre_tail_copy_handoff=` / `pre_tail_copy_body_split=` story is still correct: a copy-dominated inherited feeder chain leads into the first `L15` draw consumer. But this new pass removes the remaining ambiguity about downstream work: there is no meaningful immediate non-draw backend attachment after that draw that would be a tighter seam than the draw boundary itself.
+
+#### Provenance and outer failure signature remain unchanged in the same run
+
+The same valid repro keeps the established source-built baseline intact:
+
+- `render_for_compositor_sync_snapshot` still stays stable before the frame-1 submit chain
+- `submit_serial=8` is still the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass closes the remaining downstream-attachment question for the current backend seam.
+
+Supported by the runtime evidence:
+
+- the inherited feeder/setup ancestry into `Render Depth Pre-Pass (L15) (Draw)` is still real and already well classified
+- there is **no** immediate non-draw attachment after that draw before the next draw boundary
+- `same_level_followup` and `higher_level_followup` are both empty
+- the next boundary after the seam is simply the next draw label, `Render Opaque Pass (L16) (Draw)`
+- therefore the tightest surviving backend-owned seam remains pinned exactly on `Render Depth Pre-Pass (L15) (Draw)` and does not shift downstream
+
+### Next recommendation
+
+Keep the investigation source-built and projection-only, but stop spending more QA cycles on ancestry or immediate-followup reclassification for this seam. The next useful slice should inspect backend-owned work, dependencies, or synchronization behavior attached directly to the `Render Depth Pre-Pass (L15) (Draw)` consumer boundary itself, because both the upstream feeder chain and the immediate downstream non-draw attachment theory are now demoted relative to that exact draw boundary.
+
+## Follow-up QA pass for bead `oc-agt` — classify the exact `Render Depth Pre-Pass (L15) (Draw)` backend boundary on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-agt` and inspect the expanded `depth_prepass_consumer_seam=` payload on failing `submit_serial=9`. This pass was specifically checking whether the exact `Render Depth Pre-Pass (L15) (Draw)` seam behaves like a real draw packet, an inherited-state consumer, or some tighter backend wrapper around the eventual collapse.
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+- source-built binary rebuilt locally from the active worktree before the run
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-boundary-wrapper-vulkan-sourcebuild-20260518-150439/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-boundary-wrapper-vulkan-sourcebuild-20260518-150439/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-boundary-wrapper-vulkan-sourcebuild-20260518-150439/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-boundary-wrapper-vulkan-sourcebuild-20260518-150439/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### The exact surviving depth-prepass seam behaves like a render-pass wrapper, not a direct draw packet
+
+The updated failing `submit_serial=9` command summary now carries an expanded:
+
+- `depth_prepass_consumer_seam={...,draw_boundary_backend_attachment={consumer_class="render_pass_wrapper",begin_state={...},label_commands={...}}}`
+
+The backend-owned classification from the run is:
+
+- `consumer_class="render_pass_wrapper"`
+- `begin_state={render_pass_active=false,framebuffer_active=false,subpass=0,render_pipeline_bound=false,vertex_binding_count=0,index_buffer_bound=false,index_format=none,begin_breadcrumb="NONE"}`
+- `label_commands={render_pass_begin=1,next_subpass=0,render_pass_end=1,pipeline_binds=0,uniform_binds=0,vertex_buffer_binds=0,vertex_buffer_binding_total=0,index_buffer_binds=0,draw_calls=0,draw_indexed_calls=0,draw_indirect_calls=0,draw_indexed_indirect_calls=0,execute_secondary_calls=0,secondary_command_buffers=0,secondary_labels=0,secondary_draw_labels=0,first_backend_command="begin_render_pass",last_backend_command="end_render_pass"}`
+
+So the exact label currently pinned as the first surviving seam is **not** a place where this command buffer records a direct indexed/non-indexed/indirect draw, a graphics-pipeline bind, a descriptor-set bind, a vertex/index-buffer bind, or a secondary-command execution. In this repro, that label is acting as a tiny backend wrapper that opens and closes a render pass around deeper work rather than carrying the draw payload itself.
+
+#### The broader failure signature is unchanged
+
+This tighter classification does **not** move the eventual crash site:
+
+- the failing submission is still `submit_serial=9`
+- the first explicit failure is still `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+So the new value here is not “the seam moved.” The value is that the seam is now classified more precisely: the earliest surviving depth-prepass consumer boundary is a render-pass-owned wrapper, not a direct draw command packet.
+
+### Updated interpretation
+
+This pass demotes the old mental model of “first depth-prepass draw” as though it were necessarily the first concrete draw call. The surviving seam is better understood as:
+
+- the first **depth-prepass render-pass consumer boundary** inside the dominant `L8..L15` hotspot
+- with no direct backend draw/bind commands recorded on the label itself in the primary command buffer
+- and therefore likely requiring the next split to look at render-pass ownership / pass setup / work issued beneath that wrapper rather than only counting immediate draw commands on the label itself
+
+### Next recommendation
+
+Keep the source-built, projection-only staging exactly as-is and inspect the backend work immediately under this render-pass wrapper next:
+
+1. determine where the actual depth-prepass draw payload is recorded relative to this wrapper (for example: inside pass-scoped work beneath the label rather than on the label itself)
+2. keep command-graph / render-pass ownership evidence ahead of shader-side probes
+3. continue treating `submit_serial=9` and the later `BLIT_PASS` collapse as the stable downstream failure envelope
