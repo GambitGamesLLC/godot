@@ -2275,3 +2275,183 @@ Keep the source-built, projection-only staging exactly as-is and inspect the bac
 1. determine where the actual depth-prepass draw payload is recorded relative to this wrapper (for example: inside pass-scoped work beneath the label rather than on the label itself)
 2. keep command-graph / render-pass ownership evidence ahead of shader-side probes
 3. continue treating `submit_serial=9` and the later `BLIT_PASS` collapse as the stable downstream failure envelope
+
+## Follow-up QA pass for bead `oc-124` — inspect the depth-prepass render-pass wrapper payload on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-agt` and inspect the `draw_boundary_backend_attachment={consumer_class,begin_state,label_commands}` classification on failing `submit_serial=9`. The question for this pass was whether the surviving seam really stays pinned to a tiny `render_pass_wrapper` boundary, and whether the real depth-prepass payload shows up as nested / render-pass-owned work beneath that wrapper rather than as direct commands recorded on the label itself.
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-payload-vulkan-sourcebuild-20260518-16032731035/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-payload-vulkan-sourcebuild-20260518-16032731035/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-payload-vulkan-sourcebuild-20260518-16032731035/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-payload-vulkan-sourcebuild-20260518-16032731035/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### The seam still resolves to a tiny `render_pass_wrapper` boundary
+
+The fresh `submit_serial=9` payload reproduces the same exact boundary classification already suggested by bead `oc-agt`:
+
+- `draw_boundary_backend_attachment.consumer_class="render_pass_wrapper"`
+- `begin_state={render_pass_active=false, framebuffer_active=false, subpass=0, render_pipeline_bound=false, vertex_binding_count=0, index_buffer_bound=false, index_format=none, begin_breadcrumb="NONE"}`
+- `label_commands={render_pass_begin=1, next_subpass=0, render_pass_end=1, pipeline_binds=0, uniform_binds=0, vertex_buffer_binds=0, vertex_buffer_binding_total=0, index_buffer_binds=0, draw_calls=0, draw_indexed_calls=0, draw_indirect_calls=0, draw_indexed_indirect_calls=0, execute_secondary_calls=0, secondary_command_buffers=0, secondary_labels=0, secondary_draw_labels=0, first_backend_command="begin_render_pass", last_backend_command="end_render_pass"}`
+
+So the seam does **not** widen back out into a direct draw packet on this rerun. At the exact `Render Depth Pre-Pass (L15) (Draw)` label, the primary command buffer still records only a tiny render-pass wrapper: begin render pass, then end render pass, with zero direct draw/bind/secondary-execute commands attributed to the label itself.
+
+#### The real depth-prepass payload does **not** appear as direct commands on the label itself
+
+This rerun makes the second question answerable in a limited but still useful way.
+
+What QA can now say confidently:
+
+- the exact seam remains pinned on the first depth-prepass consumer boundary
+- the label itself still does **not** own direct payload commands in the primary-command-buffer summary
+- there is also no evidence that the payload is exposed through secondary command buffers at this exact label, because `execute_secondary_calls=0`, `secondary_command_buffers=0`, `secondary_labels=0`, and `secondary_draw_labels=0`
+
+So the surviving seam still looks like a **render-pass-owned wrapper boundary**, not a direct recorded draw packet. If there is real depth-prepass payload attached to this consumer, it currently appears to live beneath broader render-pass ownership / nested pass machinery that this label-local summary does not unfold, rather than as direct draw/bind commands emitted on the label itself.
+
+That is slightly sharper than the prior pass: the wrapper theory held, and this rerun did **not** reveal a hidden direct payload or secondary-command payload on the label.
+
+#### Compared against earlier seam evidence, the wrapper stayed the tightest boundary
+
+This rerun does not contradict the earlier narrowing stack:
+
+- `pre_tail_copy_body_split=` still demotes the broad late tail in favor of the `L8..L15` hotspot
+- `pre_tail_copy_handoff=` still resolves that hotspot toward the first `L15` consumer handoff
+- `level_draw_handoff=` still resolves level `15` to a copy/setup prefix plus the first depth-prepass draw consumer boundary
+- `depth_prepass_consumer_seam=` still keeps the seam pinned on `Render Depth Pre-Pass (L15) (Draw)` with no tighter immediate downstream non-draw follow-up
+- the fresh `draw_boundary_backend_attachment=` readout now confirms that this exact surviving seam remains only a wrapper-level render-pass boundary
+
+So the wrapper stayed the tightest visible seam. The rerun did **not** reveal a lower-level payload owner directly on the label itself.
+
+#### Provenance and outer failure signature remain unchanged
+
+The same valid repro keeps the established source-built baseline intact:
+
+- `render_for_compositor_sync_snapshot` still stays stable before the frame-1 submit chain
+- `submit_serial=8` is still the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass closes the QA question for bead `oc-124`.
+
+Supported by the runtime evidence:
+
+- the seam truly does stay on a tiny `render_pass_wrapper` boundary at the exact `Render Depth Pre-Pass (L15) (Draw)` label
+- the label-local backend summary still shows no direct draw/bind payload and no secondary-command payload on that label
+- therefore the real depth-prepass work, if any, is still only inferable as render-pass-owned / nested work beneath the wrapper rather than as direct commands emitted on the label itself
+- the wrapper remained the tightest visible seam; this rerun did **not** expose a lower-level payload owner directly on the label
+
+### Next recommendation
+
+Keep the investigation source-built and projection-only, but stop trying to force this exact label-local summary to behave like a direct draw packet. The next useful slice should look at render-pass-owned work beneath this wrapper or at broader pass-level ownership/state that survives past the wrapper into the later `submit_serial=9` / `BLIT_PASS` failure envelope.
+
+---
+
+## 2026-05-18 — bead `oc-023` coder validation (`nested_scope=` beneath the depth-prepass wrapper)
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-nested-vulkan-sourcebuild-20260518-164742319304969/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-nested-vulkan-sourcebuild-20260518-164742319304969/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-nested-vulkan-sourcebuild-20260518-164742319304969/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-nested-vulkan-sourcebuild-20260518-164742319304969/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### The new nested descendant summary landed in the rebuilt source binary
+
+The refreshed editor contains the new string payload:
+
+- `nested_scope={descendant_labels=`
+
+That confirms the source-built runtime now includes the new descendant/pass-owned wrapper summary added by bead `oc-023`.
+
+#### The exact `Render Depth Pre-Pass (L15) (Draw)` wrapper still shows no nested payload ownership
+
+On the failing `submit_serial=9` command buffer, the new payload expands the existing wrapper classification to:
+
+- `draw_boundary_backend_attachment.consumer_class="render_pass_wrapper"`
+- `label_commands={render_pass_begin=1, next_subpass=0, render_pass_end=1, pipeline_binds=0, uniform_binds=0, vertex_buffer_binds=0, vertex_buffer_binding_total=0, index_buffer_binds=0, draw_calls=0, draw_indexed_calls=0, draw_indirect_calls=0, draw_indexed_indirect_calls=0, execute_secondary_calls=0, secondary_command_buffers=0, secondary_labels=0, secondary_draw_labels=0, first_backend_command="begin_render_pass", last_backend_command="end_render_pass"}`
+- `nested_scope={descendant_labels=0, descendant_draw_labels=0, descendant_begin_inside_render_pass_labels=0, descendant_begin_inside_render_pass_draw_labels=0, levels=none, label_indexes=none, descendant_commands={render_pass_begin=0, next_subpass=0, render_pass_end=0, pipeline_binds=0, uniform_binds=0, vertex_buffer_binds=0, vertex_buffer_binding_total=0, index_buffer_binds=0, draw_calls=0, draw_indexed_calls=0, draw_indirect_calls=0, draw_indexed_indirect_calls=0, execute_secondary_calls=0, secondary_command_buffers=0, secondary_labels=0, secondary_draw_labels=0}}`
+
+So this pass answers the new question pretty directly: the wrapper does **not** hide a nested label tree, nested draw labels, or secondary-command descendants in the primary-command-buffer trace either. The label still looks like a bare begin/end render-pass wrapper with no unfolded child payload at this instrumentation seam.
+
+#### The outer failure envelope remains unchanged
+
+The same source-built projection-only repro still keeps the previously established failure signature:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the first failing frame-1 main submission waiting on that semaphore
+- the explicit failure still first appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass closes the coder question for bead `oc-023`.
+
+Supported by the runtime evidence:
+
+- the surviving seam still stays pinned on a tiny `render_pass_wrapper` at `Render Depth Pre-Pass (L15) (Draw)`
+- the wrapper still owns no direct draw/bind payload on the label itself
+- the new descendant summary also shows no nested labels, no nested draw labels, and no nested secondary-command payload beneath that exact label in the primary-command-buffer trace
+- the next useful slice therefore needs to move one rung wider than this exact label-local wrapper: render-pass ownership outside the label, or broader pass-level / command-buffer ownership that survives past the wrapper into the later `submit_serial=9` / `BLIT_PASS` failure envelope

@@ -3516,26 +3516,47 @@ void RenderingDeviceDriverVulkan::command_buffer_execute_secondary(CommandBuffer
 	vkCmdExecuteCommands(command_buffer->vk_command_buffer, p_secondary_cmd_buffers.size(), secondary_command_buffers.ptr());
 	_debug_record_label_backend_command(command_buffer, "execute_secondary");
 	if (command_buffer->debug_active_label_stack_size > 0) {
-		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
-		if (entry_index < command_buffer->debug_label_entry_count) {
-			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
-			entry.secondary_command_buffer_count += p_secondary_cmd_buffers.size();
+		const uint32_t active_entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (active_entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &active_entry = command_buffer->debug_label_entries[active_entry_index];
+			active_entry.secondary_command_buffer_count += p_secondary_cmd_buffers.size();
 			for (uint32_t i = 0; i < p_secondary_cmd_buffers.size(); i++) {
 				CommandBufferInfo *secondary_command_buffer = (CommandBufferInfo *)(p_secondary_cmd_buffers[i].id);
-				entry.secondary_label_count += secondary_command_buffer->debug_label_count;
+				uint32_t secondary_draw_labels = 0;
 				for (uint32_t j = 0; j < secondary_command_buffer->debug_label_entry_count; j++) {
 					const DebugLabelEntry &secondary_entry = secondary_command_buffer->debug_label_entries[j];
 					if (secondary_entry.operation_tag == "Draw") {
-						entry.secondary_draw_label_count++;
+						secondary_draw_labels++;
 					}
 				}
-				if (entry.first_secondary_label.is_empty() && !secondary_command_buffer->debug_first_label.is_empty()) {
-					entry.first_secondary_label = secondary_command_buffer->debug_first_label;
+
+				active_entry.secondary_label_count += secondary_command_buffer->debug_label_count;
+				active_entry.secondary_draw_label_count += secondary_draw_labels;
+				if (active_entry.first_secondary_label.is_empty() && !secondary_command_buffer->debug_first_label.is_empty()) {
+					active_entry.first_secondary_label = secondary_command_buffer->debug_first_label;
 				}
 				if (!secondary_command_buffer->debug_last_label.is_empty()) {
-					entry.last_secondary_label = secondary_command_buffer->debug_last_label;
+					active_entry.last_secondary_label = secondary_command_buffer->debug_last_label;
 				}
-				entry.last_secondary_breadcrumb = _debug_breadcrumb_to_string(secondary_command_buffer->debug_last_breadcrumb);
+				active_entry.last_secondary_breadcrumb = _debug_breadcrumb_to_string(secondary_command_buffer->debug_last_breadcrumb);
+
+				for (uint32_t stack_index = 0; stack_index + 1 < command_buffer->debug_active_label_stack_size; stack_index++) {
+					const uint32_t ancestor_index = command_buffer->debug_active_label_stack[stack_index];
+					if (ancestor_index >= command_buffer->debug_label_entry_count) {
+						continue;
+					}
+					DebugLabelEntry &ancestor_entry = command_buffer->debug_label_entries[ancestor_index];
+					ancestor_entry.descendant_secondary_command_buffer_count++;
+					ancestor_entry.descendant_secondary_label_count += secondary_command_buffer->debug_label_count;
+					ancestor_entry.descendant_secondary_draw_label_count += secondary_draw_labels;
+					if (ancestor_entry.first_descendant_secondary_label.is_empty() && !secondary_command_buffer->debug_first_label.is_empty()) {
+						ancestor_entry.first_descendant_secondary_label = secondary_command_buffer->debug_first_label;
+					}
+					if (!secondary_command_buffer->debug_last_label.is_empty()) {
+						ancestor_entry.last_descendant_secondary_label = secondary_command_buffer->debug_last_label;
+					}
+					ancestor_entry.last_descendant_secondary_breadcrumb = _debug_breadcrumb_to_string(secondary_command_buffer->debug_last_breadcrumb);
+				}
 			}
 		}
 	}
@@ -6866,6 +6887,44 @@ void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buff
 		}
 	}
 	const uint32_t label_entry_index = _debug_record_command_label(command_buffer, String(p_label_name));
+	if (label_entry_index != UINT32_MAX) {
+		const DebugLabelEntry &new_entry = command_buffer->debug_label_entries[label_entry_index];
+		for (uint32_t i = 0; i < command_buffer->debug_active_label_stack_size; i++) {
+			const uint32_t ancestor_index = command_buffer->debug_active_label_stack[i];
+			if (ancestor_index >= command_buffer->debug_label_entry_count) {
+				continue;
+			}
+			DebugLabelEntry &ancestor_entry = command_buffer->debug_label_entries[ancestor_index];
+			ancestor_entry.descendant_label_count++;
+			if (ancestor_entry.first_descendant_label.is_empty()) {
+				ancestor_entry.first_descendant_label = new_entry.label;
+				ancestor_entry.first_descendant_level = new_entry.level;
+				ancestor_entry.first_descendant_label_index = new_entry.label_index;
+			}
+			ancestor_entry.last_descendant_label = new_entry.label;
+			ancestor_entry.last_descendant_level = new_entry.level;
+			ancestor_entry.last_descendant_label_index = new_entry.label_index;
+			if (new_entry.operation_tag == "Draw") {
+				ancestor_entry.descendant_draw_label_count++;
+				if (ancestor_entry.first_descendant_draw_label.is_empty()) {
+					ancestor_entry.first_descendant_draw_label = new_entry.label;
+				}
+				ancestor_entry.last_descendant_draw_label = new_entry.label;
+			}
+			if (new_entry.begin_active_render_pass) {
+				ancestor_entry.descendant_begin_inside_render_pass_label_count++;
+				if (ancestor_entry.first_descendant_inside_render_pass_label.is_empty()) {
+					ancestor_entry.first_descendant_inside_render_pass_label = new_entry.label;
+				}
+				if (new_entry.operation_tag == "Draw") {
+					ancestor_entry.descendant_begin_inside_render_pass_draw_label_count++;
+					if (ancestor_entry.first_descendant_inside_render_pass_draw_label.is_empty()) {
+						ancestor_entry.first_descendant_inside_render_pass_draw_label = new_entry.label;
+					}
+				}
+			}
+		}
+	}
 	if (label_entry_index != UINT32_MAX && command_buffer->debug_active_label_stack_size < 32) {
 		command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size++] = label_entry_index;
 	}
@@ -7986,7 +8045,74 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer
 	if (!draw_entry.last_backend_command.is_empty()) {
 		text += ",last_backend_command=\"" + draw_entry.last_backend_command + "\"";
 	}
-	text += "}}";
+	text += "},nested_scope={descendant_labels=" + itos(draw_entry.descendant_label_count);
+	text += ",descendant_draw_labels=" + itos(draw_entry.descendant_draw_label_count);
+	text += ",descendant_begin_inside_render_pass_labels=" + itos(draw_entry.descendant_begin_inside_render_pass_label_count);
+	text += ",descendant_begin_inside_render_pass_draw_labels=" + itos(draw_entry.descendant_begin_inside_render_pass_draw_label_count);
+	text += ",levels=";
+	if (draw_entry.descendant_label_count == 0) {
+		text += "none";
+	} else if (draw_entry.first_descendant_level == draw_entry.last_descendant_level) {
+		text += itos(draw_entry.first_descendant_level);
+	} else {
+		text += itos(draw_entry.first_descendant_level) + ".." + itos(draw_entry.last_descendant_level);
+	}
+	text += ",label_indexes=";
+	if (draw_entry.descendant_label_count == 0) {
+		text += "none";
+	} else {
+		text += itos(draw_entry.first_descendant_label_index) + ".." + itos(draw_entry.last_descendant_label_index);
+	}
+	if (!draw_entry.first_descendant_label.is_empty()) {
+		text += ",first_descendant_label=\"" + draw_entry.first_descendant_label + "\"";
+	}
+	if (!draw_entry.last_descendant_label.is_empty()) {
+		text += ",last_descendant_label=\"" + draw_entry.last_descendant_label + "\"";
+	}
+	if (!draw_entry.first_descendant_draw_label.is_empty()) {
+		text += ",first_descendant_draw_label=\"" + draw_entry.first_descendant_draw_label + "\"";
+	}
+	if (!draw_entry.last_descendant_draw_label.is_empty()) {
+		text += ",last_descendant_draw_label=\"" + draw_entry.last_descendant_draw_label + "\"";
+	}
+	if (!draw_entry.first_descendant_inside_render_pass_label.is_empty()) {
+		text += ",first_descendant_inside_render_pass_label=\"" + draw_entry.first_descendant_inside_render_pass_label + "\"";
+	}
+	if (!draw_entry.first_descendant_inside_render_pass_draw_label.is_empty()) {
+		text += ",first_descendant_inside_render_pass_draw_label=\"" + draw_entry.first_descendant_inside_render_pass_draw_label + "\"";
+	}
+	text += ",descendant_commands={render_pass_begin=" + itos(draw_entry.descendant_render_pass_begin_count);
+	text += ",next_subpass=" + itos(draw_entry.descendant_next_subpass_count);
+	text += ",render_pass_end=" + itos(draw_entry.descendant_render_pass_end_count);
+	text += ",pipeline_binds=" + itos(draw_entry.descendant_render_pipeline_bind_count);
+	text += ",uniform_binds=" + itos(draw_entry.descendant_render_uniform_bind_count);
+	text += ",vertex_buffer_binds=" + itos(draw_entry.descendant_vertex_buffer_bind_count);
+	text += ",vertex_buffer_binding_total=" + itos(draw_entry.descendant_vertex_buffer_binding_total);
+	text += ",index_buffer_binds=" + itos(draw_entry.descendant_index_buffer_bind_count);
+	text += ",draw_calls=" + itos(draw_entry.descendant_draw_count);
+	text += ",draw_indexed_calls=" + itos(draw_entry.descendant_draw_indexed_count);
+	text += ",draw_indirect_calls=" + itos(draw_entry.descendant_draw_indirect_count);
+	text += ",draw_indexed_indirect_calls=" + itos(draw_entry.descendant_draw_indexed_indirect_count);
+	text += ",execute_secondary_calls=" + itos(draw_entry.descendant_execute_secondary_count);
+	text += ",secondary_command_buffers=" + itos(draw_entry.descendant_secondary_command_buffer_count);
+	text += ",secondary_labels=" + itos(draw_entry.descendant_secondary_label_count);
+	text += ",secondary_draw_labels=" + itos(draw_entry.descendant_secondary_draw_label_count);
+	if (!draw_entry.first_descendant_secondary_label.is_empty()) {
+		text += ",first_descendant_secondary_label=\"" + draw_entry.first_descendant_secondary_label + "\"";
+	}
+	if (!draw_entry.last_descendant_secondary_label.is_empty()) {
+		text += ",last_descendant_secondary_label=\"" + draw_entry.last_descendant_secondary_label + "\"";
+	}
+	if (!draw_entry.last_descendant_secondary_breadcrumb.is_empty()) {
+		text += ",last_descendant_secondary_breadcrumb=\"" + draw_entry.last_descendant_secondary_breadcrumb + "\"";
+	}
+	if (!draw_entry.first_descendant_backend_command.is_empty()) {
+		text += ",first_descendant_backend_command=\"" + draw_entry.first_descendant_backend_command + "\"";
+	}
+	if (!draw_entry.last_descendant_backend_command.is_empty()) {
+		text += ",last_descendant_backend_command=\"" + draw_entry.last_descendant_backend_command + "\"";
+	}
+	text += "}}}";
 	if (p_command_buffer->debug_label_entries_overflow) {
 		text += ",entry_overflow=true";
 	}
@@ -8152,46 +8278,68 @@ void RenderingDeviceDriverVulkan::_debug_record_label_backend_command(CommandBuf
 		return;
 	}
 
-	const uint32_t entry_index = p_command_buffer->debug_active_label_stack[p_command_buffer->debug_active_label_stack_size - 1];
-	if (entry_index >= p_command_buffer->debug_label_entry_count) {
-		return;
-	}
-
-	DebugLabelEntry &entry = p_command_buffer->debug_label_entries[entry_index];
 	const String command_name = String(p_command_name);
-	if (entry.first_backend_command.is_empty()) {
-		entry.first_backend_command = command_name;
-	}
-	entry.last_backend_command = command_name;
+	const auto accumulate_backend_command = [&](DebugLabelEntry &r_entry, bool p_descendant) {
+		String *first_backend_command = p_descendant ? &r_entry.first_descendant_backend_command : &r_entry.first_backend_command;
+		String *last_backend_command = p_descendant ? &r_entry.last_descendant_backend_command : &r_entry.last_backend_command;
+		if (first_backend_command->is_empty()) {
+			*first_backend_command = command_name;
+		}
+		*last_backend_command = command_name;
 
-	if (command_name == "begin_render_pass") {
-		entry.render_pass_begin_count++;
-	} else if (command_name == "end_render_pass") {
-		entry.render_pass_end_count++;
-	} else if (command_name == "next_render_subpass") {
-		entry.next_subpass_count++;
-	} else if (command_name == "bind_render_pipeline") {
-		entry.render_pipeline_bind_count++;
-	} else if (command_name == "bind_render_uniform_sets") {
-		entry.render_uniform_bind_count++;
-	} else if (command_name == "bind_vertex_buffers") {
-		entry.vertex_buffer_bind_count++;
-		entry.vertex_buffer_binding_total += p_command_buffer->debug_vertex_binding_count;
-	} else if (command_name == "bind_index_buffer") {
-		entry.index_buffer_bind_count++;
-	} else if (command_name == "draw") {
-		entry.draw_count++;
-	} else if (command_name == "draw_indexed") {
-		entry.draw_count++;
-		entry.draw_indexed_count++;
-	} else if (command_name == "draw_indirect") {
-		entry.draw_count++;
-		entry.draw_indirect_count++;
-	} else if (command_name == "draw_indexed_indirect") {
-		entry.draw_count++;
-		entry.draw_indexed_indirect_count++;
-	} else if (command_name == "execute_secondary") {
-		entry.execute_secondary_count++;
+		uint32_t *render_pass_begin_count = p_descendant ? &r_entry.descendant_render_pass_begin_count : &r_entry.render_pass_begin_count;
+		uint32_t *render_pass_end_count = p_descendant ? &r_entry.descendant_render_pass_end_count : &r_entry.render_pass_end_count;
+		uint32_t *next_subpass_count = p_descendant ? &r_entry.descendant_next_subpass_count : &r_entry.next_subpass_count;
+		uint32_t *render_pipeline_bind_count = p_descendant ? &r_entry.descendant_render_pipeline_bind_count : &r_entry.render_pipeline_bind_count;
+		uint32_t *render_uniform_bind_count = p_descendant ? &r_entry.descendant_render_uniform_bind_count : &r_entry.render_uniform_bind_count;
+		uint32_t *vertex_buffer_bind_count = p_descendant ? &r_entry.descendant_vertex_buffer_bind_count : &r_entry.vertex_buffer_bind_count;
+		uint32_t *vertex_buffer_binding_total = p_descendant ? &r_entry.descendant_vertex_buffer_binding_total : &r_entry.vertex_buffer_binding_total;
+		uint32_t *index_buffer_bind_count = p_descendant ? &r_entry.descendant_index_buffer_bind_count : &r_entry.index_buffer_bind_count;
+		uint32_t *draw_count = p_descendant ? &r_entry.descendant_draw_count : &r_entry.draw_count;
+		uint32_t *draw_indexed_count = p_descendant ? &r_entry.descendant_draw_indexed_count : &r_entry.draw_indexed_count;
+		uint32_t *draw_indirect_count = p_descendant ? &r_entry.descendant_draw_indirect_count : &r_entry.draw_indirect_count;
+		uint32_t *draw_indexed_indirect_count = p_descendant ? &r_entry.descendant_draw_indexed_indirect_count : &r_entry.draw_indexed_indirect_count;
+		uint32_t *execute_secondary_count = p_descendant ? &r_entry.descendant_execute_secondary_count : &r_entry.execute_secondary_count;
+
+		if (command_name == "begin_render_pass") {
+			(*render_pass_begin_count)++;
+		} else if (command_name == "end_render_pass") {
+			(*render_pass_end_count)++;
+		} else if (command_name == "next_render_subpass") {
+			(*next_subpass_count)++;
+		} else if (command_name == "bind_render_pipeline") {
+			(*render_pipeline_bind_count)++;
+		} else if (command_name == "bind_render_uniform_sets") {
+			(*render_uniform_bind_count)++;
+		} else if (command_name == "bind_vertex_buffers") {
+			(*vertex_buffer_bind_count)++;
+			(*vertex_buffer_binding_total) += p_command_buffer->debug_vertex_binding_count;
+		} else if (command_name == "bind_index_buffer") {
+			(*index_buffer_bind_count)++;
+		} else if (command_name == "draw") {
+			(*draw_count)++;
+		} else if (command_name == "draw_indexed") {
+			(*draw_count)++;
+			(*draw_indexed_count)++;
+		} else if (command_name == "draw_indirect") {
+			(*draw_count)++;
+			(*draw_indirect_count)++;
+		} else if (command_name == "draw_indexed_indirect") {
+			(*draw_count)++;
+			(*draw_indexed_indirect_count)++;
+		} else if (command_name == "execute_secondary") {
+			(*execute_secondary_count)++;
+		}
+	};
+
+	for (uint32_t stack_index = 0; stack_index < p_command_buffer->debug_active_label_stack_size; stack_index++) {
+		const uint32_t entry_index = p_command_buffer->debug_active_label_stack[stack_index];
+		if (entry_index >= p_command_buffer->debug_label_entry_count) {
+			continue;
+		}
+		DebugLabelEntry &entry = p_command_buffer->debug_label_entries[entry_index];
+		const bool descendant = stack_index + 1 < p_command_buffer->debug_active_label_stack_size;
+		accumulate_backend_command(entry, descendant);
 	}
 }
 

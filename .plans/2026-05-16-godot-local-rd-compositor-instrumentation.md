@@ -968,6 +968,53 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 ---
 
+### Task 42: QA inspect the depth-prepass render-pass wrapper payload on failing `submit_serial=9`
+
+**Bead ID:** `oc-124`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-124` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new `draw_boundary_backend_attachment={consumer_class,begin_state,label_commands}` classification on failing `submit_serial=9`. Determine whether the seam truly stays on a tiny `render_pass_wrapper` boundary, and whether the real depth-prepass payload appears as nested / render-pass-owned work beneath that wrapper rather than as direct commands on the label itself. Compare the result against the earlier `depth_prepass_consumer_seam=` / `draw_boundary_backend_attachment=` evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-124` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan source-built repro on 2026-05-18 using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-payload-vulkan-sourcebuild-20260518-16032731035 no_present compositor projection_only disabled 120` (artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-payload-vulkan-sourcebuild-20260518-16032731035/`). The fresh `submit_serial=9` evidence preserved the settled baselines (`render_for_compositor_sync_snapshot` still stable, `submit_serial=8` still the transfer-worker handoff, `submit_serial=9` still waits on that exact semaphore, first explicit failure still `fence_wait_error submit_serial=9 wait_result=-4`, later breadcrumb collapse still `BLIT_PASS`) and answered the new wrapper-payload question cleanly. The seam truly stays pinned on a tiny backend `render_pass_wrapper`: `draw_boundary_backend_attachment.consumer_class="render_pass_wrapper"`, `begin_state={render_pass_active=false, framebuffer_active=false, subpass=0, render_pipeline_bound=false, vertex_binding_count=0, index_buffer_bound=false, index_format=none, begin_breadcrumb="NONE"}`, and `label_commands={render_pass_begin=1, render_pass_end=1, draw_calls=0, draw_indexed_calls=0, draw_indirect_calls=0, draw_indexed_indirect_calls=0, pipeline_binds=0, uniform_binds=0, vertex_buffer_binds=0, index_buffer_binds=0, execute_secondary_calls=0, secondary_command_buffers=0, secondary_labels=0, secondary_draw_labels=0, first_backend_command="begin_render_pass", last_backend_command="end_render_pass"}`. That means the rerun did **not** reveal any direct draw/bind payload or secondary-command payload on the exact `Render Depth Pre-Pass (L15) (Draw)` label itself. Compared against the earlier `depth_prepass_consumer_seam=` evidence, the wrapper remained the tightest visible seam, and any real depth-prepass payload is still only inferable as render-pass-owned / nested work beneath that wrapper rather than as direct commands recorded on the label.
+
+---
+
+### Task 43: Inspect lower-level ownership beneath the depth-prepass render-pass wrapper on failing `submit_serial=9`
+
+**Bead ID:** `oc-023`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-023` and keep the investigation projection-only on the refreshed source-built Godot binary. The backend seam is now pinned on a tiny `render_pass_wrapper` at `Render Depth Pre-Pass (L15) (Draw)` with no direct draw/bind/secondary payload visible on the label itself. Add small, reversible, high-signal instrumentation that inspects lower-level ownership beneath that wrapper so we can see where the real depth-prepass payload is emitted relative to this label. Prefer render-pass ownership / nested command recording evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-023` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- backend seam diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a small reversible descendant/pass-owned attribution layer in `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` so the exact `Render Depth Pre-Pass (L15) (Draw)` seam can now report lower-level ownership beneath its current `render_pass_wrapper` classification without reopening shader-side probes. The Vulkan debug label tracker now (1) records descendant label metadata for active ancestor labels, including descendant draw-label counts and whether descendants begin while a render pass is already active; (2) records descendant backend-command ownership for ancestor labels while nested labels are active; and (3) propagates executed secondary-command-buffer counts/labels into ancestor-descendant fields. `depth_prepass_consumer_seam=` now extends `draw_boundary_backend_attachment=` with a new `nested_scope={...}` payload that summarizes descendant labels, inside-render-pass descendants, descendant backend-command counts, and descendant secondary-command provenance beneath the exact wrapper label.
+
+Validation completed with the usual source-built projection-only lane intact: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; refreshed editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "nested_scope={descendant_labels="`; rebuilt-binary sanity launch `timeout 20s ./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version`; and a fresh host Wayland/Vulkan staged repro saved at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-wrapper-nested-vulkan-sourcebuild-20260518-164742319304969/`.
+
+Actual runtime result on the failing `submit_serial=9` seam: the wrapper remained a tiny `render_pass_wrapper`, and the new descendant summary also came back empty — `nested_scope={descendant_labels=0, descendant_draw_labels=0, descendant_begin_inside_render_pass_labels=0, descendant_begin_inside_render_pass_draw_labels=0, ... descendant_commands={... all zero ...}}`. So the real depth-prepass payload still does not surface as direct commands, nested labels, or secondary-command descendants on this exact label-local wrapper. The next QA slice should widen one rung to render-pass ownership outside this exact label or broader pass-level ownership that survives into the later `fence_wait_error submit_serial=9 wait_result=-4` / `BLIT_PASS` envelope. Landed on branch `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` and ready for QA/audit follow-up.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
