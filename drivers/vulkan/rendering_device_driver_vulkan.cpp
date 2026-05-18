@@ -7419,10 +7419,10 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_pre_tail_copy_handoff_
 
 		if (matched->draw_count > 0 && first_draw_level == INT32_MAX) {
 			first_draw_level = level;
-			first_draw_label = matched->first_label;
+			first_draw_label = matched->first_draw_label.is_empty() ? matched->first_label : matched->first_draw_label;
 		}
 		if (matched->copy_count > 0) {
-			last_copy_label = matched->last_label;
+			last_copy_label = matched->last_copy_before_first_draw_label.is_empty() ? matched->last_label : matched->last_copy_before_first_draw_label;
 		}
 	}
 	level_details += "]";
@@ -7516,6 +7516,68 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_pre_tail_copy_handoff_
 	return text;
 }
 
+String RenderingDeviceDriverVulkan::_debug_command_buffer_level_draw_handoff_summary(const CommandBufferInfo *p_command_buffer) {
+	if (p_command_buffer->debug_level_stat_count == 0) {
+		return "{}";
+	}
+
+	const DebugLevelStats *target_level = nullptr;
+	for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+		const DebugLevelStats &stats = p_command_buffer->debug_level_stats[i];
+		if (stats.level == 15) {
+			target_level = &stats;
+			break;
+		}
+	}
+	if (target_level == nullptr) {
+		return "{}";
+	}
+
+	String text = "{";
+	text += "level=" + itos(target_level->level);
+	text += ",labels=" + itos(target_level->label_count);
+	text += ",ops={copy=" + itos(target_level->copy_count);
+	text += ",compute=" + itos(target_level->compute_count);
+	text += ",draw=" + itos(target_level->draw_count);
+	text += ",custom=" + itos(target_level->custom_count);
+	text += ",mixed=" + itos(target_level->mixed_count);
+	text += ",unclassified=" + itos(target_level->unclassified_count) + "}";
+	if (!target_level->first_label.is_empty()) {
+		text += ",first_label=\"" + target_level->first_label + "\"";
+	}
+	if (!target_level->last_label.is_empty()) {
+		text += ",last_label=\"" + target_level->last_label + "\"";
+	}
+	text += ",copy_setup_prefix={labels=" + itos(target_level->labels_before_first_draw);
+	text += ",ops={copy=" + itos(target_level->copy_before_first_draw);
+	text += ",compute=" + itos(target_level->compute_before_first_draw);
+	text += ",draw=" + itos(target_level->draw_before_first_draw);
+	text += ",custom=" + itos(target_level->custom_before_first_draw);
+	text += ",mixed=" + itos(target_level->mixed_before_first_draw);
+	text += ",unclassified=" + itos(target_level->unclassified_before_first_draw) + "}";
+	if (!target_level->last_copy_before_first_draw_label.is_empty()) {
+		text += ",last_copy_label=\"" + target_level->last_copy_before_first_draw_label + "\"";
+	}
+	text += "}";
+	text += ",draw_consumer_boundary={has_draw=";
+	text += (target_level->first_draw_label.is_empty() ? "false" : "true");
+	if (!target_level->first_draw_label.is_empty()) {
+		text += ",first_draw_label=\"" + target_level->first_draw_label + "\"";
+	}
+	text += ",from_first_draw={labels=" + itos(target_level->labels_from_first_draw);
+	text += ",ops={copy=" + itos(target_level->copy_from_first_draw);
+	text += ",compute=" + itos(target_level->compute_from_first_draw);
+	text += ",draw=" + itos(target_level->draw_from_first_draw);
+	text += ",custom=" + itos(target_level->custom_from_first_draw);
+	text += ",mixed=" + itos(target_level->mixed_from_first_draw);
+	text += ",unclassified=" + itos(target_level->unclassified_from_first_draw) + "}}";
+	if (p_command_buffer->debug_level_stats_overflow) {
+		text += ",overflow=true";
+	}
+	text += "}";
+	return text;
+}
+
 void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
 	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
 		p_command_buffer->debug_label_tail_path += " > ";
@@ -7589,6 +7651,7 @@ void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo 
 			level_stats->label_count++;
 			if (level_stats->first_label.is_empty()) {
 				level_stats->first_label = p_label_name;
+				level_stats->first_operation_tag = operation_tag;
 			}
 			level_stats->last_label = p_label_name;
 			if (operation_tag == "Copy") {
@@ -7603,6 +7666,43 @@ void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo 
 				level_stats->unclassified_count++;
 			} else {
 				level_stats->mixed_count++;
+			}
+
+			const bool had_draw_before_label = !level_stats->first_draw_label.is_empty();
+			if (!had_draw_before_label && operation_tag == "Draw") {
+				level_stats->first_draw_label = p_label_name;
+			}
+
+			if (!had_draw_before_label && operation_tag != "Draw") {
+				level_stats->labels_before_first_draw++;
+				if (operation_tag == "Copy") {
+					level_stats->copy_before_first_draw++;
+					level_stats->last_copy_before_first_draw_label = p_label_name;
+				} else if (operation_tag == "Compute") {
+					level_stats->compute_before_first_draw++;
+				} else if (operation_tag == "Custom") {
+					level_stats->custom_before_first_draw++;
+				} else if (operation_tag == "Unclassified") {
+					level_stats->unclassified_before_first_draw++;
+				} else {
+					level_stats->mixed_before_first_draw++;
+				}
+			}
+			if (!level_stats->first_draw_label.is_empty()) {
+				level_stats->labels_from_first_draw++;
+				if (operation_tag == "Copy") {
+					level_stats->copy_from_first_draw++;
+				} else if (operation_tag == "Compute") {
+					level_stats->compute_from_first_draw++;
+				} else if (operation_tag == "Draw") {
+					level_stats->draw_from_first_draw++;
+				} else if (operation_tag == "Custom") {
+					level_stats->custom_from_first_draw++;
+				} else if (operation_tag == "Unclassified") {
+					level_stats->unclassified_from_first_draw++;
+				} else {
+					level_stats->mixed_from_first_draw++;
+				}
 			}
 		}
 	}
@@ -7650,6 +7750,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 		text += ",late_tail_split=" + _debug_command_buffer_late_tail_summary(command_buffer);
 		text += ",pre_tail_copy_body_split=" + _debug_command_buffer_pre_tail_copy_body_summary(command_buffer);
 		text += ",pre_tail_copy_handoff=" + _debug_command_buffer_pre_tail_copy_handoff_summary(command_buffer);
+		text += ",level_draw_handoff=" + _debug_command_buffer_level_draw_handoff_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}

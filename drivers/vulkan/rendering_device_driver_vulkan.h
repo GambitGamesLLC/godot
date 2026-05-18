@@ -445,6 +445,23 @@ private:
 		uint32_t unclassified_count = 0;
 		String first_label;
 		String last_label;
+		String first_operation_tag;
+		String first_draw_label;
+		String last_copy_before_first_draw_label;
+		uint32_t labels_before_first_draw = 0;
+		uint32_t copy_before_first_draw = 0;
+		uint32_t compute_before_first_draw = 0;
+		uint32_t draw_before_first_draw = 0;
+		uint32_t custom_before_first_draw = 0;
+		uint32_t mixed_before_first_draw = 0;
+		uint32_t unclassified_before_first_draw = 0;
+		uint32_t labels_from_first_draw = 0;
+		uint32_t copy_from_first_draw = 0;
+		uint32_t compute_from_first_draw = 0;
+		uint32_t draw_from_first_draw = 0;
+		uint32_t custom_from_first_draw = 0;
+		uint32_t mixed_from_first_draw = 0;
+		uint32_t unclassified_from_first_draw = 0;
 	};
 
 	struct CommandBufferInfo {
@@ -843,6 +860,7 @@ public:
 	static String _debug_command_buffer_label_segments_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_pre_tail_copy_body_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_pre_tail_copy_handoff_summary(const CommandBufferInfo *p_command_buffer);
+	static String _debug_command_buffer_level_draw_handoff_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer);
 	void _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
 	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;

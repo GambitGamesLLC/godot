@@ -796,6 +796,49 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 ---
 
+### Task 34: QA classify the `L8..L15` copy-chain versus `L15` draw-consumer handoff on failing `submit_serial=9`
+
+**Bead ID:** `oc-tz6`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-tz6` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new `pre_tail_copy_handoff=` backend summary on failing `submit_serial=9`. Determine whether the tighter backend-owned seam resolves to the `L8..L14` copy-chain side or to the first `L15` draw consumer handoff (`Render Depth Pre-Pass (L15) (Draw)`), compare the result against the earlier `pre_tail_copy_body_split=` / `late_tail_split=` / `label_segments` evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-tz6` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan source-built repro on 2026-05-18 using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-handoff-vulkan-sourcebuild-20260518-111539 no_present compositor projection_only disabled 120` (artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-handoff-vulkan-sourcebuild-20260518-111539/`). The new `pre_tail_copy_handoff=` summary on failing `submit_serial=9` tightens the earlier `L8..L15` hotspot into an even split between a pure copy-chain prefix and the first draw-containing consumer level: `copy_chain={levels=8..14,labels=7,ops={copy=7,compute=0,draw=0,...}}` versus `consumer={levels=15..15,labels=7,ops={copy=6,compute=0,draw=1,...}}`, with `first_draw_level=15`. Compared against the earlier evidence, this means the broad copy-dominated story still holds (`label_segments` still shows the overall frame-1 command buffer dominated by Copy work, and `late_tail_split=` / `pre_tail_copy_body_split=` still place the dominant backend seam before the late `L86..L88` tail), but the *tightest* backend-owned seam inside that dominant bucket now resolves to the first `L15` consumer handoff rather than the pure `L8..L14` copy-only prefix alone. The run preserved the existing baselines in the same artifact: `submit_serial=8` remains the transfer-worker handoff, `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`, `render_for_compositor_sync_snapshot` stays stable before the frame-1 submit chain, the first explicit failure still surfaces at `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`. Recommended next step from this QA pass: split or classify level `15` itself — especially the handoff from the `Command Graph (L15) (Copy)` labels into `Render Depth Pre-Pass (L15) (Draw)` — before spending more effort on the already-demoted late tail or on the pure `L8..L14` copy prefix.
+
+---
+
+### Task 35: Split the `L15` copy-to-depth-prepass seam inside failing `submit_serial=9`
+
+**Bead ID:** `oc-89z`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-89z` and keep the investigation projection-only on the refreshed source-built Godot binary. Add small, reversible, high-signal instrumentation that splits level `15` inside failing `submit_serial=9`, with particular attention to the handoff from `Command Graph (L15) (Copy)` into `Render Depth Pre-Pass (L15) (Draw)`. The goal is to identify whether the tighter backend-owned seam lives in the `L15` copy/setup work itself or exactly at the first depth-prepass draw consumer boundary. Prefer command-graph / backend ownership evidence over shader-side probes, keep the staged repro model intact, run relevant validation, update this plan with actual results, commit/push the changes, and close bead `oc-89z` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- backend seam diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a small, reversible Vulkan-side refinement on top of `pre_tail_copy_handoff=` so the source-built runtime can now split the first draw-containing consumer level itself instead of stopping at per-level aggregate counts. `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` now extend `DebugLevelStats` with first-draw and last-copy-before-first-draw bookkeeping plus per-level before/after-first-draw op counts, and `command_summary=` appends a new `level_draw_handoff=` payload. For the current failing lane this is designed to resolve level `15` into two backend-owned slices without reopening shader probes: `copy_setup_prefix={... last_copy_label="Command Graph (L15) (Copy)"}` versus `draw_consumer_boundary={has_draw=true, first_draw_label="Render Depth Pre-Pass (L15) (Draw)", from_first_draw={...}}`. That keeps the staged repro model intact while giving QA a direct way to answer whether the remaining seam inside `submit_serial=9` lives in the `L15` copy/setup prefix itself or exactly at the first depth-prepass draw consumer boundary. Validation run: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check`; incremental object rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; refreshed editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "level_draw_handoff="` to confirm the new summary string landed in the runnable source-built binary. Commit/push details appended after landing the branch update.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
