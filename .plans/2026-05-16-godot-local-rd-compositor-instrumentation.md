@@ -931,7 +931,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **What We Built:** This session turned the GDGS/Godot bug hunt from a broad compositor mystery into a narrow backend handoff investigation. The earlier staged work already proved that `projection_only` is the first meaningful failing stage, that a real scratch-only compute dispatch survives, that CPU readbacks are not the root trigger, and that the tracked projection-owned resources remain stable across `projection_begin` → `projection_end` → `projection_post_dispatch_checkpoint_end` with no cleanup churn or RID aliasing. This session extended that by moving onto a source-built Godot binary, instrumenting the post-projection submit/stall/fence path, mapping the exact submissions after projection return, and proving that the failing `submit_serial=9` is the frame-1 main command-graph submission waiting on the semaphore signaled by the transfer-worker `submit_serial=8`.
 
-The key current read is: the projection dispatch still appears to be the first bad event, but the tracked projection resources themselves stay stable and the transfer-worker → frame-1 semaphore handoff appears valid. `submit_serial=8` is a narrow transfer submission with `signal_semaphores=1`; `submit_serial=9` is the following frame-1 main submission with `wait_semaphores=1`, `command_buffers=1`, `present_submission=false`, and a large command graph (`labels=102`, first label `Command Graph (L-1)`, last label `Command Graph (L88) (Draw)`, last breadcrumb `UI_PASS`). That submit queues cleanly, then later dies at `fence_wait_error submit_serial=9 wait_result=-4`, after which the broader lost-device breadcrumb trail still collapses to `BLIT_PASS`. The newest source-built instrumentation also adds `late_tail_split=` so the next QA pass can quantify the seam between the dominant pre-tail copy body and the short late `L86` / `L87` / `L88` transparent / compute / tonemap / final-draw tail inside that same failing submission.
+The key current read is: the projection dispatch still appears to be the first bad event, but the tracked projection resources themselves stay stable and the transfer-worker → frame-1 semaphore handoff appears valid. `submit_serial=8` is a narrow transfer submission with `signal_semaphores=1`; `submit_serial=9` is the following frame-1 main submission with `wait_semaphores=1`, `command_buffers=1`, `present_submission=false`, and a large command graph (`labels=102`, first label `Command Graph (L-1)`, last label `Command Graph (L88) (Draw)`, last breadcrumb `UI_PASS`). That submit queues cleanly, then later dies at `fence_wait_error submit_serial=9 wait_result=-4`, after which the broader lost-device breadcrumb trail still collapses to `BLIT_PASS`. The investigation has now progressively narrowed the backend-owned seam from the broad copy-dominated frame-1 command graph, to the `L8..L15` hotspot, to the first `L15` draw-consumer boundary, and finally to the exact `Render Depth Pre-Pass (L15) (Draw)` consumer label. The newest source-built instrumentation extends that seam summary one step further by classifying any immediate non-draw backend attachment after that depth-prepass draw so the next QA pass can decide whether the surviving seam is still the draw boundary itself or downstream work attached immediately after it.
 
 **Reference Check:** `REF-06` still defines the instrumentation seam map, `REF-07` is now the primary living evidence log for the entire staged repro campaign, and `REF-08` records the earlier independent audit that locked in the projection-first conclusion. The freshest high-signal artifacts in `REF-07` now include the source-built submit/stall/fence correlation run and the submit-8 → submit-9 semaphore provenance run.
 
@@ -966,22 +966,24 @@ Start the next session from this plan plus `REF-07`, then execute in this order:
    - do not reopen the earlier scratch/projection-first questions unless new evidence forces it
    - keep the staging narrow so the backend handoff logs remain comparable
 
-2. **Run QA once on the refreshed source-built binary and inspect the new `late_tail_split=` summary on failing `submit_serial=9`**
-   - confirm whether the pre-tail copy body versus the `L86` / `L87` / `L88` late tail is the tighter backend-owned hazard seam
-   - compare the aggregate `pre_tail_ops` / `tail_ops` and per-level tail details against the existing `label_segments` / `label_tail` evidence
+2. **Run QA once on the refreshed source-built binary and inspect the expanded `depth_prepass_consumer_seam=` payload on failing `submit_serial=9`**
+   - determine whether the seam stays pinned exactly on `Render Depth Pre-Pass (L15) (Draw)`
+   - or whether there is meaningful immediate non-draw downstream attachment after that draw before the next draw boundary appears
+   - artifact expectation: the most recent coder pass now emits `post_draw_non_draw_attachment`, `same_level_followup`, `higher_level_followup`, and `next_draw_label`
 
-3. **Narrow why a valid transfer-worker handoff feeds a frame-1 main submission that later dies at fence wait**
-   - use the new late-tail split to decide whether the next coder slice should break apart the long copy body itself or the short late transparent / compute / tonemap / final-draw tail
-   - keep focusing on non-present backend work and any hidden barrier / dependency / submission-lifecycle issue between submit 8 and submit 9
+3. **If the seam stays pinned on `Render Depth Pre-Pass (L15) (Draw)`, split the backend-owned work attached directly to that draw consumer**
+   - prefer backend ownership / dependency evidence around the depth-prepass consumer itself
+   - only widen the scope if the new QA evidence proves the downstream attachment is the tighter seam instead
 
-4. **Only if the new late-tail split still leaves ambiguity, then add a deeper backend-owned split inside the winning side of that seam**
-   - not for prettier logs, but only if needed to pinpoint which command-graph subrange inside submit 9 is the real hazard
+4. **If the seam shifts downstream, split only that immediate attached backend work — not the whole ancestry again**
+   - the broad copy-chain ancestry is already well classified and should stay demoted unless new evidence contradicts it
 
 Avoid reopening already-closed branches unless the new backend evidence directly points back to them:
 - the radix push-constant contract bug is fixed and no longer leads the suspect list
 - scratch-only already proved a safe compositor-path compute dispatch exists
 - projection-owned tracked resources stayed stable across the critical post-dispatch window
 - the 8 → 9 semaphore identity/reuse question is answered and no stale consumer was seen
+- the broad `L8..L14` copy prefix and the late `L86..L88` tail have both been demoted below the current depth-prepass seam
 
 ---
 

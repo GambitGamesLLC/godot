@@ -900,6 +900,7 @@ The repair keeps the instrumentation diagnostic and reversible:
 Coder ran the preserved dev5 binary against the GDGS project with a lightweight headless load check:
 
 
+
 - `timeout 15s /home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit`
 - exit status: `0`
 
@@ -1696,3 +1697,404 @@ Stay source-built and projection-only, but move the next engine-side split one s
 1. classify or split the big pre-tail Copy body itself rather than the already-quantified `L86` / `L87` / `L88` tail
 2. treat the late tail as the last visible context, not as the dominant workload seam
 3. keep the 8 → 9 semaphore handoff, stable projection snapshot, and projection-first staging conclusions as settled baselines unless new backend evidence directly contradicts them
+
+## Follow-up QA pass for bead `oc-699` — classify the dominant 8-level pre-tail Copy bucket on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-699` and inspect the new `pre_tail_copy_body_split=` backend summary on failing `submit_serial=9`. The question for this pass was no longer whether the late `L86..L88` tail exists — that was already settled — but which fixed 8-level bucket inside the much larger pre-tail Copy body actually dominates the submission.
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `62db7e64`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `eb3e53f`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- engine banner from the run: `Godot Engine v4.7.beta.custom_build.296d8248c (2026-05-18 12:17:09 UTC)`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-body-vulkan-sourcebuild-corrected-20260518-093650/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-body-vulkan-sourcebuild-corrected-20260518-093650/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-body-vulkan-sourcebuild-corrected-20260518-093650/logs/projection_only__disabled.normal.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-body-vulkan-sourcebuild-corrected-20260518-093650/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### The dominant 8-level pre-tail bucket is `L8..L15`, not the late `L86..L88` tail
+
+The failing `submit_serial=9` command summary now carries:
+
+- `pre_tail_copy_body_split={bucket_size=8,pre_tail_levels=0..85,dominant_bucket={levels=8..15,labels=14,ops={copy=13,compute=0,draw=1,custom=0,mixed=0,unclassified=0},first_label="Command Graph (L8) (Copy)",last_label="Render Depth Pre-Pass (L15) (Draw)"}, ...}`
+
+That gives the requested bucket classification directly:
+
+- dominant pre-tail bucket levels: `8..15`
+- bucket labels: `14`
+- bucket ops: `copy=13`, `draw=1`, `compute=0`, `mixed=0`, `custom=0`, `unclassified=0`
+- first label: `Command Graph (L8) (Copy)`
+- last label: `Render Depth Pre-Pass (L15) (Draw)`
+
+The remaining pre-tail buckets are smaller:
+
+- `0..7`: `8` labels, all `Copy`
+- `16..23`: `9` labels (`8` `Copy`, `1` `Draw`)
+- `24..31` through `72..79`: each `8` labels, all `Copy`
+- `80..85`: `6` labels, all `Copy`
+
+So the fresh backend split says the densest single 8-level hotspot inside the already-dominant pre-tail body is an early-mid Copy band around `L8..L15`, not any part of the demoted late transparent/tonemap/final-draw epilogue.
+
+#### This sharpens — not overturns — the earlier `late_tail_split=` and `label_segments=` evidence
+
+The new bucket result lines up with the previous two backend summaries:
+
+- earlier `late_tail_split=` had already shown that the late `L86..L88` tail is only `8` labels wide with `tail_ops={copy=3,compute=1,draw=3,mixed=1}`
+- earlier `label_segments=` had already shown the overall frame-1 submission is dominated by Copy work: `Copy(21)` before the first small draw seam, then `Copy(73)` before the late tail
+
+`pre_tail_copy_body_split=` adds the missing detail inside that 94-label pre-tail body:
+
+- the dominant bucket is not one of the flat all-copy 8-label bands
+- it is `L8..L15`, where the command graph still stays overwhelmingly Copy-heavy but also reaches the first draw seam inside the pre-tail body (`Render Depth Pre-Pass (L15) (Draw)`)
+
+So the evidence now forms a coherent stack:
+
+1. `label_segments=`: submission is broadly Copy-dominated with only a tiny late tail
+2. `late_tail_split=`: late `L86..L88` tail is real but small (`8` labels)
+3. `pre_tail_copy_body_split=`: within the much larger pre-tail body, the densest 8-level hotspot is `L8..L15`
+
+#### Provenance and outer failure signature remain unchanged in the same run
+
+The same corrected repro keeps the established source-built baseline intact:
+
+- `render_for_compositor_sync_snapshot` still stays stable before the frame-1 submit chain
+- `submit_serial=8` is still the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass completes the next backend-owned narrowing step.
+
+Supported by the runtime evidence:
+
+- the late `L86..L88` tail remains a small end-of-buffer epilogue, not the dominant hotspot
+- the dominant 8-level hotspot inside the large pre-tail Copy body is `L8..L15`
+- that hotspot is still overwhelmingly Copy-heavy (`13` Copy labels), but it also reaches the first draw seam in that bucket at `Render Depth Pre-Pass (L15) (Draw)`
+
+That makes `L8..L15` the best next backend breakpoint if coder work wants to split the pre-tail Copy body further.
+
+### Next recommendation
+
+Keep the investigation source-built and projection-only, but move the next backend split into or around the newly identified `L8..L15` hotspot rather than revisiting the already-demoted late tail:
+
+1. inspect / split the `L8..L15` region first, especially the transition from the Copy chain into `Render Depth Pre-Pass (L15) (Draw)`
+2. keep treating the late `L86..L88` tail as final visible context rather than the dominant workload seam
+3. preserve the settled baselines: projection-only is still the first bad event, tracked projection resources are stable, and the `submit_serial=8` -> `submit_serial=9` semaphore handoff remains coherent
+
+## Follow-up QA pass for bead `oc-tz6` — classify the `L8..L15` copy-chain versus `L15` consumer handoff on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-vmd` added `pre_tail_copy_handoff=` to the Vulkan command summary. The question for this pass was whether the tighter backend-owned seam inside the already-identified dominant `L8..L15` hotspot still belongs to the pure `L8..L14` copy chain, or whether it resolves to the first draw-containing `L15` consumer handoff.
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `9964a253`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `eb3e53f`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-handoff-vulkan-sourcebuild-20260518-111539/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-handoff-vulkan-sourcebuild-20260518-111539/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-handoff-vulkan-sourcebuild-20260518-111539/logs/projection_only__disabled.normal.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-pre-tail-copy-handoff-vulkan-sourcebuild-20260518-111539/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### `pre_tail_copy_handoff=` splits the old `L8..L15` hotspot into an even copy-prefix / consumer-level handoff
+
+The failing `submit_serial=9` command summary now carries:
+
+- `pre_tail_copy_handoff={dominant_bucket_levels=8..15, first_draw_level=15, copy_chain={levels=8..14,labels=7,ops={copy=7,compute=0,draw=0,...},first_label="Command Graph (L8) (Copy)",last_label="Command Graph (L14) (Copy)"}, consumer={levels=15..15,labels=7,ops={copy=6,compute=0,draw=1,...},first_label="Command Graph (L15) (Copy)",last_label="Render Depth Pre-Pass (L15) (Draw)"}, ...}`
+
+That gives the requested seam classification directly:
+
+- pure copy-chain side: `L8..L14`, `7` labels, all `Copy`
+- first consumer side: `L15`, `7` labels total, `6` `Copy` + `1` `Draw`
+- first draw-containing level: `15`
+- first draw-containing terminal label in the bucket: `Render Depth Pre-Pass (L15) (Draw)`
+
+So the old dominant `L8..L15` bucket is no longer just “copy-heavy somewhere before the tail.” The new handoff split says the bucket resolves into two equally sized halves, with the actual draw-consuming transition concentrated entirely in level `15`.
+
+#### Compared against earlier evidence, the broad copy story still holds, but the *tightest* seam now resolves to the `L15` handoff
+
+This new split sharpens the earlier stack rather than overturning it:
+
+- `label_segments=` still says the overall failing frame-1 command buffer is dominated by Copy work (`Copy(21)` + `Copy(73)` before the tiny late tail)
+- `late_tail_split=` still says the late `L86..L88` epilogue is small (`tail_labels=8`) compared with the `94`-label pre-tail body
+- `pre_tail_copy_body_split=` still says the densest 8-level hotspot inside that pre-tail body is `L8..L15` with `13` `Copy` labels and `1` `Draw` label
+
+What `pre_tail_copy_handoff=` adds is the final split inside that hotspot:
+
+- the pure copy-only prefix `L8..L14` is real, but it is only half the dominant bucket
+- the first draw consumer is not diffused across several later levels; it is concentrated immediately at `L15`
+- because the bucket divides evenly by label count and the only draw in the bucket lives in `L15`, the tightest backend-owned seam now points at the `L15` consumer handoff rather than at the pure `L8..L14` copy prefix alone
+
+This does **not** mean the broader frame-1 workload stopped being copy-dominated. It means the next narrowing step should target the first draw-consuming handoff inside the dominant copy bucket, not the already-demoted late tail and not a generic “somewhere in the copy body” theory.
+
+#### Provenance and outer failure signature remain unchanged in the same run
+
+The same valid repro keeps the established source-built baseline intact:
+
+- `render_for_compositor_sync_snapshot` still stays stable before the frame-1 submit chain
+- `submit_serial=8` is still the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass completes the next backend-owned narrowing step.
+
+Supported by the runtime evidence:
+
+- the dominant pre-tail hotspot remains `L8..L15`
+- within that hotspot, the pure `L8..L14` copy prefix and the `L15` consumer level are equal in label count (`7` vs `7`)
+- the only draw in the hotspot appears at `Render Depth Pre-Pass (L15) (Draw)`
+- therefore the tighter backend seam now resolves to the first `L15` draw consumer handoff, not to the pure copy-only prefix by itself
+
+### Next recommendation
+
+Keep the investigation source-built and projection-only, but move the next backend split into level `15` itself:
+
+1. split or classify the `L15` labels more finely, especially the handoff from `Command Graph (L15) (Copy)` into `Render Depth Pre-Pass (L15) (Draw)`
+2. keep the late `L86..L88` tail demoted as final visible context rather than the dominant seam
+3. keep the settled baselines unchanged unless new backend evidence directly contradicts them
+
+## Follow-up QA pass for bead `oc-is3` — classify the `L15` copy-setup prefix versus first draw-consumer boundary
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-89z` added `level_draw_handoff=` to the Vulkan command summary. The question for this pass was whether the tightest remaining backend-owned seam inside the already-identified `L15` consumer level lives in the `Command Graph (L15) (Copy)` setup prefix itself or exactly at the first draw-consumer boundary `Render Depth Pre-Pass (L15) (Draw)`.
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-level-draw-handoff-vulkan-sourcebuild-20260518-115554/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-level-draw-handoff-vulkan-sourcebuild-20260518-115554/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-level-draw-handoff-vulkan-sourcebuild-20260518-115554/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-level-draw-handoff-vulkan-sourcebuild-20260518-115554/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### `level_draw_handoff=` resolves level `15` to a six-label copy/setup prefix plus a one-label draw boundary
+
+The failing `submit_serial=9` command summary now carries:
+
+- `level_draw_handoff={level=15,labels=7,ops={copy=6,compute=0,draw=1,...},first_label="Command Graph (L15) (Copy)",last_label="Render Depth Pre-Pass (L15) (Draw)",copy_setup_prefix={labels=6,ops={copy=6,compute=0,draw=0,...},last_copy_label="Command Graph (L15) (Copy)"},draw_consumer_boundary={has_draw=true,first_draw_label="Render Depth Pre-Pass (L15) (Draw)",from_first_draw={labels=1,ops={copy=0,compute=0,draw=1,...}}}}`
+
+That gives the requested split directly:
+
+- `copy_setup_prefix`: `6` labels, all `Copy`, ending at `Command Graph (L15) (Copy)`
+- `draw_consumer_boundary`: present, starts immediately at `Render Depth Pre-Pass (L15) (Draw)`, and contains only `1` draw label from the first draw onward
+
+So the remaining seam inside level `15` is no longer a vague mixed level. The instrumentation resolves it to a clean copy/setup prefix followed by a single first draw-consumer boundary.
+
+#### Compared against the earlier stack, the tightest seam resolves to the first `L15` draw consumer, not the copy/setup prefix alone
+
+This result is consistent with and tighter than the previous backend summaries:
+
+- `label_segments=` still says the overall failing frame-1 command buffer is dominated by Copy work, with only a tiny late tail
+- `late_tail_split=` still says the late `L86..L88` epilogue is small (`tail_labels=8`) compared with the `94`-label pre-tail body
+- `pre_tail_copy_body_split=` still identifies `L8..L15` as the dominant 8-level hotspot (`labels=14`, `copy=13`, `draw=1`)
+- `pre_tail_copy_handoff=` already split that hotspot into an even `L8..L14` pure copy chain (`7` labels) and `L15` consumer level (`7` labels, `6` copy + `1` draw)
+
+What `level_draw_handoff=` adds is the final intra-level answer: inside `L15`, the copy/setup prefix itself is still copy-only and ends cleanly, while the only draw work begins exactly at `Render Depth Pre-Pass (L15) (Draw)`. That means the tightest backend-owned seam now resolves to the **first draw-consumer boundary** rather than to the `L15` copy/setup prefix alone.
+
+#### Provenance and outer failure signature remain unchanged in the same run
+
+The same valid repro keeps the established source-built baseline intact:
+
+- `render_for_compositor_sync_snapshot` still stays stable before the frame-1 submit chain
+- `submit_serial=8` is still the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass completes the next backend-owned narrowing step.
+
+Supported by the runtime evidence:
+
+- the dominant pre-tail hotspot remains `L8..L15`
+- the tighter consumer-level seam remains `L15`
+- inside `L15`, the copy/setup prefix is six pure-copy labels and the first draw work appears only at `Render Depth Pre-Pass (L15) (Draw)`
+- therefore the tightest backend seam currently resolves to the **first `L15` draw-consumer boundary**, not to the copy/setup prefix by itself
+
+### Next recommendation
+
+Keep the investigation source-built and projection-only, but move the next backend split onto the first `L15` draw consumer itself rather than back into broader copy-body buckets:
+
+1. classify what backend-owned work is attached to `Render Depth Pre-Pass (L15) (Draw)` and its immediate inherited setup/dependency chain
+2. keep the late `L86..L88` tail and the pure `L8..L14` copy prefix demoted relative to this tighter seam
+3. keep the settled baselines unchanged unless new backend evidence directly contradicts them
+
+## Follow-up QA pass for bead `oc-y2c` — classify the depth-prepass draw-consumer seam on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-an8` added `depth_prepass_consumer_seam=` to the Vulkan command summary. The question for this pass was whether the tightest remaining backend-owned seam resolves to the exact first depth-prepass draw-consumer label or to the contiguous inherited non-draw feeder chain that reaches into that boundary.
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- engine banner from the crash: `Godot Engine v4.7.beta.custom_build (becc15f72693cc92b14c9bb728e2e283fba28306)`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-consumer-seam-vulkan-sourcebuild-20260518-122700/`
+
+Key files:
+
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-consumer-seam-vulkan-sourcebuild-20260518-122700/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-consumer-seam-vulkan-sourcebuild-20260518-122700/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command used:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-depth-prepass-consumer-seam-vulkan-sourcebuild-20260518-122700 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### `depth_prepass_consumer_seam=` resolves the remaining backend-owned seam to the exact first draw consumer
+
+The failing `submit_serial=9` command summary now carries:
+
+- `depth_prepass_consumer_seam={draw_label_index=22,draw_label="Render Depth Pre-Pass (L15) (Draw)",draw_level=15,contiguous_non_draw_feeder={label_indexes=0..21,levels=-1..15,labels=22,ops={copy=21,compute=0,draw=0,custom=0,mixed=0,unclassified=1},first_label="Command Graph (L-1)",last_label="Command Graph (L15) (Copy)"},same_level_setup={label_indexes=16..21,labels=6,ops={copy=6,compute=0,draw=0,custom=0,mixed=0,unclassified=0},first_label="Command Graph (L15) (Copy)",last_label="Command Graph (L15) (Copy)"},inherited_dependency_chain={label_indexes=0..15,levels=-1..14,labels=16,ops={copy=15,compute=0,draw=0,custom=0,mixed=0,unclassified=1},first_label="Command Graph (L-1)",last_label="Command Graph (L14) (Copy)"},previous_draw_label=none}`
+
+This matters because the feeder chain is now fully described and still remains entirely non-draw setup work. The same-level `L15` setup is only six copy labels, the inherited prior-level dependency chain is sixteen non-draw labels ending at `Command Graph (L14) (Copy)`, and there is no earlier draw boundary in that contiguous feeder (`previous_draw_label=none`). That means the feeder chain is real and larger in aggregate, but the *first backend-owned consumer transition* is still exactly the `Render Depth Pre-Pass (L15) (Draw)` label itself.
+
+#### Compared against earlier evidence, the broad copy-dominated story still holds, but the tightest seam remains the exact draw-consumer boundary
+
+This new split stays consistent with the earlier stack instead of changing direction:
+
+- `pre_tail_copy_body_split=` still says the dominant pre-tail hotspot is `L8..L15`
+- `pre_tail_copy_handoff=` still says that hotspot resolves into a pure `L8..L14` copy chain plus an `L15` consumer level
+- `level_draw_handoff=` already showed that `L15` itself splits into a six-label `Command Graph (L15) (Copy)` setup prefix and a one-label draw boundary at `Render Depth Pre-Pass (L15) (Draw)`
+
+`depth_prepass_consumer_seam=` adds the final dependency context around that draw boundary and still does not uncover a narrower competing handoff inside the feeder chain. So the best read remains: the inherited non-draw feeder chain is the contiguous setup that leads into the seam, but the tightest remaining backend-owned seam is the exact first depth-prepass draw consumer boundary, not the feeder chain by itself.
+
+#### Provenance and outer failure signature remain unchanged in the same run
+
+The same valid repro keeps the established source-built baseline intact:
+
+- `render_for_compositor_sync_snapshot` still stays stable before the frame-1 submit chain
+- `submit_serial=8` is still the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass completes the current backend-owned narrowing step.
+
+Supported by the runtime evidence:
+
+- the inherited feeder chain into level `15` is now fully classified and remains entirely non-draw work
+- the same-level `L15` setup prefix is still only copy/setup work
+- the first actual consumer transition is still `Render Depth Pre-Pass (L15) (Draw)`
+- therefore the tightest remaining backend-owned seam on failing `submit_serial=9` is the exact depth-prepass draw-consumer boundary, with the inherited feeder chain as the contiguous dependency path that leads into it rather than as the narrower seam itself
+
+### Next recommendation
+
+Keep the investigation source-built and projection-only, but stop spending cycles reclassifying the already-settled copy-chain ancestry. The next useful slice should inspect what backend-owned work or dependency attached to `Render Depth Pre-Pass (L15) (Draw)` makes that first consumer boundary the tightest surviving seam.
