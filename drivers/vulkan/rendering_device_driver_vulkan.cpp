@@ -2978,11 +2978,11 @@ RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
 	VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
-	print_line(vformat("[gdgs-vk] fence_wait_begin submit_serial=%d queue_family=%d queue_index=%d fence_status=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s wait_summary=%s signal_summary=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)fence_status, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false", fence->last_wait_semaphore_summary, fence->last_signal_semaphore_summary, fence->last_command_buffer_summary));
+	print_line(vformat("[gdgs-vk] fence_wait_begin submit_serial=%d queue_family=%d queue_index=%d fence_status=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s wait_summary=%s wait_provenance=%s signal_summary=%s signal_provenance=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)fence_status, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false", fence->last_wait_semaphore_summary, fence->last_wait_provenance_summary, fence->last_signal_semaphore_summary, fence->last_signal_provenance_summary, fence->last_command_buffer_summary));
 	if (fence_status == VK_NOT_READY) {
 		VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
 		if (err != VK_SUCCESS) {
-			print_line(vformat("[gdgs-vk] fence_wait_error submit_serial=%d queue_family=%d queue_index=%d wait_result=%d wait_summary=%s signal_summary=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)err, fence->last_wait_semaphore_summary, fence->last_signal_semaphore_summary, fence->last_command_buffer_summary));
+			print_line(vformat("[gdgs-vk] fence_wait_error submit_serial=%d queue_family=%d queue_index=%d wait_result=%d wait_summary=%s wait_provenance=%s signal_summary=%s signal_provenance=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)err, fence->last_wait_semaphore_summary, fence->last_wait_provenance_summary, fence->last_signal_semaphore_summary, fence->last_signal_provenance_summary, fence->last_command_buffer_summary));
 		}
 		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", err));
 	}
@@ -3203,14 +3203,21 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 			fence->last_pending_fence_semaphore_count = command_queue->pending_semaphores_for_fence.size();
 			fence->last_present_submission = p_swap_chains.size() > 0;
 			fence->last_wait_semaphore_summary = _debug_wait_semaphore_summary(command_queue, p_wait_semaphores);
+			fence->last_wait_provenance_summary = _debug_wait_semaphore_provenance_summary(p_wait_semaphores);
 			fence->last_signal_semaphore_summary = _debug_signal_semaphore_summary(p_cmd_semaphores, p_swap_chains);
+			fence->last_signal_provenance_summary = _debug_signal_semaphore_provenance_summary(p_cmd_semaphores, p_swap_chains, fence);
 			fence->last_command_buffer_summary = _debug_command_buffer_summary(p_cmd_buffers);
-			print_line(vformat("[gdgs-vk] queue_submit submit_serial=%d queue_family=%d queue_index=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s wait_summary=%s signal_summary=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false", fence->last_wait_semaphore_summary, fence->last_signal_semaphore_summary, fence->last_command_buffer_summary));
+			print_line(vformat("[gdgs-vk] queue_submit submit_serial=%d queue_family=%d queue_index=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s wait_summary=%s wait_provenance=%s signal_summary=%s signal_provenance=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false", fence->last_wait_semaphore_summary, fence->last_wait_provenance_summary, fence->last_signal_semaphore_summary, fence->last_signal_provenance_summary, fence->last_command_buffer_summary));
 		}
 
 		device_queue.submit_mutex.lock();
 		err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
 		device_queue.submit_mutex.unlock();
+
+		if (err == VK_SUCCESS && fence != nullptr) {
+			_debug_register_signal_semaphore_states(p_cmd_semaphores, p_swap_chains, fence);
+			_debug_register_wait_semaphore_states(p_wait_semaphores, fence);
+		}
 
 		if (err == VK_ERROR_DEVICE_LOST) {
 			print_lost_device_info();
@@ -7131,6 +7138,118 @@ String RenderingDeviceDriverVulkan::_debug_signal_semaphore_summary(VectorView<S
 
 	text += "]";
 	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_wait_semaphore_provenance_summary(VectorView<SemaphoreID> p_wait_semaphores) const {
+	String text = "[";
+	for (uint32_t i = 0; i < p_wait_semaphores.size(); i++) {
+		if (i > 0) {
+			text += ", ";
+		}
+		const uint64_t vk_semaphore = (uint64_t)VkSemaphore(p_wait_semaphores[i].id);
+		text += "{index=" + itos(i);
+		text += ",vk=" + itos(vk_semaphore);
+		const DebugSemaphoreState *state = debug_semaphore_states.getptr(vk_semaphore);
+		if (state != nullptr) {
+			text += ",last_signal_submit_serial=" + itos(state->last_signal_submit_serial);
+			text += ",last_signal_queue_family=" + itos(state->last_signal_queue_family);
+			text += ",last_signal_queue_index=" + itos(state->last_signal_queue_index);
+			if (!state->last_signal_source.is_empty()) {
+				text += ",last_signal_source=\"" + state->last_signal_source + "\"";
+			}
+			if (!state->last_signal_command_summary.is_empty()) {
+				text += ",last_signal_command_summary=\"" + state->last_signal_command_summary + "\"";
+			}
+			text += ",last_wait_submit_serial=" + itos(state->last_wait_submit_serial);
+			text += ",last_wait_queue_family=" + itos(state->last_wait_queue_family);
+			text += ",last_wait_queue_index=" + itos(state->last_wait_queue_index);
+			if (!state->last_wait_command_summary.is_empty()) {
+				text += ",last_wait_command_summary=\"" + state->last_wait_command_summary + "\"";
+			}
+		} else {
+			text += ",last_signal_submit_serial=0,last_wait_submit_serial=0";
+		}
+		text += "}";
+	}
+	text += "]";
+	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_signal_semaphore_provenance_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains, const Fence *p_fence) const {
+	String text = "[";
+	bool first = true;
+	for (uint32_t i = 0; i < p_cmd_semaphores.size(); i++) {
+		if (!first) {
+			text += ", ";
+		}
+		first = false;
+		text += "{source=submit,index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)VkSemaphore(p_cmd_semaphores[i].id));
+		if (p_fence != nullptr) {
+			text += ",signal_submit_serial=" + itos(p_fence->last_submit_serial);
+			text += ",queue_family=" + itos(p_fence->last_queue_family);
+			text += ",queue_index=" + itos(p_fence->last_queue_index);
+		}
+		text += "}";
+	}
+	for (uint32_t i = 0; i < p_swap_chains.size(); i++) {
+		const SwapChain *swap_chain = (const SwapChain *)(p_swap_chains[i].id);
+		if (!first) {
+			text += ", ";
+		}
+		first = false;
+		text += "{source=present,index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)swap_chain->present_semaphores[swap_chain->image_index]);
+		text += ",swapchain=" + itos((uint64_t)swap_chain->vk_swapchain);
+		text += ",image_index=" + itos(swap_chain->image_index);
+		if (p_fence != nullptr) {
+			text += ",signal_submit_serial=" + itos(p_fence->last_submit_serial);
+			text += ",queue_family=" + itos(p_fence->last_queue_family);
+			text += ",queue_index=" + itos(p_fence->last_queue_index);
+		}
+		text += "}";
+	}
+	text += "]";
+	return text;
+}
+
+void RenderingDeviceDriverVulkan::_debug_register_signal_semaphore_states(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains, const Fence *p_fence) {
+	if (p_fence == nullptr) {
+		return;
+	}
+	for (uint32_t i = 0; i < p_cmd_semaphores.size(); i++) {
+		const uint64_t vk_semaphore = (uint64_t)VkSemaphore(p_cmd_semaphores[i].id);
+		DebugSemaphoreState &state = debug_semaphore_states[vk_semaphore];
+		state.last_signal_submit_serial = p_fence->last_submit_serial;
+		state.last_signal_queue_family = p_fence->last_queue_family;
+		state.last_signal_queue_index = p_fence->last_queue_index;
+		state.last_signal_source = "submit";
+		state.last_signal_command_summary = p_fence->last_command_buffer_summary;
+	}
+	for (uint32_t i = 0; i < p_swap_chains.size(); i++) {
+		const SwapChain *swap_chain = (const SwapChain *)(p_swap_chains[i].id);
+		const uint64_t vk_semaphore = (uint64_t)swap_chain->present_semaphores[swap_chain->image_index];
+		DebugSemaphoreState &state = debug_semaphore_states[vk_semaphore];
+		state.last_signal_submit_serial = p_fence->last_submit_serial;
+		state.last_signal_queue_family = p_fence->last_queue_family;
+		state.last_signal_queue_index = p_fence->last_queue_index;
+		state.last_signal_source = "present";
+		state.last_signal_command_summary = p_fence->last_command_buffer_summary;
+	}
+}
+
+void RenderingDeviceDriverVulkan::_debug_register_wait_semaphore_states(VectorView<SemaphoreID> p_wait_semaphores, const Fence *p_fence) {
+	if (p_fence == nullptr) {
+		return;
+	}
+	for (uint32_t i = 0; i < p_wait_semaphores.size(); i++) {
+		const uint64_t vk_semaphore = (uint64_t)VkSemaphore(p_wait_semaphores[i].id);
+		DebugSemaphoreState &state = debug_semaphore_states[vk_semaphore];
+		state.last_wait_submit_serial = p_fence->last_submit_serial;
+		state.last_wait_queue_family = p_fence->last_queue_family;
+		state.last_wait_queue_index = p_fence->last_queue_index;
+		state.last_wait_command_summary = p_fence->last_command_buffer_summary;
+	}
 }
 
 void RenderingDeviceDriverVulkan::print_lost_device_info() {

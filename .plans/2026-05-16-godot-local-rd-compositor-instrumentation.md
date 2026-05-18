@@ -563,6 +563,59 @@ Validation completed on the touched code paths with `python3 misc/scripts/file_f
 
 ---
 
+### Task 24: QA map `submit_serial=8` → `submit_serial=9` semaphore and command path
+
+**Bead ID:** `oc-zbz`  
+**SubAgent:** `primary` (for `qa`)  
+**Role:** `qa`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-zbz` and keep the investigation projection-only. Run the minimum valid host-Vulkan repro (`projection_only + disabled`) using the new Vulkan submit/work mapping diagnostics. Determine whether `submit_serial=8` is the transfer-worker submission, whether `submit_serial=9` is the following frame-1 command submission waiting on that same semaphore chain, and what command-label path / breadcrumb context is attached to `submit_serial=9` when the later `fence_wait_error` fires. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-zbz` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA claimed bead `oc-zbz`, ran the minimum host-Vulkan repro on the source-built editor (`projection_only + disabled`) at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-map-sourcebuild-20260517-205949/`, and confirmed the submit-chain ownership question. The valid run again showed the stable post-projection snapshot, then a successful frame-0 wait on `submit_serial=5`, then `queue_submit submit_serial=8` with `wait_semaphores=0 command_buffers=1 signal_semaphores=1`, followed immediately by `frame_execute_begin frame=1 ... wait_semaphores=1` and `queue_submit submit_serial=9` with `wait_semaphores=1 command_buffers=1 signal_semaphores=0`, before the later `fence_wait_error submit_serial=9 wait_result=-4` and `BLIT_PASS` collapse. Cross-checking that runtime ordering against the updated engine source (`RenderingDevice::_submit_transfer_worker()` pushing signal semaphores into `frames[frame].semaphores_to_wait_on`, then `_execute_frame()` / `execute_chained_cmds()` consuming that same wait list) supports the intended answer: `submit_serial=8` is the transfer-worker handoff and `submit_serial=9` is the following frame-1 command submission waiting on the same semaphore chain. QA saved the durable notes in `doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Important caveat: the source-built editor binary used for the valid repro still lagged the newest runtime log strings, so this artifact set does **not** include the newly added `wait_summary` / `signal_summary` / `command_summary` / `label_path` text for `submit_serial=9` even though that source is present on branch `e968db74`. QA therefore closed the bead on the strength of the answered ownership question, while explicitly documenting that richer command-label provenance would require the same single rerun on a refreshed binary if still needed.
+
+---
+
+### Task 25: Investigate the transfer-submit → frame-submit hazard on failing `submit_serial=9`
+
+**Bead ID:** `oc-d79`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-d79` and keep the investigation projection-only. The current evidence says `submit_serial=8` is the transfer-worker submission and `submit_serial=9` is the following frame-1 main submission that waits on that semaphore chain, then later dies at `fence_wait`. Add small, reversible, high-signal instrumentation that helps determine what specific hazard lives in that transfer-submit → frame-submit handoff: semaphore provenance/consumption, transfer payload ownership, frame-submit work classification, or other backend-side state that could explain why submit 9 queues cleanly but later fails. Prefer failure-mechanics instrumentation over prettier logging. Update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-d79` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrow transfer-submit → frame-submit diagnostic slice in Godot only; GDGS stayed unchanged. On the RenderingDevice side, transfer-worker submission now logs the submitted command buffer identity plus transfer payload ownership state (`staging_in_use`, `ops_processed`, `ops_submitted`, `ops_recorded`, `ops_used_by_draw`) and stores per-frame wait provenance strings when transfer semaphores are pushed into `frames[frame].semaphores_to_wait_on`. The matching frame execution logs now print that same `wait_debug` payload when frame execution begins and when the main queue submits the next command buffer, so QA can see exactly which transfer worker payload/semaphore chain is being consumed by the failing follow-up submit.
+
+On the Vulkan backend side, queue submission and later fence-wait diagnostics now carry `wait_provenance=` and `signal_provenance=` alongside the existing wait/signal/command summaries. A small backend semaphore-state table records, per Vulkan semaphore handle, the last signaling submit serial / queue / source / command summary and the last waiting submit serial / queue / command summary. That gives the next projection-only repro a direct causal readout for whether failing `submit_serial=9` is waiting on a semaphore last signaled by `submit_serial=8`, whether that semaphore had already been consumed elsewhere, and what command summary last owned each side of the handoff.
+
+Validation completed with `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp servers/rendering/rendering_device.h servers/rendering/rendering_device.cpp` and an incremental rebuild via `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64` (after one compile-only correction from `VectorView::is_empty()` to `size() > 0`). A final `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "wait_provenance="` check confirmed the rebuilt editor now contains the new provenance log strings.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

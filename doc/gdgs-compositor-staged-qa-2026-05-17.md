@@ -1044,6 +1044,150 @@ Best next step:
 1. move the next diagnostic slice onto the later synchronization / backend / fence path that follows this stable snapshot window
 2. if additional lifetime suspicion remains, instrument resource ownership or backend state beyond the current tracked RID set rather than repeating the same projection snapshot comparison
 
+## Follow-up QA pass for bead `oc-zbz` — submit_serial 8 → 9 chain correlation
+
+### Scope
+
+Run the minimum valid host-Vulkan repro again on the updated instrumentation branches, keep the repro projection-only (`projection_only + disabled`), and answer the specific submit-chain question:
+
+- is `submit_serial=8` the transfer-worker submission?
+- is `submit_serial=9` the following frame-1 command submission that waits on that same semaphore chain?
+- what command / breadcrumb metadata is attached when the later `fence_wait_error` fires?
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `e968db74`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `eb3e53f`
+
+### Runtime used
+
+QA used the source-built Godot editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- timestamp on disk during the run: `2026-05-17 20:19`
+
+Launch path:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000`
+- `--display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-map-sourcebuild-20260517-205949/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-map-sourcebuild-20260517-205949/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-map-sourcebuild-20260517-205949/logs/projection_only__disabled.normal.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-map-sourcebuild-20260517-205949/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved context/artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### `submit_serial=8` still maps to the transfer-worker handoff
+
+The runtime log preserves the same high-level ordering previously seen around the stable post-projection snapshot:
+
+1. frame-0 wait completes successfully at `submit_serial=5`
+2. `queue_submit submit_serial=8 ... wait_semaphores=0 command_buffers=1 signal_semaphores=1 swap_chains=0 present_submission=false`
+3. immediately after that, `frame_execute_begin frame=1 ... wait_semaphores=1 swap_chains=0`
+4. then `queue_submit submit_serial=9 ... wait_semaphores=1 command_buffers=1 signal_semaphores=0 swap_chains=0 present_submission=false`
+
+The updated engine source on this branch makes the ownership explicit:
+
+- `RenderingDevice::_submit_transfer_worker(...)` logs `transfer_submit_begin ... signal_semaphores=%d` and then pushes those same semaphores into `frames[frame].semaphores_to_wait_on`
+- `RenderingDevice::_execute_frame(...)` / `execute_chained_cmds(...)` consumes `frames[frame].semaphores_to_wait_on` as the wait list for the next main-queue command submission
+
+So even though this binary did not yet emit the new `transfer_submit_begin` line at runtime, the valid repro plus the updated source path support the mapping cleanly: `submit_serial=8` is the transfer-worker submission that seeds the next frame wait chain.
+
+#### `submit_serial=9` is the following frame-1 command submission waiting on that same semaphore chain
+
+This same run shows the expected consumer side:
+
+- `frame_execute_begin frame=1 ... wait_semaphores=1`
+- `queue_submit submit_serial=9 ... wait_semaphores=1 command_buffers=1 signal_semaphores=0 swap_chains=0 present_submission=false`
+- `frame_execute_submitted frame=1 ...`
+- `fence_wait_begin submit_serial=9 ...`
+- `fence_wait_error submit_serial=9 wait_result=-4`
+
+That matches the updated main-queue execution code exactly:
+
+- the first frame-1 command buffer waits on the accumulated external semaphore list
+- the last/only command buffer in this `no_present` path signals the fence, not a new semaphore
+- the later failing fence wait therefore belongs to that same frame-1 command submission
+
+#### Command-label path / breadcrumb metadata caveat on this run
+
+This run produced a valid Vulkan repro and answered the submit-chain ownership question, but it also exposed a build-artifact drift caveat that matters for the richer metadata fields.
+
+The source on branch `e968db74` includes the new Vulkan log fields:
+
+- `wait_summary=...`
+- `signal_summary=...`
+- `command_summary=...`
+- command-buffer `label_path`, `first_label`, `last_label`, and `last_breadcrumb`
+
+However, the source-built editor binary on disk at run time did **not** yet contain those strings, and the saved runtime log correspondingly emitted only the older shorter lines. QA verified that mismatch by checking the source and the binary contents after the run.
+
+So for this bead, the durable evidence package supports:
+
+- submit ownership (`8` = transfer handoff, `9` = following frame-1 wait/execute submit)
+- the semaphore-chain relationship
+- the later failure site (`fence_wait_error submit_serial=9`)
+- the later lost-device breadcrumb collapse to `BLIT_PASS`
+
+But it does **not** include a runtime-emitted `command_summary` / `label_path` payload for `submit_serial=9` from this specific artifact set.
+
+#### Failure signature still surfaces at `fence_wait`, then later collapses to `BLIT_PASS`
+
+The outer failure shape remains unchanged:
+
+- `projection_end`
+- `projection_post_dispatch_checkpoint_end ... checkpoint=disabled`
+- `render_for_compositor_sync_snapshot`
+- frame-0 wait on `submit_serial=5` succeeds
+- `submit_serial=8` then `submit_serial=9`
+- `fence_wait_error submit_serial=9 wait_result=-4`
+- later lost-device breadcrumbs still report `Last known breadcrumb: BLIT_PASS`
+
+### Updated interpretation
+
+This pass is enough to close the ownership question that Task 24 asked.
+
+Supported by the valid repro plus source-path correlation:
+
+- `submit_serial=8` is the transfer-worker submission that signals the semaphore chain consumed by the next frame
+- `submit_serial=9` is the subsequent frame-1 main command submission that waits on that same chain and later fails at `fence_wait`
+- the later failure still first surfaces at `fence_wait` and still later collapses to `BLIT_PASS`
+
+Explicit caveat:
+
+- this artifact set does **not** yet carry the new runtime-emitted `command_summary` / `label_path` text for `submit_serial=9`, because the source-built editor binary used for the valid run lagged the newest logging strings even though the branch source already contained them
+
+### Next recommendation
+
+Do not spend more QA time re-proving the submit-8 → submit-9 ownership question. That answer is complete enough for this bead.
+
+Best next step:
+
+1. have the coder refresh the source-built editor binary so the new `wait_summary` / `signal_summary` / `command_summary` strings are actually present in the runnable artifact
+2. if richer submit-9 command-label provenance is still needed, rerun the same single `projection_only + disabled` host-Vulkan pass once on that refreshed binary
+3. otherwise treat the main QA answer as settled and keep the next diagnostic lane focused on why the frame-1 command submission later dies at `fence_wait` / `BLIT_PASS`
+
 ## Follow-up QA pass for bead `oc-c1f` — source-built post-projection submit/stall/fence correlation
 
 ### Scope

@@ -7256,12 +7256,34 @@ void RenderingDevice::_end_transfer_worker(TransferWorker *p_transfer_worker) {
 }
 
 void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores) {
-	print_line(vformat("[gdgs-rd] transfer_submit_begin frame=%d transfer_worker=%d signal_semaphores=%d command_fence=%s submitted=%s", frame, p_transfer_worker->index, p_signal_semaphores.size(), p_transfer_worker->command_fence ? "true" : "false", p_transfer_worker->submitted ? "true" : "false"));
+	uint64_t operations_processed = 0;
+	uint64_t operations_submitted = 0;
+	uint64_t operations_counter = 0;
+	{
+		MutexLock lock(p_transfer_worker->operations_mutex);
+		operations_processed = p_transfer_worker->operations_processed;
+		operations_submitted = p_transfer_worker->operations_submitted;
+		operations_counter = p_transfer_worker->operations_counter;
+	}
+	const uint64_t operations_used_by_draw = transfer_worker_operation_used_by_draw[p_transfer_worker->index];
+	print_line(vformat("[gdgs-rd] transfer_submit_begin frame=%d transfer_worker=%d signal_semaphores=%d command_fence=%s submitted=%s command_buffer_id=%d staging_in_use=%d ops_processed=%d ops_submitted=%d ops_recorded=%d ops_used_by_draw=%d", frame, p_transfer_worker->index, p_signal_semaphores.size(), p_transfer_worker->command_fence ? "true" : "false", p_transfer_worker->submitted ? "true" : "false", (uint64_t)p_transfer_worker->command_buffer.id, p_transfer_worker->staging_buffer_size_in_use, operations_processed, operations_submitted, operations_counter, operations_used_by_draw));
 	driver->command_queue_execute_and_present(transfer_queue, {}, p_transfer_worker->command_buffer, p_signal_semaphores, p_transfer_worker->command_fence, {});
 
 	for (uint32_t i = 0; i < p_signal_semaphores.size(); i++) {
 		// Indicate the frame should wait on these semaphores before executing the main command buffer.
 		frames[frame].semaphores_to_wait_on.push_back(p_signal_semaphores[i]);
+		frames[frame].semaphores_to_wait_debug.push_back(vformat("{source=transfer_worker,frame=%d,worker=%d,signal_index=%d,semaphore_id=%d,command_buffer_id=%d,command_fence_id=%d,staging_in_use=%d,ops_processed=%d,ops_submitted=%d,ops_recorded=%d,ops_used_by_draw=%d}", frame, p_transfer_worker->index, i, (uint64_t)p_signal_semaphores[i].id, (uint64_t)p_transfer_worker->command_buffer.id, (uint64_t)p_transfer_worker->command_fence.id, p_transfer_worker->staging_buffer_size_in_use, operations_processed, operations_submitted, operations_counter, operations_used_by_draw));
+	}
+	if (p_signal_semaphores.size() > 0) {
+		String wait_debug = "[";
+		for (uint32_t i = 0; i < frames[frame].semaphores_to_wait_debug.size(); i++) {
+			if (i > 0) {
+				wait_debug += ", ";
+			}
+			wait_debug += frames[frame].semaphores_to_wait_debug[i];
+		}
+		wait_debug += "]";
+		print_line(vformat("[gdgs-rd] transfer_submit_enqueued_frame_waits frame=%d wait_count=%d wait_debug=%s", frame, frames[frame].semaphores_to_wait_on.size(), wait_debug));
 	}
 
 	p_transfer_worker->submitted = true;
@@ -8124,6 +8146,8 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 	// and chain them together via semaphores as dependent executions.
 	thread_local LocalVector<RDD::SemaphoreID> wait_semaphores;
 	wait_semaphores = frames[frame].semaphores_to_wait_on;
+	thread_local LocalVector<String> wait_semaphore_debug;
+	wait_semaphore_debug = frames[frame].semaphores_to_wait_debug;
 
 	for (uint32_t i = 0; i < command_buffer_count; i++) {
 		RDD::CommandBufferID command_buffer;
@@ -8149,7 +8173,15 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 			// Semaphores always need to be signaled if it's not the last command buffer.
 		}
 
-		print_line(vformat("[gdgs-rd] frame_execute_cmd_submit frame=%d command_buffer_index=%d command_buffer_count=%d wait_semaphores=%d signal_semaphore=%s signal_fence=%s swap_chains=%d present_swap_chain=%s", frame, i, command_buffer_count, wait_semaphores.size(), signal_semaphore ? "true" : "false", signal_fence ? "true" : "false", swap_chains.size(), p_present_swap_chain ? "true" : "false"));
+		String wait_debug = "[";
+		for (uint32_t j = 0; j < wait_semaphore_debug.size(); j++) {
+			if (j > 0) {
+				wait_debug += ", ";
+			}
+			wait_debug += wait_semaphore_debug[j];
+		}
+		wait_debug += "]";
+		print_line(vformat("[gdgs-rd] frame_execute_cmd_submit frame=%d command_buffer_index=%d command_buffer_count=%d command_buffer_id=%d wait_semaphores=%d wait_debug=%s signal_semaphore=%s signal_fence=%s swap_chains=%d present_swap_chain=%s", frame, i, command_buffer_count, (uint64_t)command_buffer.id, wait_semaphores.size(), wait_debug, signal_semaphore ? "true" : "false", signal_fence ? "true" : "false", swap_chains.size(), p_present_swap_chain ? "true" : "false"));
 		driver->command_queue_execute_and_present(main_queue, wait_semaphores, command_buffer,
 				signal_semaphore ? signal_semaphore : VectorView<RDD::SemaphoreID>(), signal_fence,
 				swap_chains);
@@ -8157,16 +8189,27 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 		// Make the next command buffer wait on the semaphore signaled by this one.
 		wait_semaphores.resize(1);
 		wait_semaphores[0] = signal_semaphore;
+		wait_semaphore_debug.resize(1);
+		wait_semaphore_debug[0] = vformat("{source=frame_chain,frame=%d,command_buffer_index=%d,semaphore_id=%d,command_buffer_id=%d,present_swap_chain=%s}", frame, i, (uint64_t)signal_semaphore.id, (uint64_t)command_buffer.id, p_present_swap_chain ? "true" : "false");
 	}
 
 	frames[frame].semaphores_to_wait_on.clear();
+	frames[frame].semaphores_to_wait_debug.clear();
 }
 
 void RenderingDevice::_execute_frame(bool p_present) {
 	// Check whether this frame should present the swap chains and in which queue.
 	const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.is_empty();
 	const bool separate_present_queue = main_queue != present_queue;
-	print_line(vformat("[gdgs-rd] frame_execute_begin frame=%d present_requested=%s frame_can_present=%s separate_present_queue=%s wait_semaphores=%d swap_chains=%d pending_buffer_downloads=%d pending_texture_downloads=%d", frame, p_present ? "true" : "false", frame_can_present ? "true" : "false", separate_present_queue ? "true" : "false", frames[frame].semaphores_to_wait_on.size(), frames[frame].swap_chains_to_present.size(), frames[frame].download_buffer_get_data_requests.size(), frames[frame].download_texture_get_data_requests.size()));
+	String frame_wait_debug = "[";
+	for (uint32_t i = 0; i < frames[frame].semaphores_to_wait_debug.size(); i++) {
+		if (i > 0) {
+			frame_wait_debug += ", ";
+		}
+		frame_wait_debug += frames[frame].semaphores_to_wait_debug[i];
+	}
+	frame_wait_debug += "]";
+	print_line(vformat("[gdgs-rd] frame_execute_begin frame=%d present_requested=%s frame_can_present=%s separate_present_queue=%s wait_semaphores=%d wait_debug=%s swap_chains=%d pending_buffer_downloads=%d pending_texture_downloads=%d", frame, p_present ? "true" : "false", frame_can_present ? "true" : "false", separate_present_queue ? "true" : "false", frames[frame].semaphores_to_wait_on.size(), frame_wait_debug, frames[frame].swap_chains_to_present.size(), frames[frame].download_buffer_get_data_requests.size(), frames[frame].download_texture_get_data_requests.size()));
 
 	// The semaphore is required if the frame can be presented and a separate present queue is used;
 	// since the separate queue will wait for that semaphore before presenting.

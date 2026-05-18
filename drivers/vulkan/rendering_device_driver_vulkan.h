@@ -225,6 +225,18 @@ private:
 	uint32_t current_segment_frame_index = UINT32_MAX;
 	uint32_t current_segment_frames_drawn = 0;
 #endif
+	struct DebugSemaphoreState {
+		uint64_t last_signal_submit_serial = 0;
+		uint32_t last_signal_queue_family = 0;
+		uint32_t last_signal_queue_index = 0;
+		String last_signal_source;
+		String last_signal_command_summary;
+		uint64_t last_wait_submit_serial = 0;
+		uint32_t last_wait_queue_family = 0;
+		uint32_t last_wait_queue_index = 0;
+		String last_wait_command_summary;
+	};
+	HashMap<uint64_t, DebugSemaphoreState> debug_semaphore_states;
 
 public:
 	/*****************/
@@ -352,7 +364,9 @@ private:
 		uint32_t last_pending_fence_semaphore_count = 0;
 		bool last_present_submission = false;
 		String last_wait_semaphore_summary;
+		String last_wait_provenance_summary;
 		String last_signal_semaphore_summary;
+		String last_signal_provenance_summary;
 		String last_command_buffer_summary;
 	};
 
@@ -796,7 +810,11 @@ public:
 	static String _debug_pipeline_stage_to_string(VkPipelineStageFlags p_stage_flags);
 	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
 	String _debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const;
+	String _debug_wait_semaphore_provenance_summary(VectorView<SemaphoreID> p_wait_semaphores) const;
 	String _debug_signal_semaphore_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains) const;
+	String _debug_signal_semaphore_provenance_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains, const Fence *p_fence) const;
+	void _debug_register_signal_semaphore_states(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains, const Fence *p_fence);
+	void _debug_register_wait_semaphore_states(VectorView<SemaphoreID> p_wait_semaphores, const Fence *p_fence);
 
 	/********************/
 	/**** SUBMISSION ****/
