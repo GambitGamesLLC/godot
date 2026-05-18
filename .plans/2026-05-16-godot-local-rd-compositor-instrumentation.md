@@ -644,6 +644,28 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 ---
 
+### Task 27: Split the frame-1 main command graph behind failing `submit_serial=9`
+
+**Bead ID:** `oc-1ux`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-1ux` and keep the investigation projection-only on the source-built Godot binary. Add small, reversible, high-signal instrumentation that splits or maps the large frame-1 main command graph behind failing `submit_serial=9` into more actionable backend segments. The goal is to identify what portion of that non-present frame-1 work is actually represented by the failing command buffer and what segment most plausibly leads to the later `fence_wait_error` / `BLIT_PASS` collapse. Prefer command-graph / draw-list / backend ownership evidence over more shader-side probes, keep the staged repro model intact, run relevant validation, update this plan with actual results, commit/push the changes, and close bead `oc-1ux` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrow Vulkan command-buffer classification layer on top of the existing submit-8 → submit-9 provenance logs, without changing renderer behavior. `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` now track per-command-buffer `label_tail` (the last labels rather than only the truncated front path) plus a compact `label_segments` summary that groups contiguous debug labels by their recorded command-graph operation tag (`Copy`, `Compute`, `Draw`, `Custom`, or mixed tags already emitted by `RenderingDeviceGraph`) and reports label-count / label-index / level ranges for each segment. The summary is reset at command-buffer begin, recorded at each `command_begin_label(...)`, and appended to the existing `command_summary=` payload that already rides through `queue_submit`, `fence_wait_begin`, and `fence_wait_error`. This keeps the staged repro model intact while making `submit_serial=9` actionable for the next QA pass: instead of only seeing `labels=102 ... last_breadcrumb=UI_PASS`, QA can now tell whether the failing frame-1 main command buffer is mostly copy-vs-draw work, where the major contiguous segment boundaries land, and what tail labels were active nearest the eventual fence failure / later `BLIT_PASS` collapse. Validation run: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check`; incremental object build `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; full incremental editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "label_segments="` to confirm the refreshed source-built binary contains the new segment-summary log string.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

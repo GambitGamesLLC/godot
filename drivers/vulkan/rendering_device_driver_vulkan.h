@@ -425,6 +425,15 @@ public:
 private:
 	// ----- BUFFER -----
 
+	struct DebugLabelSegment {
+		String operation_tag;
+		int32_t first_level = INT32_MAX;
+		int32_t last_level = INT32_MIN;
+		uint32_t first_label_index = 0;
+		uint32_t last_label_index = 0;
+		uint32_t label_count = 0;
+	};
+
 	struct CommandBufferInfo {
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
 		Framebuffer *active_framebuffer = nullptr;
@@ -438,6 +447,11 @@ private:
 		String debug_last_label;
 		String debug_label_path;
 		bool debug_label_path_truncated = false;
+		String debug_label_tail_path;
+		bool debug_label_tail_path_truncated = false;
+		bool debug_label_segment_overflow = false;
+		uint32_t debug_label_segment_count = 0;
+		DebugLabelSegment debug_label_segments[8];
 	};
 
 public:
@@ -808,6 +822,10 @@ public:
 	static String get_vulkan_result(VkResult err);
 	static String _debug_breadcrumb_to_string(uint32_t p_breadcrumb);
 	static String _debug_pipeline_stage_to_string(VkPipelineStageFlags p_stage_flags);
+	static String _debug_extract_label_operation_tag(const String &p_label_name);
+	static int32_t _debug_extract_label_level(const String &p_label_name);
+	static String _debug_command_buffer_label_segments_summary(const CommandBufferInfo *p_command_buffer);
+	void _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
 	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
 	String _debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const;
 	String _debug_wait_semaphore_provenance_summary(VectorView<SemaphoreID> p_wait_semaphores) const;

@@ -3425,6 +3425,10 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_last_label = String();
 	command_buffer->debug_label_path = String();
 	command_buffer->debug_label_path_truncated = false;
+	command_buffer->debug_label_tail_path = String();
+	command_buffer->debug_label_tail_path_truncated = false;
+	command_buffer->debug_label_segment_overflow = false;
+	command_buffer->debug_label_segment_count = 0;
 
 	VkCommandBufferBeginInfo cmd_buf_begin_info = {};
 	cmd_buf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -3449,6 +3453,10 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_last_label = String();
 	command_buffer->debug_label_path = String();
 	command_buffer->debug_label_path_truncated = false;
+	command_buffer->debug_label_tail_path = String();
+	command_buffer->debug_label_tail_path_truncated = false;
+	command_buffer->debug_label_segment_overflow = false;
+	command_buffer->debug_label_segment_count = 0;
 
 	VkCommandBufferInheritanceInfo inheritance_info = {};
 	inheritance_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -6788,6 +6796,7 @@ void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buff
 			command_buffer->debug_label_path_truncated = true;
 		}
 	}
+	_debug_record_command_label(command_buffer, String(p_label_name));
 
 	if (!functions.CmdBeginDebugUtilsLabelEXT) {
 		if (functions.CmdDebugMarkerBeginEXT) {
@@ -7041,6 +7050,124 @@ String RenderingDeviceDriverVulkan::_debug_pipeline_stage_to_string(VkPipelineSt
 	return "stage(" + itos((uint64_t)p_stage_flags) + ")";
 }
 
+String RenderingDeviceDriverVulkan::_debug_extract_label_operation_tag(const String &p_label_name) {
+	if (!p_label_name.ends_with(")")) {
+		return String();
+	}
+
+	const int op_open = p_label_name.rfind(" (");
+	if (op_open == -1) {
+		return String();
+	}
+
+	const String operation_tag = p_label_name.substr(op_open + 2, p_label_name.length() - op_open - 3);
+	if (operation_tag.contains("Copy") || operation_tag.contains("Compute") || operation_tag.contains("Draw") || operation_tag.contains("Custom")) {
+		return operation_tag;
+	}
+	return String();
+}
+
+int32_t RenderingDeviceDriverVulkan::_debug_extract_label_level(const String &p_label_name) {
+	const int level_open = p_label_name.find(" (L");
+	if (level_open == -1) {
+		return INT32_MAX;
+	}
+
+	const int level_close = p_label_name.find(")", level_open + 3);
+	if (level_close == -1) {
+		return INT32_MAX;
+	}
+
+	return p_label_name.substr(level_open + 3, level_close - (level_open + 3)).to_int();
+}
+
+String RenderingDeviceDriverVulkan::_debug_command_buffer_label_segments_summary(const CommandBufferInfo *p_command_buffer) {
+	if (p_command_buffer->debug_label_segment_count == 0) {
+		return "[]";
+	}
+
+	String text = "[";
+	for (uint32_t i = 0; i < p_command_buffer->debug_label_segment_count; i++) {
+		const DebugLabelSegment &segment = p_command_buffer->debug_label_segments[i];
+		if (i > 0) {
+			text += ", ";
+		}
+		text += "{index=" + itos(i);
+		text += ",op=\"" + segment.operation_tag + "\"";
+		text += ",labels=" + itos(segment.label_count);
+		text += ",label_indexes=" + itos(segment.first_label_index) + ".." + itos(segment.last_label_index);
+		text += ",levels=";
+		if (segment.first_level == INT32_MAX || segment.last_level == INT32_MIN) {
+			text += "unknown";
+		} else if (segment.first_level == segment.last_level) {
+			text += itos(segment.first_level);
+		} else {
+			text += itos(segment.first_level) + ".." + itos(segment.last_level);
+		}
+		text += "}";
+	}
+	if (p_command_buffer->debug_label_segment_overflow) {
+		text += ", {overflow=true}";
+	}
+	text += "]";
+	return text;
+}
+
+void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
+	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
+		p_command_buffer->debug_label_tail_path += " > ";
+	}
+	p_command_buffer->debug_label_tail_path += p_label_name;
+	while (p_command_buffer->debug_label_tail_path.length() > 240) {
+		const int separator = p_command_buffer->debug_label_tail_path.find(" > ");
+		if (separator == -1) {
+			p_command_buffer->debug_label_tail_path = p_command_buffer->debug_label_tail_path.right(240);
+			break;
+		}
+		p_command_buffer->debug_label_tail_path = p_command_buffer->debug_label_tail_path.substr(separator + 3);
+		p_command_buffer->debug_label_tail_path_truncated = true;
+	}
+
+	String operation_tag = _debug_extract_label_operation_tag(p_label_name);
+	if (operation_tag.is_empty()) {
+		operation_tag = "Unclassified";
+	}
+	const int32_t level = _debug_extract_label_level(p_label_name);
+	const uint32_t label_index = p_command_buffer->debug_label_count > 0 ? (p_command_buffer->debug_label_count - 1) : 0;
+
+	DebugLabelSegment *segment = nullptr;
+	if (p_command_buffer->debug_label_segment_count > 0) {
+		DebugLabelSegment &last_segment = p_command_buffer->debug_label_segments[p_command_buffer->debug_label_segment_count - 1];
+		if (last_segment.operation_tag == operation_tag) {
+			segment = &last_segment;
+		}
+	}
+
+	if (segment == nullptr) {
+		if (p_command_buffer->debug_label_segment_count < 8) {
+			segment = &p_command_buffer->debug_label_segments[p_command_buffer->debug_label_segment_count++];
+			segment->operation_tag = operation_tag;
+			segment->first_level = level;
+			segment->last_level = level;
+			segment->first_label_index = label_index;
+			segment->last_label_index = label_index;
+			segment->label_count = 0;
+		} else {
+			p_command_buffer->debug_label_segment_overflow = true;
+			segment = &p_command_buffer->debug_label_segments[p_command_buffer->debug_label_segment_count - 1];
+		}
+	}
+
+	segment->label_count++;
+	segment->last_label_index = label_index;
+	if (level != INT32_MAX) {
+		if (segment->first_level == INT32_MAX) {
+			segment->first_level = level;
+		}
+		segment->last_level = level;
+	}
+}
+
 String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const {
 	if (p_cmd_buffers.size() == 0) {
 		return "[]";
@@ -7072,6 +7199,14 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 			}
 			text += "\"";
 		}
+		if (!command_buffer->debug_label_tail_path.is_empty()) {
+			text += ",label_tail=\"";
+			if (command_buffer->debug_label_tail_path_truncated) {
+				text += "... > ";
+			}
+			text += command_buffer->debug_label_tail_path + "\"";
+		}
+		text += ",label_segments=" + _debug_command_buffer_label_segments_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}
