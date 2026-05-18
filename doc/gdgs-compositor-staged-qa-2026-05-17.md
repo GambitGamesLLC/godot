@@ -1188,6 +1188,149 @@ Best next step:
 2. if richer submit-9 command-label provenance is still needed, rerun the same single `projection_only + disabled` host-Vulkan pass once on that refreshed binary
 3. otherwise treat the main QA answer as settled and keep the next diagnostic lane focused on why the frame-1 command submission later dies at `fence_wait` / `BLIT_PASS`
 
+## Follow-up QA pass for bead `oc-y6n` — refreshed source-build wait provenance for `submit_serial=9`
+
+### Scope
+
+Run the refreshed source-built host-Vulkan repro once, keep it projection-only (`projection_only + disabled`), and answer the remaining semaphore-provenance questions for the failing frame-1 submit:
+
+- does `submit_serial=9` wait on the exact semaphore last signaled by `submit_serial=8`?
+- did that semaphore already have a prior recorded consumer (`last_wait_submit_serial != 0`)?
+- do the new wait/signal provenance, transfer payload ownership, and command summaries suggest stale/reused semaphore ownership rather than a pure workload failure?
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `dc6b26d1`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `eb3e53f`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- binary mtime during the run: `2026-05-17 21:40:12 -0400`
+- binary contains the new provenance strings (`wait_provenance=`, `signal_provenance=`, `last_wait_submit_serial=`)
+
+Launch path:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000`
+- `--display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-provenance-sourcebuild-20260517-214532/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-provenance-sourcebuild-20260517-214532/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-provenance-sourcebuild-20260517-214532/logs/projection_only__disabled.normal.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-provenance-sourcebuild-20260517-214532/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+- git head recorded in context: `dc6b26d173f8d80e0c67f87e9699be99320df43a`
+
+### Findings
+
+#### `submit_serial=9` waits on the exact same semaphore handle last signaled by `submit_serial=8`
+
+The failing frame-1 main submit waits on Vulkan semaphore handle `107352545131872`:
+
+- `queue_submit submit_serial=9 ... wait_summary=[{source=external,index=0,vk=107352545131872,stage="ALL_COMMANDS"}]`
+
+The immediately preceding transfer-worker handoff signaled that same handle:
+
+- `queue_submit submit_serial=8 ... signal_summary=[{source=submit,index=0,vk=107352545131872}]`
+- `signal_provenance=[{source=submit,index=0,vk=107352545131872,signal_submit_serial=8,queue_family=0,queue_index=0}]`
+
+The backend provenance table on submit 9 confirms the match directly:
+
+- `wait_provenance=[{index=0,vk=107352545131872,last_signal_submit_serial=8,...}]`
+
+So the answer is yes: `submit_serial=9` is waiting on the exact semaphore last signaled by `submit_serial=8`.
+
+#### The semaphore did **not** have a prior recorded consumer before `submit_serial=9`
+
+The same submit-9 wait provenance records:
+
+- `last_wait_submit_serial=0`
+- `last_wait_queue_family=0`
+- `last_wait_queue_index=0`
+
+That means the semaphore did not show a prior recorded wait/consumer before the failing submit-9 handoff. QA did not see stale/reused ownership signs on this semaphore chain.
+
+#### Transfer payload ownership and frame wait provenance are internally consistent across submit 8 → 9
+
+The transfer-worker payload attached to the signaling handoff is explicit:
+
+- `transfer_submit_begin frame=1 transfer_worker=0 signal_semaphores=1 command_fence=true submitted=false command_buffer_id=135588252477144 staging_in_use=63676352 ops_processed=85 ops_submitted=85 ops_recorded=98 ops_used_by_draw=98`
+
+The following frame-1 execution consumes that same payload as its sole wait source:
+
+- `frame_execute_begin frame=1 ... wait_semaphores=1`
+- `wait_debug=[{source=transfer_worker,frame=1,worker=0,signal_index=0,semaphore_id=107352545131872,command_buffer_id=135588252477144,command_fence_id=107352559285712,staging_in_use=63676352,ops_processed=85,ops_submitted=85,ops_recorded=98,ops_used_by_draw=98}]`
+
+That matches the Vulkan-level handoff exactly: one transfer-worker signal on submit 8, then one external wait on submit 9 for the same semaphore and payload lineage.
+
+#### Command summaries distinguish the submit-8 transfer handoff from the failing submit-9 main command graph
+
+`submit_serial=8` command summary:
+
+- `command_summary=[{index=0,vk=107352560225984,frame=1,frames_drawn=4,labels=0,breadcrumbs=0,last_breadcrumb="NONE"}]`
+
+`submit_serial=9` command summary:
+
+- `command_summary=[{index=0,vk=107352545824112,frame=1,frames_drawn=4,labels=102,first_label="Command Graph (L-1)",last_label="Command Graph (L88) (Draw)",label_path="Command Graph (L-1) > Command Graph (L0) (Copy) > ...",breadcrumbs=1,last_breadcrumb="UI_PASS"}]`
+
+So the failing submit is not the transfer-worker command buffer itself. It is the subsequent frame-1 main command-graph submission, which waits on the transfer-worker semaphore and later fails at fence wait.
+
+#### Failure signature still first surfaces at `fence_wait`, then later collapses to `BLIT_PASS`
+
+The outer failure shape is unchanged:
+
+- `queue_submit submit_serial=9 ...`
+- `fence_wait_begin submit_serial=9 ...`
+- `fence_wait_error submit_serial=9 wait_result=-4`
+- later: `ERROR: Last known breadcrumb: BLIT_PASS`
+
+The new provenance package narrows the handoff mechanics, but it does not move the first explicit failure site away from `fence_wait` or change the later lost-device breadcrumb collapse.
+
+### Updated interpretation
+
+This refreshed source-build pass completes the semaphore-provenance question cleanly.
+
+Supported directly by runtime evidence:
+
+- `submit_serial=9` waits on the exact Vulkan semaphore handle last signaled by `submit_serial=8`
+- that semaphore had no prior recorded consumer (`last_wait_submit_serial=0`) before submit 9
+- the transfer payload ownership (`command_buffer_id`, `command_fence_id`, `staging_in_use`, `ops_*`) propagates coherently from the transfer-worker handoff into `frame_execute_begin`
+- `submit_serial=8` is a narrow transfer-worker handoff, while `submit_serial=9` is the broader frame-1 main command-graph submission
+- the failure still first surfaces at `fence_wait` for submit 9, with later breadcrumbs still collapsing to `BLIT_PASS`
+
+QA did **not** find evidence here of stale/reused semaphore ownership on the specific submit-8 → submit-9 handoff. That shifts suspicion away from “submit 9 waited on the wrong/previously-consumed semaphore” and back toward the workload or synchronization/lifetime fallout carried into the main frame command graph after a valid transfer-worker handoff.
+
+### Next recommendation
+
+Do not spend more QA time re-proving semaphore identity for submit 8 → 9. That answer is now complete.
+
+Best next step:
+
+1. investigate why the valid transfer-worker handoff feeds a frame-1 main command graph that later dies at `fence_wait`
+2. focus on synchronization/lifetime fallout or workload poisoning inside the main frame command graph rather than stale semaphore reuse
+3. if more engine-side narrowing is needed, add instrumentation that splits the large frame-1 command graph around the projection-following copy/draw/UI segments so the post-submit failure can be attributed more precisely than the later `BLIT_PASS` collapse
+
 ## Follow-up QA pass for bead `oc-c1f` — source-built post-projection submit/stall/fence correlation
 
 ### Scope

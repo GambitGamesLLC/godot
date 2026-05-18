@@ -616,47 +616,91 @@ Validation completed with `python3 misc/scripts/file_format.py drivers/vulkan/re
 
 ---
 
+### Task 26: QA verify `submit_serial=9` wait provenance from `submit_serial=8`
+
+**Bead ID:** `oc-y6n`  
+**SubAgent:** `primary` (for `qa`)  
+**Role:** `qa`  
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-y6n` and keep the investigation projection-only. Run the refreshed source-built host-Vulkan repro (`projection_only + disabled`) and use the new transfer→frame provenance diagnostics to determine whether `submit_serial=9` is waiting on the exact semaphore last signaled by `submit_serial=8`, whether that semaphore already had a prior consumer, and whether the attached wait/signal provenance or command summary indicates stale/reused ownership rather than a pure projection workload failure. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-y6n` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA claimed bead `oc-y6n`, confirmed the refreshed source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` now contains the new provenance strings from `dc6b26d1`, and ran one minimum host-Vulkan repro (`projection_only + disabled`) into `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-provenance-sourcebuild-20260517-214532/`.
+
+That run answered the semaphore question directly. `submit_serial=8` is the frame-1 transfer-worker handoff with `signal_summary=[{source=submit,index=0,vk=107352545131872}]`, and `submit_serial=9` is the following frame-1 main command submission with `wait_summary=[{source=external,index=0,vk=107352545131872,stage="ALL_COMMANDS"}]`. The backend wait provenance on submit 9 records `last_signal_submit_serial=8` for that exact handle and `last_wait_submit_serial=0`, so submit 9 is waiting on the exact semaphore last signaled by submit 8 and QA did **not** see a prior recorded consumer or stale/reused semaphore ownership on that chain.
+
+The transfer payload ownership also stays coherent across the handoff: `transfer_submit_begin frame=1 transfer_worker=0 ... command_buffer_id=135588252477144 staging_in_use=63676352 ops_processed=85 ops_submitted=85 ops_recorded=98 ops_used_by_draw=98` matches `frame_execute_begin frame=1 ... wait_debug=[{source=transfer_worker,... semaphore_id=107352545131872,command_buffer_id=135588252477144,command_fence_id=107352559285712,staging_in_use=63676352,ops_processed=85,ops_submitted=85,ops_recorded=98,ops_used_by_draw=98}]`. On the command side, submit 8 carries a narrow unlabeled transfer command buffer, while submit 9 carries the larger frame-1 main command graph (`labels=102`, `first_label="Command Graph (L-1)"`, `last_label="Command Graph (L88) (Draw)"`, truncated `label_path`, `last_breadcrumb="UI_PASS"`).
+
+The failure signature is unchanged: the first explicit error still surfaces at `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`. QA saved the durable evidence package in `doc/gdgs-compositor-staged-qa-2026-05-17.md` and closed bead `oc-y6n` because the requested semaphore-provenance package is now complete.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
 
-**What We Built:** The instrumentation lane is now fully documented and independently audited. The package established the right staged repro controls on the GDGS side, corrected the seam description from the earlier local/global theory to the current global/global reality, and narrowed the first failing staged workload boundary to `projection_only`. The audit also captured the main remaining limitation: the new Godot-source callback breadcrumbs were prepared in the instrumentation branch, but the staged QA evidence package came from the managed runtime rather than a source-built engine binary, so the current evidence narrows the first failing GDGS stage more strongly than it separates plugin misuse from engine/backend failure.
+**What We Built:** This session turned the GDGS/Godot bug hunt from a broad compositor mystery into a narrow backend handoff investigation. The earlier staged work already proved that `projection_only` is the first meaningful failing stage, that a real scratch-only compute dispatch survives, that CPU readbacks are not the root trigger, and that the tracked projection-owned resources remain stable across `projection_begin` → `projection_end` → `projection_post_dispatch_checkpoint_end` with no cleanup churn or RID aliasing. This session extended that by moving onto a source-built Godot binary, instrumenting the post-projection submit/stall/fence path, mapping the exact submissions after projection return, and proving that the failing `submit_serial=9` is the frame-1 main command-graph submission waiting on the semaphore signaled by the transfer-worker `submit_serial=8`.
 
-**Reference Check:** `REF-06` documents the intended staged order and instrumentation seams, `REF-07` contains the executed QA evidence package, and `REF-08` records the independent auditor verdict and caveats. The projection-first conclusion is accepted only in that narrower audited sense.
+The key current read is: the projection dispatch still appears to be the first bad event, but the tracked projection resources themselves stay stable and the transfer-worker → frame-1 semaphore handoff appears valid. `submit_serial=8` is a narrow transfer submission with `signal_semaphores=1`; `submit_serial=9` is the following frame-1 main submission with `wait_semaphores=1`, `command_buffers=1`, `present_submission=false`, and a large command graph (`labels=102`, first label `Command Graph (L-1)`, last label `Command Graph (L88) (Draw)`, last breadcrumb `UI_PASS`). That submit queues cleanly, then later dies at `fence_wait_error submit_serial=9 wait_result=-4`, after which the broader lost-device breadcrumb trail still collapses to `BLIT_PASS`.
+
+**Reference Check:** `REF-06` still defines the instrumentation seam map, `REF-07` is now the primary living evidence log for the entire staged repro campaign, and `REF-08` records the earlier independent audit that locked in the projection-first conclusion. The freshest high-signal artifacts in `REF-07` now include the source-built submit/stall/fence correlation run and the submit-8 → submit-9 semaphore provenance run.
 
 **Commits:**
 - `2e9a557` - `docs: map GDGS compositor instrumentation seams`
 - `c111442` - `debug: add compositor callback breadcrumbs`
 - `3b2ce44` - `debug: add GDGS compositor instrumentation gates`
 - `e3be761` - `debug: add projection scratch dispatch diagnostics`
-- `d54d58ae` - `docs: record compositor projection diagnostics lane`
+- `4523691` - `debug: make scratch probe a real positive control`
+- `ba83c1c` - `debug: deepen projection dispatch diagnostics`
+- `64287e1` - `Add projection GPU guard diagnostics`
+- `7f569a8` - `debug: add projection visibility mirror diagnostics`
+- `e610c25` - `debug: add projection lifetime cleanup diagnostics`
+- `60bc52d4` - `Fix projection snapshot callable diagnostics`
+- `eb3e53f` - `Add post-projection compositor sync snapshots`
+- `e9c89177` - `Instrument post-projection fence and submit path`
+- `e968db74` - `Add Vulkan submit mapping diagnostics for GDGS compositor stall`
+- `dc6b26d1` - `Add transfer-to-frame semaphore provenance diagnostics`
 
 **Lessons Learned:**
-- After removing one real plugin misuse, the next best step is diagnostic isolation, not another guess.
-- The surviving seam changed meaning after source inspection: the active repro is global/global, not local/global.
-- Stage gating can isolate the first failing plugin workload boundary even when the engine-side instrumentation runtime is not yet the one under test, but that distinction has to be stated explicitly.
+- The live repro is definitively on the global/global RenderingDevice path, not the earlier local/global theory.
+- A valid compositor-path scratch dispatch can succeed, so the failure is not “any compute here is cursed”; it is tied to the projection lane and/or the downstream frame work it feeds.
+- CPU readbacks, tracked RID aliasing, and tracked cleanup/rebuild churn are not the root trigger.
+- The first suspicious backend transition after a stable projection return is the frame-1 main submission `submit_serial=9`, and the submit-8 → submit-9 semaphore handoff currently looks valid rather than stale or reused.
 
 ## Fresh Session Start / Next Steps
 
-Start the next session from this plan plus `REF-07` and `REF-08`, then execute in this order:
+Start the next session from this plan plus `REF-07`, then execute in this order:
 
-1. **Add or expose the missing trivial scratch-dispatch stage**
-   - prove whether any nontrivial compositor-path compute dispatch is sufficient to poison the device, or whether projection-specific work is required
-2. **Run the same staged experiment on a source-built Godot binary from the instrumentation branch**
-   - exercise the new Godot callback breadcrumbs in the actual runtime under test
-   - verify whether the engine-owned callback seam and later `BLIT_PASS` path add any new separating evidence
-3. **If projection remains the first failing boundary, inspect projection-specific suspects first**
-   - output buffer / image write bounds
-   - projection pipeline layout / push-constant contract at the observed 128-byte dispatch
-   - post-projection synchronization or resource lifetime fallout
-4. **Keep later stages demoted unless new evidence forces them back up**
-   - radix, boundaries, render, and compositor writeback/presentation are no longer the leading first-trigger suspects
+1. **Stay on the source-built Godot binary and keep the repro at `projection_only + disabled`**
+   - do not reopen the earlier scratch/projection-first questions unless new evidence forces it
+   - keep the staging narrow so the backend handoff logs remain comparable
 
-Avoid reopening already-closed branches unless the new stage-gating evidence directly points back to them:
-- the radix push-constant contract bug is fixed and validated as removed
-- the earlier indirect-dispatch hypothesis no longer leads the suspect list
-- final compositor writeback/presentation is demoted because projection alone already reproduces the crash in the current staged package
+2. **Instrument and split the frame-1 main command graph carried by `submit_serial=9`**
+   - the next lane should explain what specific portion of that `Command Graph ... UI_PASS` submission is represented by the failing command buffer
+   - prefer command-graph / draw-list / backend ownership evidence over more shader-side bounds probes
+
+3. **Narrow why a valid transfer-worker handoff feeds a frame-1 main submission that later dies at fence wait**
+   - inspect what work is actually inside the frame-1 command graph after the transfer handoff
+   - keep focusing on non-present backend work and any hidden barrier / dependency / submission-lifecycle issue between submit 8 and submit 9
+
+4. **Only if the next backend split still leaves ambiguity, then add richer command-summary / label-path provenance**
+   - not for prettier logs, but only if needed to pinpoint which command-graph segment inside submit 9 is the real hazard
+
+Avoid reopening already-closed branches unless the new backend evidence directly points back to them:
+- the radix push-constant contract bug is fixed and no longer leads the suspect list
+- scratch-only already proved a safe compositor-path compute dispatch exists
+- projection-owned tracked resources stayed stable across the critical post-dispatch window
+- the 8 → 9 semaphore identity/reuse question is answered and no stale consumer was seen
 
 ---
 
-*Completed on 2026-05-17 (partial; audit complete, deeper runtime separation still pending)*
+*Completed on 2026-05-17 (partial; projection-first locked, backend handoff narrowed to failing frame-1 submit `submit_serial=9`)*
