@@ -666,13 +666,57 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 ---
 
+### Task 28: QA classify the failing `submit_serial=9` command graph segments
+
+**Bead ID:** `oc-uvd`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-uvd` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new `submit_serial=9` backend summaries. Determine whether `label_segments` shows a dominant Copy / Compute / Draw / Custom slice or a clearer handoff boundary, and whether `label_tail` places the likely hazard near late draw/UI work versus earlier setup/copy work. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-uvd` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan repro on the refreshed source-built editor and recorded the durable evidence in `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`). Exact runtime path used: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`, launched on the host GPU path (`DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`) against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`, case `projection_only__disabled`. Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-segments-sourcebuild-20260518-073823/`. The new `submit_serial=9` backend summary answers the classification question clearly: `label_segments` is dominated by Copy work rather than Draw/Compute (`Copy` blocks of `21` labels and then `73` labels, versus only a tiny late tail of `Draw(1)`, `Compute(1)`, `Copy+Compute(1)`, and final `Draw(2)`). `label_tail` places the nearest end-of-buffer hazard context late in the frame — `Render 3D Transparent Pass (L86) (Copy)`, `Render 3D Transparent Pass (L86) (Draw)`, `Command Graph (L86) (Compute)`, `Command Graph (L87) (Copy+Compute)`, `Tonemap (L87) (Draw)`, `Command Graph (L88) (Draw)` — so the best read is a long copy-heavy body handing off into a short late transparent/tonemap/final-draw epilogue. The broader provenance/failure signature stayed unchanged in the same run: `submit_serial=8` remains the transfer-worker handoff, `submit_serial=9` waits on that exact semaphore (`last_signal_submit_serial=8`, `last_wait_submit_serial=0`), the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`. Next recommendation from this QA pass: split the backend investigation at the large copy-body -> late `L86`/`L87`/`L88` tail boundary instead of treating `submit_serial=9` as a generic draw/UI failure.
+
+---
+
+### Task 29: Instrument the copy-body -> late-tail seam inside failing `submit_serial=9`
+
+**Bead ID:** `oc-fdg`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-fdg` and keep the investigation projection-only on the refreshed source-built Godot binary. Add small, reversible, high-signal instrumentation that splits the large Copy-dominated body of failing `submit_serial=9` from its short late `L86`/`L87`/`L88` transparent/compute/tonemap/draw tail. The goal is to identify what backend seam or subrange inside that command buffer is the most plausible hazard before the later `fence_wait_error` / `BLIT_PASS` collapse. Prefer command-graph / backend ownership evidence over shader-side probes, keep the staged repro model intact, run relevant validation, update this plan with actual results, commit/push the changes, and close bead `oc-fdg` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a small Vulkan-side seam summary on top of the existing `label_segments` / `label_tail` diagnostics, without changing renderer behavior or broadening back into shader probes. `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` now retain per-command-buffer per-level label statistics and append a new `late_tail_split=` summary into `command_summary=` at submit / fence-wait time. The summary keys off the highest observed command-graph level in the command buffer, treats the last three levels (`max_level-2 .. max_level`) as the late tail, and reports: aggregate pre-tail label/op counts, aggregate tail label/op counts, and per-level details for the tail including first/last labels and Copy / Compute / Draw / Custom / Mixed / Unclassified counts. For the failing `submit_serial=9` lane this should turn the prior qualitative answer (“big Copy body, short `L86`/`L87`/`L88` tail”) into a backend-owned quantitative seam so QA can ask whether the plausible hazard sits in the pre-tail copy body or only in the final late-level epilogue. Validation run: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check`; incremental object rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; full refreshed editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "late_tail_split="` to confirm the new log string landed in the runnable source-built binary.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
 
 **What We Built:** This session turned the GDGS/Godot bug hunt from a broad compositor mystery into a narrow backend handoff investigation. The earlier staged work already proved that `projection_only` is the first meaningful failing stage, that a real scratch-only compute dispatch survives, that CPU readbacks are not the root trigger, and that the tracked projection-owned resources remain stable across `projection_begin` → `projection_end` → `projection_post_dispatch_checkpoint_end` with no cleanup churn or RID aliasing. This session extended that by moving onto a source-built Godot binary, instrumenting the post-projection submit/stall/fence path, mapping the exact submissions after projection return, and proving that the failing `submit_serial=9` is the frame-1 main command-graph submission waiting on the semaphore signaled by the transfer-worker `submit_serial=8`.
 
-The key current read is: the projection dispatch still appears to be the first bad event, but the tracked projection resources themselves stay stable and the transfer-worker → frame-1 semaphore handoff appears valid. `submit_serial=8` is a narrow transfer submission with `signal_semaphores=1`; `submit_serial=9` is the following frame-1 main submission with `wait_semaphores=1`, `command_buffers=1`, `present_submission=false`, and a large command graph (`labels=102`, first label `Command Graph (L-1)`, last label `Command Graph (L88) (Draw)`, last breadcrumb `UI_PASS`). That submit queues cleanly, then later dies at `fence_wait_error submit_serial=9 wait_result=-4`, after which the broader lost-device breadcrumb trail still collapses to `BLIT_PASS`.
+The key current read is: the projection dispatch still appears to be the first bad event, but the tracked projection resources themselves stay stable and the transfer-worker → frame-1 semaphore handoff appears valid. `submit_serial=8` is a narrow transfer submission with `signal_semaphores=1`; `submit_serial=9` is the following frame-1 main submission with `wait_semaphores=1`, `command_buffers=1`, `present_submission=false`, and a large command graph (`labels=102`, first label `Command Graph (L-1)`, last label `Command Graph (L88) (Draw)`, last breadcrumb `UI_PASS`). That submit queues cleanly, then later dies at `fence_wait_error submit_serial=9 wait_result=-4`, after which the broader lost-device breadcrumb trail still collapses to `BLIT_PASS`. The newest source-built instrumentation also adds `late_tail_split=` so the next QA pass can quantify the seam between the dominant pre-tail copy body and the short late `L86` / `L87` / `L88` transparent / compute / tonemap / final-draw tail inside that same failing submission.
 
 **Reference Check:** `REF-06` still defines the instrumentation seam map, `REF-07` is now the primary living evidence log for the entire staged repro campaign, and `REF-08` records the earlier independent audit that locked in the projection-first conclusion. The freshest high-signal artifacts in `REF-07` now include the source-built submit/stall/fence correlation run and the submit-8 → submit-9 semaphore provenance run.
 
@@ -691,6 +735,7 @@ The key current read is: the projection dispatch still appears to be the first b
 - `e9c89177` - `Instrument post-projection fence and submit path`
 - `e968db74` - `Add Vulkan submit mapping diagnostics for GDGS compositor stall`
 - `dc6b26d1` - `Add transfer-to-frame semaphore provenance diagnostics`
+- `68cad1f9` - `debug: add submit 9 late-tail seam diagnostics`
 
 **Lessons Learned:**
 - The live repro is definitively on the global/global RenderingDevice path, not the earlier local/global theory.
@@ -706,16 +751,16 @@ Start the next session from this plan plus `REF-07`, then execute in this order:
    - do not reopen the earlier scratch/projection-first questions unless new evidence forces it
    - keep the staging narrow so the backend handoff logs remain comparable
 
-2. **Instrument and split the frame-1 main command graph carried by `submit_serial=9`**
-   - the next lane should explain what specific portion of that `Command Graph ... UI_PASS` submission is represented by the failing command buffer
-   - prefer command-graph / draw-list / backend ownership evidence over more shader-side bounds probes
+2. **Run QA once on the refreshed source-built binary and inspect the new `late_tail_split=` summary on failing `submit_serial=9`**
+   - confirm whether the pre-tail copy body versus the `L86` / `L87` / `L88` late tail is the tighter backend-owned hazard seam
+   - compare the aggregate `pre_tail_ops` / `tail_ops` and per-level tail details against the existing `label_segments` / `label_tail` evidence
 
 3. **Narrow why a valid transfer-worker handoff feeds a frame-1 main submission that later dies at fence wait**
-   - inspect what work is actually inside the frame-1 command graph after the transfer handoff
+   - use the new late-tail split to decide whether the next coder slice should break apart the long copy body itself or the short late transparent / compute / tonemap / final-draw tail
    - keep focusing on non-present backend work and any hidden barrier / dependency / submission-lifecycle issue between submit 8 and submit 9
 
-4. **Only if the next backend split still leaves ambiguity, then add richer command-summary / label-path provenance**
-   - not for prettier logs, but only if needed to pinpoint which command-graph segment inside submit 9 is the real hazard
+4. **Only if the new late-tail split still leaves ambiguity, then add a deeper backend-owned split inside the winning side of that seam**
+   - not for prettier logs, but only if needed to pinpoint which command-graph subrange inside submit 9 is the real hazard
 
 Avoid reopening already-closed branches unless the new backend evidence directly points back to them:
 - the radix push-constant contract bug is fixed and no longer leads the suspect list

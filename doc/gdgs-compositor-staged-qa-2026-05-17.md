@@ -1331,6 +1331,120 @@ Best next step:
 2. focus on synchronization/lifetime fallout or workload poisoning inside the main frame command graph rather than stale semaphore reuse
 3. if more engine-side narrowing is needed, add instrumentation that splits the large frame-1 command graph around the projection-following copy/draw/UI segments so the post-submit failure can be attributed more precisely than the later `BLIT_PASS` collapse
 
+## Follow-up QA pass for bead `oc-uvd` — classify `submit_serial=9` command graph segments on refreshed source build
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-1ux` added `label_tail` and `label_segments` to the Vulkan command summary, then classify what kind of frame-1 work actually dominates failing `submit_serial=9`.
+
+Branches / worktree state used:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `5f9c4e65`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `eb3e53f`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-segments-sourcebuild-20260518-073823/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-segments-sourcebuild-20260518-073823/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-segments-sourcebuild-20260518-073823/logs/projection_only__disabled.normal.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-submit-segments-sourcebuild-20260518-073823/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved context/artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### `submit_serial=9` is overwhelmingly copy-heavy, with a late draw/compute tail rather than one dominant pure draw slice
+
+The new `label_segments` summary on the failing frame-1 main submission is:
+
+- `Unclassified`: `1` label (`label_indexes=0..0`, `levels=-1`)
+- `Copy`: `21` labels (`1..21`, `levels=0..15`)
+- `Draw`: `2` labels (`22..23`, `levels=15..16`)
+- `Copy`: `73` labels (`24..96`, `levels=16..86`)
+- `Draw`: `1` label (`97..97`, `levels=86`)
+- `Compute`: `1` label (`98..98`, `levels=86`)
+- `Copy+Compute`: `1` label (`99..99`, `levels=87`)
+- `Draw`: `2` labels (`100..101`, `levels=87..88`)
+
+So the actionable answer is not “mostly draw” or “mostly compute.” It is a clearer handoff shape:
+
+- a tiny unclassified root
+- an early copy-heavy front block
+- a very large middle copy block (`73` labels, far larger than any other segment)
+- then only a small late tail containing one draw label, one compute label, one mixed copy+compute label, and two final draw labels
+
+That makes `submit_serial=9` predominantly copy-oriented frame-graph work with a narrow late render/compute epilogue, not a command buffer dominated by the final UI/draw tail.
+
+#### `label_tail` places the nearest visible hazard context late in the frame, but only as a short tail after the dominant copy body
+
+The new `label_tail` for `submit_serial=9` is:
+
+- `Render 3D Transparent Pass (L86) (Copy)`
+- `Command Graph (L86) (Copy)`
+- `Render 3D Transparent Pass (L86) (Draw)`
+- `Command Graph (L86) (Compute)`
+- `Command Graph (L87) (Copy+Compute)`
+- `Tonemap (L87) (Draw)`
+- `Command Graph (L88) (Draw)`
+
+That places the end of the failing command buffer near late transparent/render, tonemap, and final draw work rather than near the early setup/copy labels at the front of the command graph. But the surrounding `label_segments` data matters: that late tail is short and sits after a much larger copy-heavy body. So the best classification is:
+
+- **dominant workload class:** Copy
+- **clearest handoff boundary:** large copy body -> tiny late draw/compute tail around `L86`/`L87`/`L88`
+- **nearest visible end-of-buffer hazard context:** late render / tonemap / final draw work, not the earliest setup labels
+
+#### Transfer-worker provenance and failure site remain unchanged
+
+The broader submit-chain answer from the prior pass still holds in the same run:
+
+- `submit_serial=8` is still the transfer-worker handoff with one signaled semaphore
+- `submit_serial=9` still waits on that exact semaphore with `last_signal_submit_serial=8` and `last_wait_submit_serial=0`
+- the explicit failure still first surfaces at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+So this pass narrows the frame-1 command graph classification without overturning the already-established semaphore-provenance or later failure-site answers.
+
+### Updated interpretation
+
+This pass gives the first useful structural classification of failing `submit_serial=9`.
+
+Supported by the runtime evidence:
+
+- the failing frame-1 main submission is **not** dominated by a large late draw/UI block
+- it is dominated by a long copy-heavy command-graph body, followed by a much smaller late tail containing transparent-pass draw, one compute segment, one mixed copy+compute segment, Tonemap draw, and final draw labels
+- `label_tail` therefore places the nearest visible hazard context late in the frame, but `label_segments` says the command buffer as a whole is mostly copy-oriented work
+
+### Next recommendation
+
+Keep the investigation source-built and projection-only, but use this classification to narrow the next engine-side split:
+
+1. prefer the boundary around the large copy body -> late `L86` / `L87` / `L88` draw/compute tail as the next breakpoint
+2. inspect whether the first bad inherited work after projection feeds the long copy-heavy body, or whether the late transparent/tonemap/final-draw tail is only where the poisoned submission finally becomes observable
+3. avoid reopening shader-side projection probes unless a new backend split points back upstream
+
 ## Follow-up QA pass for bead `oc-c1f` — source-built post-projection submit/stall/fence correlation
 
 ### Scope

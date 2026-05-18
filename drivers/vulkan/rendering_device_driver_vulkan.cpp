@@ -3429,6 +3429,8 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_label_tail_path_truncated = false;
 	command_buffer->debug_label_segment_overflow = false;
 	command_buffer->debug_label_segment_count = 0;
+	command_buffer->debug_level_stats_overflow = false;
+	command_buffer->debug_level_stat_count = 0;
 
 	VkCommandBufferBeginInfo cmd_buf_begin_info = {};
 	cmd_buf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -3457,6 +3459,8 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_label_tail_path_truncated = false;
 	command_buffer->debug_label_segment_overflow = false;
 	command_buffer->debug_label_segment_count = 0;
+	command_buffer->debug_level_stats_overflow = false;
+	command_buffer->debug_level_stat_count = 0;
 
 	VkCommandBufferInheritanceInfo inheritance_info = {};
 	inheritance_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -7113,6 +7117,96 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_label_segments_summary
 	return text;
 }
 
+String RenderingDeviceDriverVulkan::_debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer) {
+	if (p_command_buffer->debug_level_stat_count == 0) {
+		return "{}";
+	}
+
+	int32_t max_level = INT32_MIN;
+	for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+		max_level = MAX(max_level, p_command_buffer->debug_level_stats[i].level);
+	}
+	if (max_level == INT32_MIN) {
+		return "{}";
+	}
+
+	const int32_t tail_start_level = MAX(max_level - 2, 0);
+	DebugLevelStats pre_tail_totals;
+	DebugLevelStats tail_totals;
+	String tail_levels = "[";
+	bool first_tail_level = true;
+
+	for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+		const DebugLevelStats &stats = p_command_buffer->debug_level_stats[i];
+		DebugLevelStats *totals = stats.level < tail_start_level ? &pre_tail_totals : &tail_totals;
+		totals->label_count += stats.label_count;
+		totals->copy_count += stats.copy_count;
+		totals->compute_count += stats.compute_count;
+		totals->draw_count += stats.draw_count;
+		totals->custom_count += stats.custom_count;
+		totals->mixed_count += stats.mixed_count;
+		totals->unclassified_count += stats.unclassified_count;
+	}
+
+	for (int32_t level = tail_start_level; level <= max_level; level++) {
+		const DebugLevelStats *matched = nullptr;
+		for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+			const DebugLevelStats &stats = p_command_buffer->debug_level_stats[i];
+			if (stats.level == level) {
+				matched = &stats;
+				break;
+			}
+		}
+		if (matched == nullptr) {
+			continue;
+		}
+		if (!first_tail_level) {
+			tail_levels += ", ";
+		}
+		first_tail_level = false;
+		tail_levels += "{level=" + itos(level);
+		tail_levels += ",labels=" + itos(matched->label_count);
+		tail_levels += ",ops={copy=" + itos(matched->copy_count);
+		tail_levels += ",compute=" + itos(matched->compute_count);
+		tail_levels += ",draw=" + itos(matched->draw_count);
+		tail_levels += ",custom=" + itos(matched->custom_count);
+		tail_levels += ",mixed=" + itos(matched->mixed_count);
+		tail_levels += ",unclassified=" + itos(matched->unclassified_count) + "}";
+		if (!matched->first_label.is_empty()) {
+			tail_levels += ",first_label=\"" + matched->first_label + "\"";
+		}
+		if (!matched->last_label.is_empty()) {
+			tail_levels += ",last_label=\"" + matched->last_label + "\"";
+		}
+		tail_levels += "}";
+	}
+	tail_levels += "]";
+
+	String text = "{";
+	text += "max_level=" + itos(max_level);
+	text += ",tail_start_level=" + itos(tail_start_level);
+	text += ",pre_tail_labels=" + itos(pre_tail_totals.label_count);
+	text += ",pre_tail_ops={copy=" + itos(pre_tail_totals.copy_count);
+	text += ",compute=" + itos(pre_tail_totals.compute_count);
+	text += ",draw=" + itos(pre_tail_totals.draw_count);
+	text += ",custom=" + itos(pre_tail_totals.custom_count);
+	text += ",mixed=" + itos(pre_tail_totals.mixed_count);
+	text += ",unclassified=" + itos(pre_tail_totals.unclassified_count) + "}";
+	text += ",tail_labels=" + itos(tail_totals.label_count);
+	text += ",tail_ops={copy=" + itos(tail_totals.copy_count);
+	text += ",compute=" + itos(tail_totals.compute_count);
+	text += ",draw=" + itos(tail_totals.draw_count);
+	text += ",custom=" + itos(tail_totals.custom_count);
+	text += ",mixed=" + itos(tail_totals.mixed_count);
+	text += ",unclassified=" + itos(tail_totals.unclassified_count) + "}";
+	text += ",tail_levels=" + tail_levels;
+	if (p_command_buffer->debug_level_stats_overflow) {
+		text += ",overflow=true";
+	}
+	text += "}";
+	return text;
+}
+
 void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
 	if (!p_command_buffer->debug_label_tail_path.is_empty()) {
 		p_command_buffer->debug_label_tail_path += " > ";
@@ -7165,6 +7259,43 @@ void RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo 
 			segment->first_level = level;
 		}
 		segment->last_level = level;
+
+		DebugLevelStats *level_stats = nullptr;
+		for (uint32_t i = 0; i < p_command_buffer->debug_level_stat_count; i++) {
+			DebugLevelStats &stats = p_command_buffer->debug_level_stats[i];
+			if (stats.level == level) {
+				level_stats = &stats;
+				break;
+			}
+		}
+		if (level_stats == nullptr) {
+			if (p_command_buffer->debug_level_stat_count < 128) {
+				level_stats = &p_command_buffer->debug_level_stats[p_command_buffer->debug_level_stat_count++];
+				level_stats->level = level;
+			} else {
+				p_command_buffer->debug_level_stats_overflow = true;
+			}
+		}
+		if (level_stats != nullptr) {
+			level_stats->label_count++;
+			if (level_stats->first_label.is_empty()) {
+				level_stats->first_label = p_label_name;
+			}
+			level_stats->last_label = p_label_name;
+			if (operation_tag == "Copy") {
+				level_stats->copy_count++;
+			} else if (operation_tag == "Compute") {
+				level_stats->compute_count++;
+			} else if (operation_tag == "Draw") {
+				level_stats->draw_count++;
+			} else if (operation_tag == "Custom") {
+				level_stats->custom_count++;
+			} else if (operation_tag == "Unclassified") {
+				level_stats->unclassified_count++;
+			} else {
+				level_stats->mixed_count++;
+			}
+		}
 	}
 }
 
@@ -7207,6 +7338,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 			text += command_buffer->debug_label_tail_path + "\"";
 		}
 		text += ",label_segments=" + _debug_command_buffer_label_segments_summary(command_buffer);
+		text += ",late_tail_split=" + _debug_command_buffer_late_tail_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}

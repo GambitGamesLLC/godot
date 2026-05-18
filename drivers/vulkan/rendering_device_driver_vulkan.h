@@ -434,6 +434,19 @@ private:
 		uint32_t label_count = 0;
 	};
 
+	struct DebugLevelStats {
+		int32_t level = INT32_MAX;
+		uint32_t label_count = 0;
+		uint32_t copy_count = 0;
+		uint32_t compute_count = 0;
+		uint32_t draw_count = 0;
+		uint32_t custom_count = 0;
+		uint32_t mixed_count = 0;
+		uint32_t unclassified_count = 0;
+		String first_label;
+		String last_label;
+	};
+
 	struct CommandBufferInfo {
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
 		Framebuffer *active_framebuffer = nullptr;
@@ -452,6 +465,9 @@ private:
 		bool debug_label_segment_overflow = false;
 		uint32_t debug_label_segment_count = 0;
 		DebugLabelSegment debug_label_segments[8];
+		bool debug_level_stats_overflow = false;
+		uint32_t debug_level_stat_count = 0;
+		DebugLevelStats debug_level_stats[128];
 	};
 
 public:
@@ -825,6 +841,7 @@ public:
 	static String _debug_extract_label_operation_tag(const String &p_label_name);
 	static int32_t _debug_extract_label_level(const String &p_label_name);
 	static String _debug_command_buffer_label_segments_summary(const CommandBufferInfo *p_command_buffer);
+	static String _debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer);
 	void _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
 	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
 	String _debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const;
