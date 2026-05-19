@@ -512,6 +512,14 @@ private:
 		String last_secondary_breadcrumb;
 		String first_backend_command;
 		String last_backend_command;
+		uint64_t first_render_pass_begin_serial = 0;
+		uint64_t first_setup_backend_command_serial = 0;
+		uint64_t last_setup_backend_command_serial = 0;
+		String first_setup_backend_command;
+		String last_setup_backend_command;
+		uint64_t first_draw_backend_command_serial = 0;
+		uint64_t last_draw_backend_command_serial = 0;
+		uint64_t first_render_pass_end_serial = 0;
 		uint32_t descendant_label_count = 0;
 		uint32_t descendant_draw_label_count = 0;
 		uint32_t descendant_render_pass_begin_count = 0;

@@ -8914,6 +8914,48 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",secondary_command_buffers=" + itos(int64_t(target_scope.secondary_command_buffer_count) - int64_t(target_label_entry.secondary_command_buffer_count + target_label_entry.descendant_secondary_command_buffer_count));
 		text += ",secondary_labels=" + itos(int64_t(target_scope.secondary_label_count) - int64_t(target_label_entry.secondary_label_count + target_label_entry.descendant_secondary_label_count));
 		text += ",secondary_draw_labels=" + itos(int64_t(target_scope.secondary_draw_label_count) - int64_t(target_label_entry.secondary_draw_label_count + target_label_entry.descendant_secondary_draw_label_count)) + "}}";
+		const int64_t begin_to_setup_gap_commands = target_label_entry.first_render_pass_begin_serial > 0 && target_label_entry.first_setup_backend_command_serial > 0 ? MAX<int64_t>(int64_t(target_label_entry.first_setup_backend_command_serial) - int64_t(target_label_entry.first_render_pass_begin_serial) - 1, 0) : -1;
+		const int64_t setup_to_draw_gap_commands = target_label_entry.last_setup_backend_command_serial > 0 && target_label_entry.first_draw_backend_command_serial > 0 ? MAX<int64_t>(int64_t(target_label_entry.first_draw_backend_command_serial) - int64_t(target_label_entry.last_setup_backend_command_serial) - 1, 0) : -1;
+		const int64_t draw_to_end_gap_commands = target_label_entry.last_draw_backend_command_serial > 0 && target_label_entry.first_render_pass_end_serial > 0 ? MAX<int64_t>(int64_t(target_label_entry.first_render_pass_end_serial) - int64_t(target_label_entry.last_draw_backend_command_serial) - 1, 0) : -1;
+		text += ",local_packet_split={phase_counts={render_pass_begin=" + itos(target_label_entry.render_pass_begin_count);
+		text += ",pipeline_binds=" + itos(target_label_entry.render_pipeline_bind_count);
+		text += ",uniform_binds=" + itos(target_label_entry.render_uniform_bind_count);
+		text += ",draw_calls=" + itos(target_label_entry.draw_count);
+		text += ",render_pass_end=" + itos(target_label_entry.render_pass_end_count) + "}";
+		text += ",phase_serials={begin_render_pass=" + itos(target_label_entry.first_render_pass_begin_serial);
+		text += ",setup_first=" + itos(target_label_entry.first_setup_backend_command_serial);
+		text += ",setup_last=" + itos(target_label_entry.last_setup_backend_command_serial);
+		text += ",draw_first=" + itos(target_label_entry.first_draw_backend_command_serial);
+		text += ",draw_last=" + itos(target_label_entry.last_draw_backend_command_serial);
+		text += ",end_render_pass=" + itos(target_label_entry.first_render_pass_end_serial) + "}";
+		text += ",phase_commands={setup_first=";
+		if (target_label_entry.first_setup_backend_command.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + target_label_entry.first_setup_backend_command + "\"";
+		}
+		text += ",setup_last=";
+		if (target_label_entry.last_setup_backend_command.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + target_label_entry.last_setup_backend_command + "\"";
+		}
+		text += "}";
+		text += ",phase_gaps={begin_to_setup_backend_gap_commands=" + itos(begin_to_setup_gap_commands);
+		text += ",setup_to_draw_backend_gap_commands=" + itos(setup_to_draw_gap_commands);
+		text += ",draw_to_end_backend_gap_commands=" + itos(draw_to_end_gap_commands) + "}";
+		String first_internal_expansion = "begin_render_pass";
+		if (target_label_entry.first_setup_backend_command_serial > 0) {
+			first_internal_expansion = "bind_setup";
+		}
+		if (target_label_entry.first_draw_backend_command_serial > 0 && target_label_entry.first_setup_backend_command_serial == 0) {
+			first_internal_expansion = "draw";
+		}
+		text += ",first_internal_expansion=\"" + first_internal_expansion + "\"";
+		text += ",packet_shape={has_begin_render_pass=" + String(target_label_entry.first_render_pass_begin_serial > 0 ? "true" : "false");
+		text += ",has_bind_setup=" + String(target_label_entry.first_setup_backend_command_serial > 0 ? "true" : "false");
+		text += ",has_draw=" + String(target_label_entry.first_draw_backend_command_serial > 0 ? "true" : "false");
+		text += ",has_end_render_pass=" + String(target_label_entry.first_render_pass_end_serial > 0 ? "true" : "false") + "}}";
 	}
 	text += ",next_meaningful_after_target=";
 	if (next_meaningful_scope_index == -1) {
@@ -9276,6 +9318,7 @@ void RenderingDeviceDriverVulkan::_debug_record_label_backend_command(CommandBuf
 	}
 
 	const String command_name = String(p_command_name);
+	const uint64_t backend_command_serial = p_command_buffer->debug_backend_command_serial;
 	const auto accumulate_backend_command = [&](DebugLabelEntry &r_entry, bool p_descendant) {
 		String *first_backend_command = p_descendant ? &r_entry.first_descendant_backend_command : &r_entry.first_backend_command;
 		String *last_backend_command = p_descendant ? &r_entry.last_descendant_backend_command : &r_entry.last_backend_command;
@@ -9300,14 +9343,36 @@ void RenderingDeviceDriverVulkan::_debug_record_label_backend_command(CommandBuf
 
 		if (command_name == "begin_render_pass") {
 			(*render_pass_begin_count)++;
+			if (!p_descendant && r_entry.first_render_pass_begin_serial == 0) {
+				r_entry.first_render_pass_begin_serial = backend_command_serial;
+			}
 		} else if (command_name == "end_render_pass") {
 			(*render_pass_end_count)++;
+			if (!p_descendant && r_entry.first_render_pass_end_serial == 0) {
+				r_entry.first_render_pass_end_serial = backend_command_serial;
+			}
 		} else if (command_name == "next_render_subpass") {
 			(*next_subpass_count)++;
 		} else if (command_name == "bind_render_pipeline") {
 			(*render_pipeline_bind_count)++;
+			if (!p_descendant) {
+				if (r_entry.first_setup_backend_command_serial == 0) {
+					r_entry.first_setup_backend_command_serial = backend_command_serial;
+					r_entry.first_setup_backend_command = command_name;
+				}
+				r_entry.last_setup_backend_command_serial = backend_command_serial;
+				r_entry.last_setup_backend_command = command_name;
+			}
 		} else if (command_name == "bind_render_uniform_sets") {
 			(*render_uniform_bind_count)++;
+			if (!p_descendant) {
+				if (r_entry.first_setup_backend_command_serial == 0) {
+					r_entry.first_setup_backend_command_serial = backend_command_serial;
+					r_entry.first_setup_backend_command = command_name;
+				}
+				r_entry.last_setup_backend_command_serial = backend_command_serial;
+				r_entry.last_setup_backend_command = command_name;
+			}
 		} else if (command_name == "bind_vertex_buffers") {
 			(*vertex_buffer_bind_count)++;
 			(*vertex_buffer_binding_total) += p_command_buffer->debug_vertex_binding_count;
@@ -9315,15 +9380,39 @@ void RenderingDeviceDriverVulkan::_debug_record_label_backend_command(CommandBuf
 			(*index_buffer_bind_count)++;
 		} else if (command_name == "draw") {
 			(*draw_count)++;
+			if (!p_descendant) {
+				if (r_entry.first_draw_backend_command_serial == 0) {
+					r_entry.first_draw_backend_command_serial = backend_command_serial;
+				}
+				r_entry.last_draw_backend_command_serial = backend_command_serial;
+			}
 		} else if (command_name == "draw_indexed") {
 			(*draw_count)++;
 			(*draw_indexed_count)++;
+			if (!p_descendant) {
+				if (r_entry.first_draw_backend_command_serial == 0) {
+					r_entry.first_draw_backend_command_serial = backend_command_serial;
+				}
+				r_entry.last_draw_backend_command_serial = backend_command_serial;
+			}
 		} else if (command_name == "draw_indirect") {
 			(*draw_count)++;
 			(*draw_indirect_count)++;
+			if (!p_descendant) {
+				if (r_entry.first_draw_backend_command_serial == 0) {
+					r_entry.first_draw_backend_command_serial = backend_command_serial;
+				}
+				r_entry.last_draw_backend_command_serial = backend_command_serial;
+			}
 		} else if (command_name == "draw_indexed_indirect") {
 			(*draw_count)++;
 			(*draw_indexed_indirect_count)++;
+			if (!p_descendant) {
+				if (r_entry.first_draw_backend_command_serial == 0) {
+					r_entry.first_draw_backend_command_serial = backend_command_serial;
+				}
+				r_entry.last_draw_backend_command_serial = backend_command_serial;
+			}
 		} else if (command_name == "execute_secondary") {
 			(*execute_secondary_count)++;
 		}
