@@ -6571,6 +6571,101 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	}
 #endif
 
+	auto float_bits = [](float p_value) {
+		uint32_t bits = 0;
+		memcpy(&bits, &p_value, sizeof(bits));
+		return bits;
+	};
+	uint64_t shader_stage_recipe_hash = hash_murmur3_one_64(shader_info->vk_stages_create_info.size());
+	uint32_t shader_stage_mask = 0;
+	for (uint32_t i = 0; i < shader_info->vk_stages_create_info.size(); i++) {
+		shader_stage_mask |= shader_info->vk_stages_create_info[i].stage;
+		shader_stage_recipe_hash = hash_murmur3_one_64(shader_info->vk_stages_create_info[i].stage, shader_stage_recipe_hash);
+		const uint64_t stage_spirv_hash = shader_info->spirv_stage_bytes.size() > i && shader_info->spirv_stage_bytes[i].size() > 0 ? hash_murmur3_buffer(shader_info->spirv_stage_bytes[i].ptr(), shader_info->spirv_stage_bytes[i].size()) : 0;
+		shader_stage_recipe_hash = hash_murmur3_one_64(stage_spirv_hash, shader_stage_recipe_hash);
+	}
+	uint64_t vertex_input_recipe_hash = 0;
+	uint32_t vertex_binding_description_count = 0;
+	uint32_t vertex_attribute_count = 0;
+	if (vertex_input_state_create_info != nullptr) {
+		vertex_binding_description_count = vertex_input_state_create_info->vertexBindingDescriptionCount;
+		vertex_attribute_count = vertex_input_state_create_info->vertexAttributeDescriptionCount;
+		vertex_input_recipe_hash = hash_murmur3_one_64(vertex_binding_description_count);
+		vertex_input_recipe_hash = hash_murmur3_one_64(vertex_attribute_count, vertex_input_recipe_hash);
+		if (vertex_input_state_create_info->pVertexBindingDescriptions != nullptr && vertex_binding_description_count > 0) {
+			vertex_input_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)vertex_input_state_create_info->pVertexBindingDescriptions, vertex_binding_description_count * sizeof(VkVertexInputBindingDescription)), vertex_input_recipe_hash);
+		}
+		if (vertex_input_state_create_info->pVertexAttributeDescriptions != nullptr && vertex_attribute_count > 0) {
+			vertex_input_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)vertex_input_state_create_info->pVertexAttributeDescriptions, vertex_attribute_count * sizeof(VkVertexInputAttributeDescription)), vertex_input_recipe_hash);
+		}
+	}
+	uint64_t rasterization_recipe_hash = hash_murmur3_one_64(rasterization_state_create_info.depthClampEnable);
+	rasterization_recipe_hash = hash_murmur3_one_64(rasterization_state_create_info.rasterizerDiscardEnable, rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(rasterization_state_create_info.polygonMode, rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(rasterization_state_create_info.cullMode, rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(rasterization_state_create_info.frontFace, rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(rasterization_state_create_info.depthBiasEnable, rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(float_bits(rasterization_state_create_info.depthBiasConstantFactor), rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(float_bits(rasterization_state_create_info.depthBiasClamp), rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(float_bits(rasterization_state_create_info.depthBiasSlopeFactor), rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(float_bits(rasterization_state_create_info.lineWidth), rasterization_recipe_hash);
+	rasterization_recipe_hash = hash_murmur3_one_64(tessellation_create_info.patchControlPoints, rasterization_recipe_hash);
+	uint64_t multisample_recipe_hash = hash_murmur3_one_64(multisample_state_create_info.rasterizationSamples);
+	multisample_recipe_hash = hash_murmur3_one_64(multisample_state_create_info.sampleShadingEnable, multisample_recipe_hash);
+	multisample_recipe_hash = hash_murmur3_one_64(float_bits(multisample_state_create_info.minSampleShading), multisample_recipe_hash);
+	const uint32_t sample_mask_word_count = p_multisample_state.sample_mask.size();
+	multisample_recipe_hash = hash_murmur3_one_64(sample_mask_word_count, multisample_recipe_hash);
+	if (multisample_state_create_info.pSampleMask != nullptr && sample_mask_word_count > 0) {
+		multisample_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)multisample_state_create_info.pSampleMask, sample_mask_word_count * sizeof(VkSampleMask)), multisample_recipe_hash);
+	}
+	multisample_recipe_hash = hash_murmur3_one_64(multisample_state_create_info.alphaToCoverageEnable, multisample_recipe_hash);
+	multisample_recipe_hash = hash_murmur3_one_64(multisample_state_create_info.alphaToOneEnable, multisample_recipe_hash);
+	uint64_t depth_stencil_recipe_hash = hash_murmur3_one_64(depth_stencil_state_create_info.depthTestEnable);
+	depth_stencil_recipe_hash = hash_murmur3_one_64(depth_stencil_state_create_info.depthWriteEnable, depth_stencil_recipe_hash);
+	depth_stencil_recipe_hash = hash_murmur3_one_64(depth_stencil_state_create_info.depthCompareOp, depth_stencil_recipe_hash);
+	depth_stencil_recipe_hash = hash_murmur3_one_64(depth_stencil_state_create_info.depthBoundsTestEnable, depth_stencil_recipe_hash);
+	depth_stencil_recipe_hash = hash_murmur3_one_64(depth_stencil_state_create_info.stencilTestEnable, depth_stencil_recipe_hash);
+	depth_stencil_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)&depth_stencil_state_create_info.front, sizeof(depth_stencil_state_create_info.front)), depth_stencil_recipe_hash);
+	depth_stencil_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)&depth_stencil_state_create_info.back, sizeof(depth_stencil_state_create_info.back)), depth_stencil_recipe_hash);
+	depth_stencil_recipe_hash = hash_murmur3_one_64(float_bits(depth_stencil_state_create_info.minDepthBounds), depth_stencil_recipe_hash);
+	depth_stencil_recipe_hash = hash_murmur3_one_64(float_bits(depth_stencil_state_create_info.maxDepthBounds), depth_stencil_recipe_hash);
+	uint64_t blend_recipe_hash = hash_murmur3_one_64(color_blend_state_create_info.logicOpEnable);
+	blend_recipe_hash = hash_murmur3_one_64(color_blend_state_create_info.logicOp, blend_recipe_hash);
+	const uint32_t color_attachment_count = p_color_attachments.size();
+	uint32_t active_color_attachment_mask = 0;
+	blend_recipe_hash = hash_murmur3_one_64(color_attachment_count, blend_recipe_hash);
+	for (uint32_t i = 0; i < p_color_attachments.size(); i++) {
+		blend_recipe_hash = hash_murmur3_one_64((uint32_t)p_color_attachments[i], blend_recipe_hash);
+		if (p_color_attachments[i] != ATTACHMENT_UNUSED) {
+			if (i < 32) {
+				active_color_attachment_mask |= (1u << i);
+			}
+			blend_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)&vk_attachment_states[i], sizeof(VkPipelineColorBlendAttachmentState)), blend_recipe_hash);
+		}
+	}
+	blend_recipe_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[0]), blend_recipe_hash);
+	blend_recipe_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[1]), blend_recipe_hash);
+	blend_recipe_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[2]), blend_recipe_hash);
+	blend_recipe_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[3]), blend_recipe_hash);
+	uint64_t dynamic_state_recipe_hash = hash_murmur3_one_64(vk_dynamic_states_count);
+	for (uint32_t i = 0; i < vk_dynamic_states_count; i++) {
+		dynamic_state_recipe_hash = hash_murmur3_one_64(vk_dynamic_states[i], dynamic_state_recipe_hash);
+	}
+	uint64_t specialization_constant_hash = hash_murmur3_one_64(p_specialization_constants.size());
+	for (uint32_t i = 0; i < p_specialization_constants.size(); i++) {
+		specialization_constant_hash = hash_murmur3_one_64(p_specialization_constants[i].constant_id, specialization_constant_hash);
+		specialization_constant_hash = hash_murmur3_one_64((uint32_t)p_specialization_constants[i].int_value, specialization_constant_hash);
+	}
+	uint64_t graphics_recipe_hash = hash_murmur3_one_64(shader_stage_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64(vertex_input_recipe_hash, graphics_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64((uint32_t)p_render_primitive, graphics_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64(rasterization_recipe_hash, graphics_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64(multisample_recipe_hash, graphics_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64(depth_stencil_recipe_hash, graphics_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64(blend_recipe_hash, graphics_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64(dynamic_state_recipe_hash, graphics_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64(specialization_constant_hash, graphics_recipe_hash);
+	graphics_recipe_hash = hash_murmur3_one_64((uint64_t)shader_info->vk_pipeline_layout, graphics_recipe_hash);
 	DebugPipelineBindingProvenance &pipeline_provenance = debug_render_pipeline_provenance_map[(uint64_t)vk_pipeline];
 	pipeline_provenance = DebugPipelineBindingProvenance();
 	pipeline_provenance.valid = true;
@@ -6588,6 +6683,40 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.render_pass_view_count = render_pass->debug_view_count;
 	pipeline_provenance.render_pass_uses_fragment_density_map = render_pass->uses_fragment_density_map;
 	pipeline_provenance.shader_name = shader_info->name;
+	pipeline_provenance.graphics_recipe_hash = graphics_recipe_hash;
+	pipeline_provenance.shader_stage_recipe_hash = shader_stage_recipe_hash;
+	pipeline_provenance.vertex_input_recipe_hash = vertex_input_recipe_hash;
+	pipeline_provenance.rasterization_recipe_hash = rasterization_recipe_hash;
+	pipeline_provenance.multisample_recipe_hash = multisample_recipe_hash;
+	pipeline_provenance.depth_stencil_recipe_hash = depth_stencil_recipe_hash;
+	pipeline_provenance.blend_recipe_hash = blend_recipe_hash;
+	pipeline_provenance.dynamic_state_recipe_hash = dynamic_state_recipe_hash;
+	pipeline_provenance.specialization_constant_hash = specialization_constant_hash;
+	pipeline_provenance.shader_stage_count = shader_info->vk_stages_create_info.size();
+	pipeline_provenance.shader_stage_mask = shader_stage_mask;
+	pipeline_provenance.vertex_binding_description_count = vertex_binding_description_count;
+	pipeline_provenance.vertex_attribute_count = vertex_attribute_count;
+	pipeline_provenance.specialization_constant_count = p_specialization_constants.size();
+	pipeline_provenance.color_attachment_count = color_attachment_count;
+	pipeline_provenance.active_color_attachment_mask = active_color_attachment_mask;
+	pipeline_provenance.dynamic_state_flags = (uint32_t)p_dynamic_state;
+	pipeline_provenance.sample_mask_word_count = sample_mask_word_count;
+	pipeline_provenance.render_primitive = p_render_primitive;
+	pipeline_provenance.raster_cull_mode = rasterization_state_create_info.cullMode;
+	pipeline_provenance.raster_front_face = rasterization_state_create_info.frontFace;
+	pipeline_provenance.sample_count = multisample_state_create_info.rasterizationSamples;
+	pipeline_provenance.depth_compare_op = depth_stencil_state_create_info.depthCompareOp;
+	pipeline_provenance.logic_op = color_blend_state_create_info.logicOp;
+	pipeline_provenance.raster_discard_primitives = rasterization_state_create_info.rasterizerDiscardEnable;
+	pipeline_provenance.raster_wireframe = rasterization_state_create_info.polygonMode == VK_POLYGON_MODE_LINE;
+	pipeline_provenance.depth_test_enabled = depth_stencil_state_create_info.depthTestEnable;
+	pipeline_provenance.depth_write_enabled = depth_stencil_state_create_info.depthWriteEnable;
+	pipeline_provenance.depth_bounds_enabled = depth_stencil_state_create_info.depthBoundsTestEnable;
+	pipeline_provenance.stencil_test_enabled = depth_stencil_state_create_info.stencilTestEnable;
+	pipeline_provenance.sample_shading_enabled = multisample_state_create_info.sampleShadingEnable;
+	pipeline_provenance.alpha_to_coverage_enabled = multisample_state_create_info.alphaToCoverageEnable;
+	pipeline_provenance.alpha_to_one_enabled = multisample_state_create_info.alphaToOneEnable;
+	pipeline_provenance.logic_op_enabled = color_blend_state_create_info.logicOpEnable;
 
 	// Destroy any modules created temporarily by re-spirv.
 	for (VkShaderModule vk_module : respv_shader_modules) {
@@ -8991,6 +9120,40 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		} else {
 			text += "\"" + provenance.shader_name + "\"";
 		}
+		text += ",graphics_recipe_hash=" + debug_uint64_or_none(provenance.graphics_recipe_hash);
+		text += ",shader_stage_recipe_hash=" + debug_uint64_or_none(provenance.shader_stage_recipe_hash);
+		text += ",vertex_input_recipe_hash=" + debug_uint64_or_none(provenance.vertex_input_recipe_hash);
+		text += ",rasterization_recipe_hash=" + debug_uint64_or_none(provenance.rasterization_recipe_hash);
+		text += ",multisample_recipe_hash=" + debug_uint64_or_none(provenance.multisample_recipe_hash);
+		text += ",depth_stencil_recipe_hash=" + debug_uint64_or_none(provenance.depth_stencil_recipe_hash);
+		text += ",blend_recipe_hash=" + debug_uint64_or_none(provenance.blend_recipe_hash);
+		text += ",dynamic_state_recipe_hash=" + debug_uint64_or_none(provenance.dynamic_state_recipe_hash);
+		text += ",specialization_constant_hash=" + debug_uint64_or_none(provenance.specialization_constant_hash);
+		text += ",recipe_shape={shader_stage_count=" + itos(provenance.shader_stage_count);
+		text += ",shader_stage_mask=\"0x" + String::num_uint64(provenance.shader_stage_mask, 16) + "\"";
+		text += ",vertex_binding_description_count=" + itos(provenance.vertex_binding_description_count);
+		text += ",vertex_attribute_count=" + itos(provenance.vertex_attribute_count);
+		text += ",specialization_constant_count=" + itos(provenance.specialization_constant_count);
+		text += ",color_attachment_count=" + itos(provenance.color_attachment_count);
+		text += ",active_color_attachment_mask=\"0x" + String::num_uint64(provenance.active_color_attachment_mask, 16) + "\"";
+		text += ",dynamic_state_flags=\"0x" + String::num_uint64(provenance.dynamic_state_flags, 16) + "\"";
+		text += ",sample_mask_word_count=" + itos(provenance.sample_mask_word_count);
+		text += ",render_primitive=" + itos(provenance.render_primitive);
+		text += ",raster_discard_primitives=" + String(provenance.raster_discard_primitives ? "true" : "false");
+		text += ",raster_wireframe=" + String(provenance.raster_wireframe ? "true" : "false");
+		text += ",raster_cull_mode=" + itos(provenance.raster_cull_mode);
+		text += ",raster_front_face=" + itos(provenance.raster_front_face);
+		text += ",sample_count=" + itos(provenance.sample_count);
+		text += ",sample_shading_enabled=" + String(provenance.sample_shading_enabled ? "true" : "false");
+		text += ",alpha_to_coverage_enabled=" + String(provenance.alpha_to_coverage_enabled ? "true" : "false");
+		text += ",alpha_to_one_enabled=" + String(provenance.alpha_to_one_enabled ? "true" : "false");
+		text += ",depth_test_enabled=" + String(provenance.depth_test_enabled ? "true" : "false");
+		text += ",depth_write_enabled=" + String(provenance.depth_write_enabled ? "true" : "false");
+		text += ",depth_compare_op=" + itos(provenance.depth_compare_op);
+		text += ",depth_bounds_enabled=" + String(provenance.depth_bounds_enabled ? "true" : "false");
+		text += ",stencil_test_enabled=" + String(provenance.stencil_test_enabled ? "true" : "false");
+		text += ",logic_op_enabled=" + String(provenance.logic_op_enabled ? "true" : "false");
+		text += ",logic_op=" + itos(provenance.logic_op) + "}";
 		text += "}";
 		return text;
 	};
@@ -9014,6 +9177,87 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			return String("different_pipeline_different_compatibility_context");
 		}
 		return String("different_pipeline_unknown_context_delta");
+	};
+	const auto pipeline_recipe_relation = [](const DebugPipelineBindingProvenance &base, const DebugPipelineBindingProvenance &other) {
+		if ((!base.valid && base.pipeline_handle == 0) || (!other.valid && other.pipeline_handle == 0)) {
+			return String("missing");
+		}
+		if (base.graphics_recipe_hash != 0 && base.graphics_recipe_hash == other.graphics_recipe_hash) {
+			return String("same_graphics_recipe");
+		}
+		if (base.shader_stage_recipe_hash == other.shader_stage_recipe_hash && base.vertex_input_recipe_hash == other.vertex_input_recipe_hash && base.rasterization_recipe_hash == other.rasterization_recipe_hash && base.multisample_recipe_hash == other.multisample_recipe_hash && base.depth_stencil_recipe_hash == other.depth_stencil_recipe_hash && base.blend_recipe_hash == other.blend_recipe_hash && base.dynamic_state_recipe_hash == other.dynamic_state_recipe_hash && base.specialization_constant_hash == other.specialization_constant_hash) {
+			return String("same_component_hashes_different_aggregate");
+		}
+		return String("different_graphics_recipe");
+	};
+	const auto pipeline_recipe_delta_summary = [&](const DebugPipelineBindingProvenance &base, const DebugPipelineBindingProvenance &other) {
+		if ((!base.valid && base.pipeline_handle == 0) || (!other.valid && other.pipeline_handle == 0)) {
+			return String("missing");
+		}
+		PackedStringArray changed_components;
+		if (base.shader_stage_recipe_hash != other.shader_stage_recipe_hash) {
+			changed_components.push_back("shader_stage_recipe");
+		}
+		if (base.vertex_input_recipe_hash != other.vertex_input_recipe_hash) {
+			changed_components.push_back("vertex_input_recipe");
+		}
+		if (base.rasterization_recipe_hash != other.rasterization_recipe_hash) {
+			changed_components.push_back("rasterization_recipe");
+		}
+		if (base.multisample_recipe_hash != other.multisample_recipe_hash) {
+			changed_components.push_back("multisample_recipe");
+		}
+		if (base.depth_stencil_recipe_hash != other.depth_stencil_recipe_hash) {
+			changed_components.push_back("depth_stencil_recipe");
+		}
+		if (base.blend_recipe_hash != other.blend_recipe_hash) {
+			changed_components.push_back("blend_recipe");
+		}
+		if (base.dynamic_state_recipe_hash != other.dynamic_state_recipe_hash) {
+			changed_components.push_back("dynamic_state_recipe");
+		}
+		if (base.specialization_constant_hash != other.specialization_constant_hash) {
+			changed_components.push_back("specialization_constants");
+		}
+		if (base.pipeline_layout_handle != other.pipeline_layout_handle) {
+			changed_components.push_back("pipeline_layout");
+		}
+		String text = "{graphics_recipe_relation=\"" + pipeline_recipe_relation(base, other) + "\"";
+		text += ",graphics_recipe_hash_changed=" + String(base.graphics_recipe_hash != other.graphics_recipe_hash ? "true" : "false");
+		text += ",changed_components=[";
+		for (int i = 0; i < changed_components.size(); i++) {
+			if (i > 0) {
+				text += ", ";
+			}
+			text += "\"" + changed_components[i] + "\"";
+		}
+		text += "]";
+		text += ",shape_delta={shader_stage_count=" + String(base.shader_stage_count == other.shader_stage_count ? "same" : "changed");
+		text += ",vertex_binding_description_count=" + String(base.vertex_binding_description_count == other.vertex_binding_description_count ? "same" : "changed");
+		text += ",vertex_attribute_count=" + String(base.vertex_attribute_count == other.vertex_attribute_count ? "same" : "changed");
+		text += ",specialization_constant_count=" + String(base.specialization_constant_count == other.specialization_constant_count ? "same" : "changed");
+		text += ",color_attachment_count=" + String(base.color_attachment_count == other.color_attachment_count ? "same" : "changed");
+		text += ",active_color_attachment_mask=" + String(base.active_color_attachment_mask == other.active_color_attachment_mask ? "same" : "changed");
+		text += ",dynamic_state_flags=" + String(base.dynamic_state_flags == other.dynamic_state_flags ? "same" : "changed");
+		text += ",sample_mask_word_count=" + String(base.sample_mask_word_count == other.sample_mask_word_count ? "same" : "changed");
+		text += ",render_primitive=" + String(base.render_primitive == other.render_primitive ? "same" : "changed");
+		text += ",raster_cull_mode=" + String(base.raster_cull_mode == other.raster_cull_mode ? "same" : "changed");
+		text += ",raster_front_face=" + String(base.raster_front_face == other.raster_front_face ? "same" : "changed");
+		text += ",sample_count=" + String(base.sample_count == other.sample_count ? "same" : "changed");
+		text += ",depth_compare_op=" + String(base.depth_compare_op == other.depth_compare_op ? "same" : "changed");
+		text += ",logic_op=" + String(base.logic_op == other.logic_op ? "same" : "changed");
+		text += ",raster_discard_primitives=" + String(base.raster_discard_primitives == other.raster_discard_primitives ? "same" : "changed");
+		text += ",raster_wireframe=" + String(base.raster_wireframe == other.raster_wireframe ? "same" : "changed");
+		text += ",depth_test_enabled=" + String(base.depth_test_enabled == other.depth_test_enabled ? "same" : "changed");
+		text += ",depth_write_enabled=" + String(base.depth_write_enabled == other.depth_write_enabled ? "same" : "changed");
+		text += ",depth_bounds_enabled=" + String(base.depth_bounds_enabled == other.depth_bounds_enabled ? "same" : "changed");
+		text += ",stencil_test_enabled=" + String(base.stencil_test_enabled == other.stencil_test_enabled ? "same" : "changed");
+		text += ",sample_shading_enabled=" + String(base.sample_shading_enabled == other.sample_shading_enabled ? "same" : "changed");
+		text += ",alpha_to_coverage_enabled=" + String(base.alpha_to_coverage_enabled == other.alpha_to_coverage_enabled ? "same" : "changed");
+		text += ",alpha_to_one_enabled=" + String(base.alpha_to_one_enabled == other.alpha_to_one_enabled ? "same" : "changed");
+		text += ",logic_op_enabled=" + String(base.logic_op_enabled == other.logic_op_enabled ? "same" : "changed") + "}";
+		text += "}";
+		return text;
 	};
 	const auto render_pass_scope_pipeline_relation = [](const DebugCommandStateSnapshot &state) {
 		const DebugPipelineBindingProvenance &provenance = state.render_pipeline_provenance;
@@ -9572,7 +9816,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 				text += ",expected_last_descriptor_set_layout_handle=" + debug_uint64_or_none(target_label_entry.first_uniform_bind_provenance.bind_expected_last_descriptor_set_layout_handle) + "}";
 				text += "}";
 			}
-			text += ",neighboring_pass_pipeline_compare={previous=";
+			text += ",neighboring_pass_pipeline_compare={tonemap_pipeline=" + pipeline_provenance_summary(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance);
+			text += ",previous=";
 			if (previous_meaningful_label_entry_index == -1) {
 				text += "none";
 			} else {
@@ -9580,6 +9825,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 				text += "{label=\"" + previous_entry.label + "\"";
 				text += ",pipeline_serial=" + itos(previous_entry.first_pipeline_bind_serial);
 				text += ",relation=\"" + pipeline_provenance_relation(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance, previous_entry.first_pipeline_bind_after_state.render_pipeline_provenance) + "\"";
+				text += ",recipe_delta=" + pipeline_recipe_delta_summary(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance, previous_entry.first_pipeline_bind_after_state.render_pipeline_provenance);
 				text += ",provenance=" + command_state_snapshot_summary(previous_entry.first_pipeline_bind_after_state);
 				text += "}";
 			}
@@ -9591,6 +9837,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 				text += "{label=\"" + next_entry.label + "\"";
 				text += ",pipeline_serial=" + itos(next_entry.first_pipeline_bind_serial);
 				text += ",relation=\"" + pipeline_provenance_relation(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance, next_entry.first_pipeline_bind_after_state.render_pipeline_provenance) + "\"";
+				text += ",recipe_delta=" + pipeline_recipe_delta_summary(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance, next_entry.first_pipeline_bind_after_state.render_pipeline_provenance);
 				text += ",provenance=" + command_state_snapshot_summary(next_entry.first_pipeline_bind_after_state);
 				text += "}";
 			}
