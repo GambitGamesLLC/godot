@@ -476,6 +476,8 @@ private:
 	struct DebugCommandStateSnapshot {
 		bool active_render_pass = false;
 		bool active_framebuffer = false;
+		uint64_t active_render_pass_handle = 0;
+		uint64_t active_framebuffer_handle = 0;
 		uint32_t subpass_index = 0;
 		bool render_pipeline_bound = false;
 		uint32_t vertex_binding_count = 0;

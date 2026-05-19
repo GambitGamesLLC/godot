@@ -1590,12 +1590,12 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sta
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
 
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-**Results:** Pending.
+**Results:** QA reran the same minimum host-Vulkan repro on the refreshed source-built Godot binary and appended the durable evidence package to `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`). Exact artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121/`. Exact launch used: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121 no_present compositor projection_only disabled 120` (artifact exit code `134`). The new Tonemap provenance fields resolved the live serial-8 bind to a concrete Tonemap packet: `pipeline_provenance={pipeline_handle="0x61e17cfdfec0",pipeline_layout_handle="0x7f0990db06e0",render_pass_handle="0x61e17ce8dc10",render_subpass=0,shader_name="TonemapShaderRD:0"}`. `neighboring_pass_pipeline_compare=` then classified the comparison as `previous=none` and `next={label="Command Graph (L88) (Draw)",relation="different_pipeline_different_compatibility_context",... shader_name="CanvasShaderRD:0" ...}`. So the best exact read is: the first surviving live pipeline provenance appears exactly at Tonemap serial `8`; it is Tonemap-owned and effectively unique in this slice rather than merely a same-context neighboring pipeline with a different handle; and the next meaningful pass packet (`L88`) differs at both pipeline identity and compatibility/context level. This sharpens the earlier `pipeline_bind_seam=` result without displacing the broader classification: `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`, with the outer failure envelope unchanged (`fence_wait_error submit_serial=9 wait_result=-4` and later `BLIT_PASS`). Minor runtime noise persisted as repeated callback `vformat` formatting errors in the source-built binary logs, but it did not change the provenance classification.
 
 ---
 
@@ -1606,6 +1606,71 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sta
 **Role:** `auditor`
 **References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ju6` after beads `oc-kbk` and `oc-899` complete. Independently audit whether the new Tonemap pipeline-state provenance evidence really advances the seam inside the current first poisoned-boundary candidate, whether the QA artifact supports the claimed pipeline-state provenance, and what the next tightest backend-owned seam should be if a smaller pipeline-state-owned boundary survives. Update this plan with actual findings, add audit notes if useful, and close bead `oc-ju6` with a clear reason when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- audit notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the fresh Tonemap pipeline-state provenance claim against both the active branch source (`3b84ea95`, `debug: inspect tonemap pipeline state provenance`) and the durable QA artifact package at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121/`. The source changes do what the QA story depends on: `render_pipeline_create()` persists a `DebugPipelineBindingProvenance` packet per graphics pipeline (pipeline handle, pipeline-layout handle, render-pass handle, subpass, shader name); `command_bind_render_pipeline()` latches that packet onto the active command buffer; `_debug_capture_command_state_snapshot()` copies it into the Tonemap seam snapshots; and the Tonemap summary now compares the Tonemap packet against neighboring meaningful pass packets through `neighboring_pass_pipeline_compare=`. The QA artifact matches that instrumentation exactly: Tonemap serial `8` records `pipeline_provenance={pipeline_handle="0x61e17cfdfec0",pipeline_layout_handle="0x7f0990db06e0",render_pass_handle="0x61e17ce8dc10",render_subpass=0,shader_name="TonemapShaderRD:0"}`, `uniform_begin_matches_pipeline_after=true`, and the next meaningful neighboring packet at `Command Graph (L88) (Draw)` records a different packet (`pipeline_handle="0x7f098cf39dd0"`, `pipeline_layout_handle="0x7f09a412f440"`, same render-pass handle / subpass, `shader_name="CanvasShaderRD:0"`) so the relation honestly classifies as `different_pipeline_different_compatibility_context`. Audit verdict: this evidence **does advance the seam inside the current first poisoned-boundary candidate** and supports the narrower statement that the first surviving live pipeline provenance at serial `8` is effectively unique to Tonemap **in this local surviving slice**. It does **not** displace `Tonemap (L87) (Draw)` as the first poisoned-boundary candidate, and it does **not** prove global uniqueness across every pass in the command buffer — only against the nearest meaningful surviving neighbor that the current comparison exposes (`previous=none`, `next=L88`). The next tightest backend-owned seam should therefore stay **inside Tonemap serial 8 itself**, with `bind_render_pipeline` treated as the current tightest surviving sub-boundary and `bind_render_uniform_sets` as the first downstream setup amplifier inside the same contiguous local packet. If follow-up instrumentation is added, it should stay pipeline-bind-owned: inspect whether any smaller backend-owned attachment survives around the Tonemap pipeline bind itself (for example pipeline object / layout compatibility / bind-time state ownership), before broadening back out to the later Tonemap draw or the heavier `L88` packet. Minor concern preserved for the record: the runtime still emits noisy callback `vformat` formatting errors, but they did not contradict the provenance result.
+
+---
+
+### Task 70: Inspect the bind-owned attachment at Tonemap serial `8` on failing `submit_serial=9`
+
+**Bead ID:** `oc-vhc`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-vhc` and keep the investigation projection-only on the refreshed source-built Godot binary. The current best read is that `Tonemap (L87) (Draw)` remains the first poisoned-boundary candidate, the tightest surviving internal seam is the pipeline-bind-owned state flip at serial `8`, and the live pipeline provenance there is a concrete Tonemap packet (`TonemapShaderRD:0`) that differs from the next meaningful neighboring pass at both pipeline identity and compatibility/context. Add small, reversible, high-signal instrumentation that inspects any smaller backend-owned attachment around Tonemap serial `8` itself so we can tell whether the surviving boundary is exhausted at the direct pipeline bind, or whether there is a narrower bind-owned attachment/state payload that should now become the next seam. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-vhc` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a small, reversible bind-owned attachment refinement on top of the existing Tonemap `pipeline_bind_seam=` diagnostics without reopening broader Tonemap phases or the demoted Tonemap→L88 lane. `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` now extend the captured `DebugCommandStateSnapshot` with active render-pass / framebuffer handles, thread those handle snapshots through the first Tonemap pipeline-bind and first downstream uniform-bind seam capture, and emit a new `bind_owned_attachment={...}` block inside `tonemap_local_attachment.local_packet_split.pipeline_bind_seam=`. The new block stays backend-owned and pass-scope-local: it reports whether the active pass scope stayed stable across serial `8`, whether the newly-live pipeline provenance packet matches the active render-pass/subpass scope, whether the bind delta was pipeline-only versus coupled with other tracked state flips, and a compact `narrower_bind_owned_seam` hint (`none`, `active_pass_scope`, `pipeline_compatibility_context`, `cohort_state_delta`, or `backend_gap`). This is designed to let QA answer the exact Task 70 question from the refreshed source-built binary: whether the surviving seam is exhausted at the direct `bind_render_pipeline` state flip, or whether a smaller bind-owned attachment around serial `8` survives. Validation/build stayed projection-only and source-built: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; targeted object check `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; refreshed editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; binary string check `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "bind_owned_attachment={class="`; and headless sanity launch `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version` (`4.7.beta.custom_build.61f778227`). No staged repro was run in this coder pass, so there is no new artifact root yet; QA should use the refreshed binary to classify whether the seam is now exhausted at the direct bind or whether `bind_owned_attachment=` exposes a narrower surviving attachment. Landed on branch `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` as commit `32bb81d1` (`debug: inspect tonemap bind owned attachment`) and pushed to remote `gambit`.
+
+---
+
+### Task 71: QA classify the bind-owned attachment at Tonemap serial `8` on failing `submit_serial=9`
+
+**Bead ID:** `oc-rea`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-rea` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new bind-owned-attachment instrumentation on failing `submit_serial=9`. Determine whether the surviving Tonemap seam is exhausted at the direct `bind_render_pipeline` state flip, or whether a smaller backend-owned attachment/state payload around serial `8` becomes the next tightest seam, while confirming whether Tonemap still remains the first poisoned-boundary candidate. Compare the result against the earlier `pipeline_bind_seam=` / provenance evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-rea` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Pending.
+
+---
+
+### Task 72: Audit the bind-owned attachment findings at Tonemap serial `8`
+
+**Bead ID:** `oc-jdq`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-jdq` after beads `oc-vhc` and `oc-rea` complete. Independently audit whether the new bind-owned-attachment evidence really advances the seam inside the current first poisoned-boundary candidate, whether the QA artifact supports the claimed serial-8 attachment classification, and what the next tightest backend-owned seam should be if a smaller pipeline-bind-owned attachment survives. Update this plan with actual findings, add audit notes if useful, and close bead `oc-jdq` with a clear reason when complete.
 
 **Folders Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/`

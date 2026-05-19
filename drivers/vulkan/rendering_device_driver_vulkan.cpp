@@ -8833,6 +8833,18 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 	const auto command_state_snapshot_summary = [&](const DebugCommandStateSnapshot &state) {
 		String text = "{render_pass_active=" + String(state.active_render_pass ? "true" : "false");
 		text += ",framebuffer_active=" + String(state.active_framebuffer ? "true" : "false");
+		text += ",render_pass_handle=";
+		if (state.active_render_pass_handle == 0) {
+			text += "none";
+		} else {
+			text += "\"0x" + String::num_uint64(state.active_render_pass_handle, 16) + "\"";
+		}
+		text += ",framebuffer_handle=";
+		if (state.active_framebuffer_handle == 0) {
+			text += "none";
+		} else {
+			text += "\"0x" + String::num_uint64(state.active_framebuffer_handle, 16) + "\"";
+		}
 		text += ",subpass=" + itos(state.subpass_index);
 		text += ",render_pipeline_bound=" + String(state.render_pipeline_bound ? "true" : "false");
 		text += ",vertex_binding_count=" + itos(state.vertex_binding_count);
@@ -8851,6 +8863,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 	const auto command_state_delta_summary = [&](const DebugCommandStateSnapshot &before_state, const DebugCommandStateSnapshot &after_state) {
 		String text = "{render_pass_active=" + String(before_state.active_render_pass != after_state.active_render_pass ? "changed" : "same");
 		text += ",framebuffer_active=" + String(before_state.active_framebuffer != after_state.active_framebuffer ? "changed" : "same");
+		text += ",render_pass_handle=" + String(before_state.active_render_pass_handle != after_state.active_render_pass_handle ? "changed" : "same");
+		text += ",framebuffer_handle=" + String(before_state.active_framebuffer_handle != after_state.active_framebuffer_handle ? "changed" : "same");
 		text += ",subpass=" + String(before_state.subpass_index != after_state.subpass_index ? "changed" : "same");
 		text += ",render_pipeline_bound=" + String(before_state.render_pipeline_bound != after_state.render_pipeline_bound ? "changed" : "same");
 		text += ",vertex_binding_count=" + String(before_state.vertex_binding_count != after_state.vertex_binding_count ? "changed" : "same");
@@ -9121,6 +9135,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 					target_label_entry.first_uniform_bind_serial > 0 &&
 					target_label_entry.first_pipeline_bind_after_state.active_render_pass == target_label_entry.first_uniform_bind_before_state.active_render_pass &&
 					target_label_entry.first_pipeline_bind_after_state.active_framebuffer == target_label_entry.first_uniform_bind_before_state.active_framebuffer &&
+					target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle == target_label_entry.first_uniform_bind_before_state.active_render_pass_handle &&
+					target_label_entry.first_pipeline_bind_after_state.active_framebuffer_handle == target_label_entry.first_uniform_bind_before_state.active_framebuffer_handle &&
 					target_label_entry.first_pipeline_bind_after_state.subpass_index == target_label_entry.first_uniform_bind_before_state.subpass_index &&
 					target_label_entry.first_pipeline_bind_after_state.render_pipeline_bound == target_label_entry.first_uniform_bind_before_state.render_pipeline_bound &&
 					target_label_entry.first_pipeline_bind_after_state.vertex_binding_count == target_label_entry.first_uniform_bind_before_state.vertex_binding_count &&
@@ -9132,6 +9148,27 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.render_pass_handle &&
 					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.render_subpass &&
 					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.shader_name;
+			const bool active_scope_stable_across_bind =
+					target_label_entry.first_pipeline_bind_before_state.active_render_pass == target_label_entry.first_pipeline_bind_after_state.active_render_pass &&
+					target_label_entry.first_pipeline_bind_before_state.active_framebuffer == target_label_entry.first_pipeline_bind_after_state.active_framebuffer &&
+					target_label_entry.first_pipeline_bind_before_state.active_render_pass_handle == target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle &&
+					target_label_entry.first_pipeline_bind_before_state.active_framebuffer_handle == target_label_entry.first_pipeline_bind_after_state.active_framebuffer_handle &&
+					target_label_entry.first_pipeline_bind_before_state.subpass_index == target_label_entry.first_pipeline_bind_after_state.subpass_index;
+			const bool pipeline_packet_matches_active_scope =
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle != 0 &&
+					target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle != 0 &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle == target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass == target_label_entry.first_pipeline_bind_after_state.subpass_index;
+			const bool bind_delta_is_pipeline_only =
+					target_label_entry.first_pipeline_bind_before_state.active_render_pass == target_label_entry.first_pipeline_bind_after_state.active_render_pass &&
+					target_label_entry.first_pipeline_bind_before_state.active_framebuffer == target_label_entry.first_pipeline_bind_after_state.active_framebuffer &&
+					target_label_entry.first_pipeline_bind_before_state.active_render_pass_handle == target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle &&
+					target_label_entry.first_pipeline_bind_before_state.active_framebuffer_handle == target_label_entry.first_pipeline_bind_after_state.active_framebuffer_handle &&
+					target_label_entry.first_pipeline_bind_before_state.subpass_index == target_label_entry.first_pipeline_bind_after_state.subpass_index &&
+					target_label_entry.first_pipeline_bind_before_state.vertex_binding_count == target_label_entry.first_pipeline_bind_after_state.vertex_binding_count &&
+					target_label_entry.first_pipeline_bind_before_state.index_buffer_bound == target_label_entry.first_pipeline_bind_after_state.index_buffer_bound &&
+					target_label_entry.first_pipeline_bind_before_state.index_format == target_label_entry.first_pipeline_bind_after_state.index_format &&
+					target_label_entry.first_pipeline_bind_before_state.breadcrumb == target_label_entry.first_pipeline_bind_after_state.breadcrumb;
 			String owned_attachment_class = "pipeline_bind_direct_state_flip";
 			if (pipeline_to_uniform_gap_commands > 0) {
 				owned_attachment_class = "backend_gap_after_pipeline_bind";
@@ -9141,6 +9178,24 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 				owned_attachment_class = "state_delta_before_uniform_without_backend_gap";
 			} else if (target_label_entry.first_pipeline_bind_before_state.render_pipeline_bound == target_label_entry.first_pipeline_bind_after_state.render_pipeline_bound) {
 				owned_attachment_class = "pipeline_bind_without_tracked_pipeline_flip";
+			}
+			String bind_owned_attachment_class = "direct_pipeline_bind_exhausted";
+			String narrower_bind_owned_seam = "none";
+			if (!active_scope_stable_across_bind) {
+				bind_owned_attachment_class = "scope_churn_during_pipeline_bind";
+				narrower_bind_owned_seam = "active_pass_scope";
+			} else if (!pipeline_packet_matches_active_scope) {
+				bind_owned_attachment_class = "pipeline_packet_scope_mismatch";
+				narrower_bind_owned_seam = "pipeline_compatibility_context";
+			} else if (!bind_delta_is_pipeline_only) {
+				bind_owned_attachment_class = "additional_tracked_state_flip_with_pipeline_bind";
+				narrower_bind_owned_seam = "cohort_state_delta";
+			} else if (pipeline_to_uniform_gap_commands > 0) {
+				bind_owned_attachment_class = "backend_gap_after_pipeline_bind";
+				narrower_bind_owned_seam = "backend_gap";
+			} else if (target_label_entry.first_uniform_bind_serial == 0) {
+				bind_owned_attachment_class = "pipeline_bind_terminal";
+				narrower_bind_owned_seam = "none";
 			}
 			text += "{owned_attachment_class=\"" + owned_attachment_class + "\"";
 			text += ",pipeline_serial=" + itos(target_label_entry.first_pipeline_bind_serial);
@@ -9161,6 +9216,58 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			} else {
 				text += String(pipeline_after_matches_uniform_before ? "true" : "false");
 			}
+			text += ",bind_owned_attachment={class=\"" + bind_owned_attachment_class + "\"";
+			text += ",narrower_bind_owned_seam=\"" + narrower_bind_owned_seam + "\"";
+			text += ",active_scope_stable_across_bind=" + String(active_scope_stable_across_bind ? "true" : "false");
+			text += ",pipeline_packet_matches_active_scope=" + String(pipeline_packet_matches_active_scope ? "true" : "false");
+			text += ",bind_delta_is_pipeline_only=" + String(bind_delta_is_pipeline_only ? "true" : "false");
+			text += ",active_scope_before={render_pass_handle=";
+			if (target_label_entry.first_pipeline_bind_before_state.active_render_pass_handle == 0) {
+				text += "none";
+			} else {
+				text += "\"0x" + String::num_uint64(target_label_entry.first_pipeline_bind_before_state.active_render_pass_handle, 16) + "\"";
+			}
+			text += ",framebuffer_handle=";
+			if (target_label_entry.first_pipeline_bind_before_state.active_framebuffer_handle == 0) {
+				text += "none";
+			} else {
+				text += "\"0x" + String::num_uint64(target_label_entry.first_pipeline_bind_before_state.active_framebuffer_handle, 16) + "\"";
+			}
+			text += ",subpass=" + itos(target_label_entry.first_pipeline_bind_before_state.subpass_index) + "}";
+			text += ",active_scope_after={render_pass_handle=";
+			if (target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle == 0) {
+				text += "none";
+			} else {
+				text += "\"0x" + String::num_uint64(target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle, 16) + "\"";
+			}
+			text += ",framebuffer_handle=";
+			if (target_label_entry.first_pipeline_bind_after_state.active_framebuffer_handle == 0) {
+				text += "none";
+			} else {
+				text += "\"0x" + String::num_uint64(target_label_entry.first_pipeline_bind_after_state.active_framebuffer_handle, 16) + "\"";
+			}
+			text += ",subpass=" + itos(target_label_entry.first_pipeline_bind_after_state.subpass_index) + "}";
+			text += ",pipeline_packet={render_pass_handle=";
+			if (target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle == 0) {
+				text += "none";
+			} else {
+				text += "\"0x" + String::num_uint64(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle, 16) + "\"";
+			}
+			text += ",render_subpass=" + itos(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass);
+			text += ",pipeline_layout_handle=";
+			if (target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle == 0) {
+				text += "none";
+			} else {
+				text += "\"0x" + String::num_uint64(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle, 16) + "\"";
+			}
+			text += ",shader_name=";
+			if (target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name.is_empty()) {
+				text += "none";
+			} else {
+				text += "\"" + target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name + "\"";
+			}
+			text += "}";
+			text += "}";
 			text += ",neighboring_pass_pipeline_compare={previous=";
 			if (previous_meaningful_label_entry_index == -1) {
 				text += "none";
@@ -9344,6 +9451,8 @@ RenderingDeviceDriverVulkan::DebugCommandStateSnapshot RenderingDeviceDriverVulk
 	DebugCommandStateSnapshot snapshot;
 	snapshot.active_render_pass = p_command_buffer->active_render_pass != nullptr;
 	snapshot.active_framebuffer = p_command_buffer->active_framebuffer != nullptr;
+	snapshot.active_render_pass_handle = p_command_buffer->active_render_pass != nullptr ? (uint64_t)p_command_buffer->active_render_pass->vk_render_pass : 0;
+	snapshot.active_framebuffer_handle = p_command_buffer->active_framebuffer != nullptr ? (uint64_t)p_command_buffer->active_framebuffer->vk_framebuffer : 0;
 	snapshot.subpass_index = p_command_buffer->active_render_subpass;
 	snapshot.render_pipeline_bound = p_command_buffer->debug_render_pipeline_bound;
 	snapshot.vertex_binding_count = p_command_buffer->debug_vertex_binding_count;
