@@ -477,6 +477,20 @@ private:
 		bool begin_index_buffer_bound = false;
 		IndexBufferFormat begin_index_format = INDEX_BUFFER_FORMAT_UINT16;
 		uint32_t begin_breadcrumb = 0;
+		uint64_t begin_backend_command_serial = 0;
+		bool end_active_render_pass = false;
+		bool end_active_framebuffer = false;
+		uint32_t end_subpass_index = 0;
+		bool end_render_pipeline_bound = false;
+		uint32_t end_vertex_binding_count = 0;
+		bool end_index_buffer_bound = false;
+		IndexBufferFormat end_index_format = INDEX_BUFFER_FORMAT_UINT16;
+		uint32_t end_breadcrumb = 0;
+		uint64_t end_backend_command_serial = 0;
+		uint32_t post_gap_backend_command_count = 0;
+		String post_gap_first_backend_command;
+		String post_gap_last_backend_command;
+		uint32_t post_gap_last_breadcrumb = 0;
 		uint32_t render_pass_begin_count = 0;
 		uint32_t render_pass_end_count = 0;
 		uint32_t next_subpass_count = 0;
@@ -590,6 +604,7 @@ private:
 		uint32_t debug_segment_frames_drawn = 0;
 		uint32_t debug_last_breadcrumb = 0;
 		uint32_t debug_breadcrumb_count = 0;
+		uint64_t debug_backend_command_serial = 0;
 		uint32_t debug_label_count = 0;
 		String debug_first_label;
 		String debug_last_label;
@@ -603,6 +618,7 @@ private:
 		bool debug_label_entries_overflow = false;
 		uint32_t debug_label_entry_count = 0;
 		DebugLabelEntry debug_label_entries[192];
+		uint32_t debug_last_closed_label_entry_index = UINT32_MAX;
 		uint32_t debug_active_label_stack_size = 0;
 		uint32_t debug_active_label_stack[32];
 		bool debug_level_stats_overflow = false;

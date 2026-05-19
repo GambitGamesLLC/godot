@@ -1267,6 +1267,71 @@ Validated with an incremental source build (`scons -j8 platform=linuxbsd target=
 
 ---
 
+### Task 55: Inspect the Tonemap-to-L88 ownership transition on failing `submit_serial=9`
+
+**Bead ID:** `oc-j8x`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-j8x` and keep the investigation projection-only on the refreshed source-built Godot binary. The current best read is that `Tonemap (L87) (Draw)` is the first self-owned surviving poisoned-boundary candidate and `Command Graph (L88) (Draw)` is the immediately following heavier downstream amplification packet. Add small, reversible, high-signal instrumentation that inspects the ownership transition between Tonemap and `L88` so we can see whether the first meaningful ownership expansion after Tonemap happens exactly at `L88`, at `UI_PASS`, or at some smaller backend-owned transition in between. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-j8x` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrow Tonemap-to-L88 transition diagnostic on top of the existing `tonemap_l88_contrast=` payload without changing renderer behavior or reopening shader-side guesswork. The Vulkan backend now persists label begin/end state for direct labels, a per-command-buffer backend-command serial, and a tiny unlabeled post-label gap tracker for the most recently closed top-level label. The refreshed `tonemap_l88_contrast=` summary now emits `tonemap_end_state=` plus `tonemap_to_l88_transition=` so QA can answer the exact seam question on failing `submit_serial=9`: whether anything backend-owned happens after Tonemap closes and before `Command Graph (L88) (Draw)` begins, whether the first visible transition is only the breadcrumb jump to `UI_PASS`, or whether the first meaningful expansion is the `L88` local packet itself. Validation run stayed on the source-built Godot branch and kept the staged repro model intact: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check`; full incremental editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "tonemap_to_l88_transition="` to confirm the refreshed binary contains the new transition payload. No repro was run in this coder pass; QA should use the refreshed binary to capture the actual seam classification. Landed on the active branch as commit `5fdc00b5` (`debug: inspect tonemap to l88 transition`).
+
+---
+
+### Task 56: QA confirm the Tonemap-to-L88 ownership transition on failing `submit_serial=9`
+
+**Bead ID:** `oc-bjx`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-bjx` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new Tonemap-to-L88 transition payload on failing `submit_serial=9`. Confirm whether the first meaningful ownership expansion after Tonemap happens exactly at `Command Graph (L88) (Draw)`, at `UI_PASS`, or at some smaller backend-owned transition in between. Compare the result against the earlier `tonemap_l88_contrast=` / `tonemap_local_attachment=` evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-bjx` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Pending.
+
+---
+
+### Task 57: Audit the Tonemap-to-L88 ownership transition findings and next seam
+
+**Bead ID:** `oc-xdd`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-xdd` after beads `oc-j8x` and `oc-bjx` complete. Independently audit whether the new Tonemap-to-L88 transition evidence really advances the seam beyond the current Tonemap-first conclusion, whether the QA artifact supports the claimed ownership transition, and what the next tightest backend-owned seam should be if Tonemap remains the first poisoned-boundary candidate.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- audit notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Pending.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

@@ -3427,6 +3427,7 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_segment_frames_drawn = current_segment_frames_drawn;
 	command_buffer->debug_last_breadcrumb = BreadcrumbMarker::NONE;
 	command_buffer->debug_breadcrumb_count = 0;
+	command_buffer->debug_backend_command_serial = 0;
 	command_buffer->debug_label_count = 0;
 	command_buffer->debug_first_label = String();
 	command_buffer->debug_last_label = String();
@@ -3438,6 +3439,7 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_label_segment_count = 0;
 	command_buffer->debug_label_entries_overflow = false;
 	command_buffer->debug_label_entry_count = 0;
+	command_buffer->debug_last_closed_label_entry_index = UINT32_MAX;
 	command_buffer->debug_active_label_stack_size = 0;
 	command_buffer->debug_level_stats_overflow = false;
 	command_buffer->debug_level_stat_count = 0;
@@ -3470,6 +3472,7 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_segment_frames_drawn = current_segment_frames_drawn;
 	command_buffer->debug_last_breadcrumb = BreadcrumbMarker::NONE;
 	command_buffer->debug_breadcrumb_count = 0;
+	command_buffer->debug_backend_command_serial = 0;
 	command_buffer->debug_label_count = 0;
 	command_buffer->debug_first_label = String();
 	command_buffer->debug_last_label = String();
@@ -3481,6 +3484,7 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_label_segment_count = 0;
 	command_buffer->debug_label_entries_overflow = false;
 	command_buffer->debug_label_entry_count = 0;
+	command_buffer->debug_last_closed_label_entry_index = UINT32_MAX;
 	command_buffer->debug_active_label_stack_size = 0;
 	command_buffer->debug_level_stats_overflow = false;
 	command_buffer->debug_level_stat_count = 0;
@@ -6944,6 +6948,7 @@ void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buff
 			command_buffer->debug_label_path_truncated = true;
 		}
 	}
+	command_buffer->debug_last_closed_label_entry_index = UINT32_MAX;
 	const uint32_t label_entry_index = _debug_record_command_label(command_buffer, String(p_label_name));
 	if (label_entry_index != UINT32_MAX && command_buffer->debug_active_render_pass_scope_index != UINT32_MAX && command_buffer->debug_active_render_pass_scope_index < command_buffer->debug_render_pass_scope_count) {
 		DebugRenderPassScope &scope = command_buffer->debug_render_pass_scopes[command_buffer->debug_active_render_pass_scope_index];
@@ -7033,8 +7038,25 @@ void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buff
 
 void RenderingDeviceDriverVulkan::command_end_label(CommandBufferID p_cmd_buffer) {
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
+	uint32_t closed_label_entry_index = UINT32_MAX;
 	if (command_buffer->debug_active_label_stack_size > 0) {
+		closed_label_entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (closed_label_entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[closed_label_entry_index];
+			entry.end_active_render_pass = command_buffer->active_render_pass != nullptr;
+			entry.end_active_framebuffer = command_buffer->active_framebuffer != nullptr;
+			entry.end_subpass_index = command_buffer->active_render_subpass;
+			entry.end_render_pipeline_bound = command_buffer->debug_render_pipeline_bound;
+			entry.end_vertex_binding_count = command_buffer->debug_vertex_binding_count;
+			entry.end_index_buffer_bound = command_buffer->debug_index_buffer_bound;
+			entry.end_index_format = command_buffer->debug_index_format;
+			entry.end_breadcrumb = command_buffer->debug_last_breadcrumb;
+			entry.end_backend_command_serial = command_buffer->debug_backend_command_serial;
+		}
 		command_buffer->debug_active_label_stack_size--;
+		if (command_buffer->debug_active_label_stack_size == 0) {
+			command_buffer->debug_last_closed_label_entry_index = closed_label_entry_index;
+		}
 	}
 	const RenderingContextDriverVulkan::Functions &functions = context_driver->functions_get();
 	if (!functions.CmdEndDebugUtilsLabelEXT) {
@@ -8691,6 +8713,40 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += "}}";
 		return text;
 	};
+	const auto label_begin_state_summary = [](const DebugLabelEntry &entry) {
+		String text = "{render_pass_active=" + String(entry.begin_active_render_pass ? "true" : "false");
+		text += ",framebuffer_active=" + String(entry.begin_active_framebuffer ? "true" : "false");
+		text += ",subpass=" + itos(entry.begin_subpass_index);
+		text += ",render_pipeline_bound=" + String(entry.begin_render_pipeline_bound ? "true" : "false");
+		text += ",vertex_binding_count=" + itos(entry.begin_vertex_binding_count);
+		text += ",index_buffer_bound=" + String(entry.begin_index_buffer_bound ? "true" : "false");
+		text += ",index_format=";
+		if (entry.begin_index_buffer_bound) {
+			text += "\"" + _debug_index_format_to_string(entry.begin_index_format) + "\"";
+		} else {
+			text += "none";
+		}
+		text += ",begin_breadcrumb=\"" + _debug_breadcrumb_to_string(entry.begin_breadcrumb) + "\"";
+		text += ",backend_command_serial=" + itos(entry.begin_backend_command_serial) + "}";
+		return text;
+	};
+	const auto label_end_state_summary = [](const DebugLabelEntry &entry) {
+		String text = "{render_pass_active=" + String(entry.end_active_render_pass ? "true" : "false");
+		text += ",framebuffer_active=" + String(entry.end_active_framebuffer ? "true" : "false");
+		text += ",subpass=" + itos(entry.end_subpass_index);
+		text += ",render_pipeline_bound=" + String(entry.end_render_pipeline_bound ? "true" : "false");
+		text += ",vertex_binding_count=" + itos(entry.end_vertex_binding_count);
+		text += ",index_buffer_bound=" + String(entry.end_index_buffer_bound ? "true" : "false");
+		text += ",index_format=";
+		if (entry.end_index_buffer_bound) {
+			text += "\"" + _debug_index_format_to_string(entry.end_index_format) + "\"";
+		} else {
+			text += "none";
+		}
+		text += ",end_breadcrumb=\"" + _debug_breadcrumb_to_string(entry.end_breadcrumb) + "\"";
+		text += ",backend_command_serial=" + itos(entry.end_backend_command_serial) + "}";
+		return text;
+	};
 
 	int32_t wrapper_chain_start = target_scope_index;
 	for (int32_t i = target_scope_index - 1; i >= 0; i--) {
@@ -8912,16 +8968,40 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += "{status=ok";
 		text += ",scope_distance=" + itos(l88_scope_index - target_scope_index);
 		text += ",next_meaningful_scope_is_l88=" + String(next_meaningful_scope_index == l88_scope_index ? "true" : "false");
-		text += ",tonemap_begin_state={render_pass_active=" + String(tonemap_label_entry.begin_active_render_pass ? "true" : "false");
-		text += ",render_pipeline_bound=" + String(tonemap_label_entry.begin_render_pipeline_bound ? "true" : "false");
-		text += ",vertex_binding_count=" + itos(tonemap_label_entry.begin_vertex_binding_count);
-		text += ",index_buffer_bound=" + String(tonemap_label_entry.begin_index_buffer_bound ? "true" : "false");
-		text += ",begin_breadcrumb=\"" + _debug_breadcrumb_to_string(tonemap_label_entry.begin_breadcrumb) + "\"}";
-		text += ",l88_begin_state={render_pass_active=" + String(l88_label_entry.begin_active_render_pass ? "true" : "false");
-		text += ",render_pipeline_bound=" + String(l88_label_entry.begin_render_pipeline_bound ? "true" : "false");
-		text += ",vertex_binding_count=" + itos(l88_label_entry.begin_vertex_binding_count);
-		text += ",index_buffer_bound=" + String(l88_label_entry.begin_index_buffer_bound ? "true" : "false");
-		text += ",begin_breadcrumb=\"" + _debug_breadcrumb_to_string(l88_label_entry.begin_breadcrumb) + "\"}";
+		text += ",tonemap_begin_state=" + label_begin_state_summary(tonemap_label_entry);
+		text += ",tonemap_end_state=" + label_end_state_summary(tonemap_label_entry);
+		text += ",l88_begin_state=" + label_begin_state_summary(l88_label_entry);
+		const int64_t backend_gap_commands = int64_t(l88_label_entry.begin_backend_command_serial) - int64_t(tonemap_label_entry.end_backend_command_serial);
+		text += ",tonemap_to_l88_transition={backend_gap_commands=" + itos(backend_gap_commands);
+		text += ",gap_has_backend_commands=" + String(backend_gap_commands > 0 ? "true" : "false");
+		text += ",post_gap_backend_command_count=" + itos(tonemap_label_entry.post_gap_backend_command_count);
+		text += ",post_gap_first_backend_command=";
+		if (tonemap_label_entry.post_gap_first_backend_command.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + tonemap_label_entry.post_gap_first_backend_command + "\"";
+		}
+		text += ",post_gap_last_backend_command=";
+		if (tonemap_label_entry.post_gap_last_backend_command.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + tonemap_label_entry.post_gap_last_backend_command + "\"";
+		}
+		text += ",post_gap_last_breadcrumb=\"" + _debug_breadcrumb_to_string(tonemap_label_entry.post_gap_last_breadcrumb) + "\"";
+		text += ",state_delta={render_pass_active=" + String(tonemap_label_entry.end_active_render_pass != l88_label_entry.begin_active_render_pass ? "changed" : "same");
+		text += ",framebuffer_active=" + String(tonemap_label_entry.end_active_framebuffer != l88_label_entry.begin_active_framebuffer ? "changed" : "same");
+		text += ",subpass=" + String(tonemap_label_entry.end_subpass_index != l88_label_entry.begin_subpass_index ? "changed" : "same");
+		text += ",render_pipeline_bound=" + String(tonemap_label_entry.end_render_pipeline_bound != l88_label_entry.begin_render_pipeline_bound ? "changed" : "same");
+		text += ",vertex_binding_count=" + String(tonemap_label_entry.end_vertex_binding_count != l88_label_entry.begin_vertex_binding_count ? "changed" : "same");
+		text += ",index_buffer_bound=" + String(tonemap_label_entry.end_index_buffer_bound != l88_label_entry.begin_index_buffer_bound ? "changed" : "same");
+		text += ",breadcrumb=" + String(tonemap_label_entry.end_breadcrumb != l88_label_entry.begin_breadcrumb ? "changed" : "same") + "}";
+		String first_expansion_site = "l88_label";
+		if (backend_gap_commands > 0 || tonemap_label_entry.post_gap_backend_command_count > 0) {
+			first_expansion_site = "inter_label_backend_gap";
+		} else if (tonemap_label_entry.end_breadcrumb != l88_label_entry.begin_breadcrumb && _debug_breadcrumb_to_string(l88_label_entry.begin_breadcrumb) == "UI_PASS") {
+			first_expansion_site = "ui_pass_breadcrumb";
+		}
+		text += ",first_meaningful_expansion=\"" + first_expansion_site + "\"}";
 		text += ",l88_scope_summary=" + scope_summary(l88_scope);
 		text += ",l88_local_attachment={label_index=" + itos(l88_label_entry.label_index);
 		text += ",entry_index=" + itos(l88_label_entry_index);
@@ -9021,6 +9101,7 @@ uint32_t RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferI
 		entry.begin_index_buffer_bound = p_command_buffer->debug_index_buffer_bound;
 		entry.begin_index_format = p_command_buffer->debug_index_format;
 		entry.begin_breadcrumb = p_command_buffer->debug_last_breadcrumb;
+		entry.begin_backend_command_serial = p_command_buffer->debug_backend_command_serial;
 	} else {
 		p_command_buffer->debug_label_entries_overflow = true;
 	}
@@ -9136,12 +9217,22 @@ uint32_t RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferI
 }
 
 void RenderingDeviceDriverVulkan::_debug_record_active_render_pass_scope_command(CommandBufferInfo *p_command_buffer, const char *p_command_name) {
+	p_command_buffer->debug_backend_command_serial++;
+	const String command_name = String(p_command_name);
+	if (p_command_buffer->debug_active_label_stack_size == 0 && p_command_buffer->debug_last_closed_label_entry_index != UINT32_MAX && p_command_buffer->debug_last_closed_label_entry_index < p_command_buffer->debug_label_entry_count) {
+		DebugLabelEntry &gap_entry = p_command_buffer->debug_label_entries[p_command_buffer->debug_last_closed_label_entry_index];
+		gap_entry.post_gap_backend_command_count++;
+		if (gap_entry.post_gap_first_backend_command.is_empty()) {
+			gap_entry.post_gap_first_backend_command = command_name;
+		}
+		gap_entry.post_gap_last_backend_command = command_name;
+		gap_entry.post_gap_last_breadcrumb = p_command_buffer->debug_last_breadcrumb;
+	}
 	if (p_command_buffer->debug_active_render_pass_scope_index == UINT32_MAX || p_command_buffer->debug_active_render_pass_scope_index >= p_command_buffer->debug_render_pass_scope_count) {
 		return;
 	}
 
 	DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[p_command_buffer->debug_active_render_pass_scope_index];
-	const String command_name = String(p_command_name);
 	if (scope.first_backend_command.is_empty()) {
 		scope.first_backend_command = command_name;
 	}
