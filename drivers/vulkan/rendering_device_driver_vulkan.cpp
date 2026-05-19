@@ -6587,6 +6587,14 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	uint64_t vertex_input_recipe_hash = 0;
 	uint32_t vertex_binding_description_count = 0;
 	uint32_t vertex_attribute_count = 0;
+	uint32_t vertex_binding_stride_total = 0;
+	uint32_t vertex_binding_input_rate_mask = 0;
+	uint32_t vertex_attribute_location_mask = 0;
+	uint32_t vertex_attribute_binding_mask = 0;
+	uint64_t vertex_binding_layout_hash = 0;
+	uint64_t vertex_attribute_layout_hash = 0;
+	uint64_t vertex_attribute_format_hash = 0;
+	bool vertex_input_uses_instance_rate = false;
 	if (vertex_input_state_create_info != nullptr) {
 		vertex_binding_description_count = vertex_input_state_create_info->vertexBindingDescriptionCount;
 		vertex_attribute_count = vertex_input_state_create_info->vertexAttributeDescriptionCount;
@@ -6594,9 +6602,36 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		vertex_input_recipe_hash = hash_murmur3_one_64(vertex_attribute_count, vertex_input_recipe_hash);
 		if (vertex_input_state_create_info->pVertexBindingDescriptions != nullptr && vertex_binding_description_count > 0) {
 			vertex_input_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)vertex_input_state_create_info->pVertexBindingDescriptions, vertex_binding_description_count * sizeof(VkVertexInputBindingDescription)), vertex_input_recipe_hash);
+			vertex_binding_layout_hash = hash_murmur3_one_64(vertex_binding_description_count);
+			for (uint32_t i = 0; i < vertex_binding_description_count; i++) {
+				const VkVertexInputBindingDescription &binding = vertex_input_state_create_info->pVertexBindingDescriptions[i];
+				vertex_binding_stride_total += binding.stride;
+				if (binding.binding < 32) {
+					vertex_binding_input_rate_mask |= ((binding.inputRate == VK_VERTEX_INPUT_RATE_INSTANCE) ? 1u : 0u) << binding.binding;
+				}
+				vertex_input_uses_instance_rate |= binding.inputRate == VK_VERTEX_INPUT_RATE_INSTANCE;
+				vertex_binding_layout_hash = hash_murmur3_one_64(binding.binding, vertex_binding_layout_hash);
+				vertex_binding_layout_hash = hash_murmur3_one_64(binding.stride, vertex_binding_layout_hash);
+				vertex_binding_layout_hash = hash_murmur3_one_64(binding.inputRate, vertex_binding_layout_hash);
+			}
 		}
 		if (vertex_input_state_create_info->pVertexAttributeDescriptions != nullptr && vertex_attribute_count > 0) {
 			vertex_input_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)vertex_input_state_create_info->pVertexAttributeDescriptions, vertex_attribute_count * sizeof(VkVertexInputAttributeDescription)), vertex_input_recipe_hash);
+			vertex_attribute_layout_hash = hash_murmur3_one_64(vertex_attribute_count);
+			vertex_attribute_format_hash = hash_murmur3_one_64(vertex_attribute_count);
+			for (uint32_t i = 0; i < vertex_attribute_count; i++) {
+				const VkVertexInputAttributeDescription &attribute = vertex_input_state_create_info->pVertexAttributeDescriptions[i];
+				if (attribute.location < 32) {
+					vertex_attribute_location_mask |= 1u << attribute.location;
+				}
+				if (attribute.binding < 32) {
+					vertex_attribute_binding_mask |= 1u << attribute.binding;
+				}
+				vertex_attribute_layout_hash = hash_murmur3_one_64(attribute.location, vertex_attribute_layout_hash);
+				vertex_attribute_layout_hash = hash_murmur3_one_64(attribute.binding, vertex_attribute_layout_hash);
+				vertex_attribute_layout_hash = hash_murmur3_one_64(attribute.offset, vertex_attribute_layout_hash);
+				vertex_attribute_format_hash = hash_murmur3_one_64(attribute.format, vertex_attribute_format_hash);
+			}
 		}
 	}
 	uint64_t rasterization_recipe_hash = hash_murmur3_one_64(rasterization_state_create_info.depthClampEnable);
@@ -6696,6 +6731,14 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.shader_stage_mask = shader_stage_mask;
 	pipeline_provenance.vertex_binding_description_count = vertex_binding_description_count;
 	pipeline_provenance.vertex_attribute_count = vertex_attribute_count;
+	pipeline_provenance.vertex_binding_stride_total = vertex_binding_stride_total;
+	pipeline_provenance.vertex_binding_input_rate_mask = vertex_binding_input_rate_mask;
+	pipeline_provenance.vertex_attribute_location_mask = vertex_attribute_location_mask;
+	pipeline_provenance.vertex_attribute_binding_mask = vertex_attribute_binding_mask;
+	pipeline_provenance.vertex_binding_layout_hash = vertex_binding_layout_hash;
+	pipeline_provenance.vertex_attribute_layout_hash = vertex_attribute_layout_hash;
+	pipeline_provenance.vertex_attribute_format_hash = vertex_attribute_format_hash;
+	pipeline_provenance.vertex_input_uses_instance_rate = vertex_input_uses_instance_rate;
 	pipeline_provenance.specialization_constant_count = p_specialization_constants.size();
 	pipeline_provenance.color_attachment_count = color_attachment_count;
 	pipeline_provenance.active_color_attachment_mask = active_color_attachment_mask;
@@ -9133,6 +9176,15 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",shader_stage_mask=\"0x" + String::num_uint64(provenance.shader_stage_mask, 16) + "\"";
 		text += ",vertex_binding_description_count=" + itos(provenance.vertex_binding_description_count);
 		text += ",vertex_attribute_count=" + itos(provenance.vertex_attribute_count);
+		text += ",vertex_input_class=\"" + String(provenance.vertex_binding_description_count == 0 && provenance.vertex_attribute_count == 0 ? "null_vertex_input" : (provenance.vertex_input_uses_instance_rate ? "instanced_vertex_input" : "streamed_vertex_input")) + "\"";
+		text += ",vertex_binding_stride_total=" + itos(provenance.vertex_binding_stride_total);
+		text += ",vertex_binding_input_rate_mask=\"0x" + String::num_uint64(provenance.vertex_binding_input_rate_mask, 16) + "\"";
+		text += ",vertex_attribute_location_mask=\"0x" + String::num_uint64(provenance.vertex_attribute_location_mask, 16) + "\"";
+		text += ",vertex_attribute_binding_mask=\"0x" + String::num_uint64(provenance.vertex_attribute_binding_mask, 16) + "\"";
+		text += ",vertex_binding_layout_hash=" + debug_uint64_or_none(provenance.vertex_binding_layout_hash);
+		text += ",vertex_attribute_layout_hash=" + debug_uint64_or_none(provenance.vertex_attribute_layout_hash);
+		text += ",vertex_attribute_format_hash=" + debug_uint64_or_none(provenance.vertex_attribute_format_hash);
+		text += ",vertex_input_uses_instance_rate=" + String(provenance.vertex_input_uses_instance_rate ? "true" : "false");
 		text += ",specialization_constant_count=" + itos(provenance.specialization_constant_count);
 		text += ",color_attachment_count=" + itos(provenance.color_attachment_count);
 		text += ",active_color_attachment_mask=\"0x" + String::num_uint64(provenance.active_color_attachment_mask, 16) + "\"";
@@ -9232,6 +9284,49 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			text += "\"" + changed_components[i] + "\"";
 		}
 		text += "]";
+		String vertex_input_relation = "different_vertex_input_recipe_broad";
+		if (base.vertex_input_recipe_hash == other.vertex_input_recipe_hash) {
+			vertex_input_relation = "same_vertex_input_recipe";
+		} else if (base.vertex_binding_description_count == 0 && base.vertex_attribute_count == 0 && (other.vertex_binding_description_count > 0 || other.vertex_attribute_count > 0)) {
+			vertex_input_relation = "null_vs_streamed_vertex_input";
+		} else if (other.vertex_binding_description_count == 0 && other.vertex_attribute_count == 0 && (base.vertex_binding_description_count > 0 || base.vertex_attribute_count > 0)) {
+			vertex_input_relation = "streamed_vs_null_vertex_input";
+		} else if (base.vertex_binding_description_count == other.vertex_binding_description_count && base.vertex_attribute_count == other.vertex_attribute_count && base.vertex_attribute_location_mask == other.vertex_attribute_location_mask && base.vertex_attribute_binding_mask == other.vertex_attribute_binding_mask && base.vertex_binding_input_rate_mask == other.vertex_binding_input_rate_mask) {
+			vertex_input_relation = "same_topology_different_layout";
+		} else if (base.vertex_binding_description_count == other.vertex_binding_description_count && base.vertex_attribute_count == other.vertex_attribute_count) {
+			vertex_input_relation = "same_shape_different_vertex_input_recipe";
+		}
+		text += ",vertex_input_delta={relation=\"" + vertex_input_relation + "\"";
+		text += ",binding_count_changed=" + String(base.vertex_binding_description_count != other.vertex_binding_description_count ? "true" : "false");
+		text += ",attribute_count_changed=" + String(base.vertex_attribute_count != other.vertex_attribute_count ? "true" : "false");
+		text += ",binding_stride_total_changed=" + String(base.vertex_binding_stride_total != other.vertex_binding_stride_total ? "true" : "false");
+		text += ",binding_input_rate_mask_changed=" + String(base.vertex_binding_input_rate_mask != other.vertex_binding_input_rate_mask ? "true" : "false");
+		text += ",attribute_location_mask_changed=" + String(base.vertex_attribute_location_mask != other.vertex_attribute_location_mask ? "true" : "false");
+		text += ",attribute_binding_mask_changed=" + String(base.vertex_attribute_binding_mask != other.vertex_attribute_binding_mask ? "true" : "false");
+		text += ",binding_layout_hash_changed=" + String(base.vertex_binding_layout_hash != other.vertex_binding_layout_hash ? "true" : "false");
+		text += ",attribute_layout_hash_changed=" + String(base.vertex_attribute_layout_hash != other.vertex_attribute_layout_hash ? "true" : "false");
+		text += ",attribute_format_hash_changed=" + String(base.vertex_attribute_format_hash != other.vertex_attribute_format_hash ? "true" : "false");
+		text += ",uses_instance_rate_changed=" + String(base.vertex_input_uses_instance_rate != other.vertex_input_uses_instance_rate ? "true" : "false");
+		text += ",base_class=\"" + String(base.vertex_binding_description_count == 0 && base.vertex_attribute_count == 0 ? "null_vertex_input" : (base.vertex_input_uses_instance_rate ? "instanced_vertex_input" : "streamed_vertex_input")) + "\"";
+		text += ",other_class=\"" + String(other.vertex_binding_description_count == 0 && other.vertex_attribute_count == 0 ? "null_vertex_input" : (other.vertex_input_uses_instance_rate ? "instanced_vertex_input" : "streamed_vertex_input")) + "\"";
+		text += ",base_runtime_shape={binding_count=" + itos(base.vertex_binding_description_count);
+		text += ",attribute_count=" + itos(base.vertex_attribute_count);
+		text += ",binding_stride_total=" + itos(base.vertex_binding_stride_total);
+		text += ",binding_input_rate_mask=\"0x" + String::num_uint64(base.vertex_binding_input_rate_mask, 16) + "\"";
+		text += ",attribute_location_mask=\"0x" + String::num_uint64(base.vertex_attribute_location_mask, 16) + "\"";
+		text += ",attribute_binding_mask=\"0x" + String::num_uint64(base.vertex_attribute_binding_mask, 16) + "\"";
+		text += ",binding_layout_hash=" + debug_uint64_or_none(base.vertex_binding_layout_hash);
+		text += ",attribute_layout_hash=" + debug_uint64_or_none(base.vertex_attribute_layout_hash);
+		text += ",attribute_format_hash=" + debug_uint64_or_none(base.vertex_attribute_format_hash) + "}";
+		text += ",other_runtime_shape={binding_count=" + itos(other.vertex_binding_description_count);
+		text += ",attribute_count=" + itos(other.vertex_attribute_count);
+		text += ",binding_stride_total=" + itos(other.vertex_binding_stride_total);
+		text += ",binding_input_rate_mask=\"0x" + String::num_uint64(other.vertex_binding_input_rate_mask, 16) + "\"";
+		text += ",attribute_location_mask=\"0x" + String::num_uint64(other.vertex_attribute_location_mask, 16) + "\"";
+		text += ",attribute_binding_mask=\"0x" + String::num_uint64(other.vertex_attribute_binding_mask, 16) + "\"";
+		text += ",binding_layout_hash=" + debug_uint64_or_none(other.vertex_binding_layout_hash);
+		text += ",attribute_layout_hash=" + debug_uint64_or_none(other.vertex_attribute_layout_hash);
+		text += ",attribute_format_hash=" + debug_uint64_or_none(other.vertex_attribute_format_hash) + "}}";
 		text += ",shape_delta={shader_stage_count=" + String(base.shader_stage_count == other.shader_stage_count ? "same" : "changed");
 		text += ",vertex_binding_description_count=" + String(base.vertex_binding_description_count == other.vertex_binding_description_count ? "same" : "changed");
 		text += ",vertex_attribute_count=" + String(base.vertex_attribute_count == other.vertex_attribute_count ? "same" : "changed");

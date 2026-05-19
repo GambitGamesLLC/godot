@@ -493,6 +493,14 @@ private:
 		uint32_t shader_stage_mask = 0;
 		uint32_t vertex_binding_description_count = 0;
 		uint32_t vertex_attribute_count = 0;
+		uint32_t vertex_binding_stride_total = 0;
+		uint32_t vertex_binding_input_rate_mask = 0;
+		uint32_t vertex_attribute_location_mask = 0;
+		uint32_t vertex_attribute_binding_mask = 0;
+		uint64_t vertex_binding_layout_hash = 0;
+		uint64_t vertex_attribute_layout_hash = 0;
+		uint64_t vertex_attribute_format_hash = 0;
+		bool vertex_input_uses_instance_rate = false;
 		uint32_t specialization_constant_count = 0;
 		uint32_t color_attachment_count = 0;
 		uint32_t active_color_attachment_mask = 0;
