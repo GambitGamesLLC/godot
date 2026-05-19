@@ -5459,6 +5459,115 @@ static void _attachment_reference_to_vk(const RDD::AttachmentReference &p_attach
 	r_vk_attachment_reference->aspectMask = (VkImageAspectFlags)p_attachment_reference.aspect;
 }
 
+static uint64_t _debug_hash_attachment_reference_compatibility(const RDD::AttachmentReference &p_attachment_reference) {
+	uint64_t hash = hash_murmur3_one_64(p_attachment_reference.attachment);
+	hash = hash_murmur3_one_64(p_attachment_reference.layout, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_attachment_reference.aspect, hash);
+	return hash;
+}
+
+static uint64_t _debug_hash_render_pass_exact(const VectorView<RDD::Attachment> &p_attachments, const VectorView<RDD::Subpass> &p_subpasses, const VectorView<RDD::SubpassDependency> &p_subpass_dependencies, uint32_t p_view_count, const RDD::AttachmentReference &p_fragment_density_map_attachment) {
+	uint64_t hash = hash_murmur3_one_64(p_attachments.size());
+	for (uint32_t i = 0; i < p_attachments.size(); i++) {
+		const RDD::Attachment &attachment = p_attachments[i];
+		hash = hash_murmur3_one_64(attachment.format, hash);
+		hash = hash_murmur3_one_64(attachment.samples, hash);
+		hash = hash_murmur3_one_64(attachment.load_op, hash);
+		hash = hash_murmur3_one_64(attachment.store_op, hash);
+		hash = hash_murmur3_one_64(attachment.stencil_load_op, hash);
+		hash = hash_murmur3_one_64(attachment.stencil_store_op, hash);
+		hash = hash_murmur3_one_64(attachment.initial_layout, hash);
+		hash = hash_murmur3_one_64(attachment.final_layout, hash);
+	}
+	hash = hash_murmur3_one_64(p_subpasses.size(), hash);
+	for (uint32_t i = 0; i < p_subpasses.size(); i++) {
+		const RDD::Subpass &subpass = p_subpasses[i];
+		hash = hash_murmur3_one_64(subpass.input_references.size(), hash);
+		for (uint32_t j = 0; j < subpass.input_references.size(); j++) {
+			hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(subpass.input_references[j]), hash);
+		}
+		hash = hash_murmur3_one_64(subpass.color_references.size(), hash);
+		for (uint32_t j = 0; j < subpass.color_references.size(); j++) {
+			hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(subpass.color_references[j]), hash);
+		}
+		hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(subpass.depth_stencil_reference), hash);
+		hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(subpass.depth_resolve_reference), hash);
+		hash = hash_murmur3_one_64(subpass.resolve_references.size(), hash);
+		for (uint32_t j = 0; j < subpass.resolve_references.size(); j++) {
+			hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(subpass.resolve_references[j]), hash);
+		}
+		hash = hash_murmur3_one_64(subpass.preserve_attachments.size(), hash);
+		for (uint32_t j = 0; j < subpass.preserve_attachments.size(); j++) {
+			hash = hash_murmur3_one_64(subpass.preserve_attachments[j], hash);
+		}
+		hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(subpass.fragment_shading_rate_reference), hash);
+		hash = hash_murmur3_one_64(subpass.fragment_shading_rate_texel_size.x, hash);
+		hash = hash_murmur3_one_64(subpass.fragment_shading_rate_texel_size.y, hash);
+	}
+	hash = hash_murmur3_one_64(p_subpass_dependencies.size(), hash);
+	for (uint32_t i = 0; i < p_subpass_dependencies.size(); i++) {
+		const RDD::SubpassDependency &dependency = p_subpass_dependencies[i];
+		hash = hash_murmur3_one_64(dependency.src_subpass, hash);
+		hash = hash_murmur3_one_64(dependency.dst_subpass, hash);
+		hash = hash_murmur3_one_64((uint64_t)dependency.src_stages, hash);
+		hash = hash_murmur3_one_64((uint64_t)dependency.dst_stages, hash);
+		hash = hash_murmur3_one_64((uint64_t)dependency.src_access, hash);
+		hash = hash_murmur3_one_64((uint64_t)dependency.dst_access, hash);
+	}
+	hash = hash_murmur3_one_64(p_view_count, hash);
+	hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(p_fragment_density_map_attachment), hash);
+	return hash;
+}
+
+static uint64_t _debug_hash_render_pass_subpass_compatibility(const VectorView<RDD::Attachment> &p_attachments, const RDD::Subpass &p_subpass) {
+	uint64_t hash = hash_murmur3_one_64(p_subpass.input_references.size());
+	for (uint32_t i = 0; i < p_subpass.input_references.size(); i++) {
+		const RDD::AttachmentReference &reference = p_subpass.input_references[i];
+		hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(reference), hash);
+		if (reference.attachment != RDD::AttachmentReference::UNUSED && reference.attachment < p_attachments.size()) {
+			hash = hash_murmur3_one_64(p_attachments[reference.attachment].format, hash);
+			hash = hash_murmur3_one_64(p_attachments[reference.attachment].samples, hash);
+		}
+	}
+	hash = hash_murmur3_one_64(p_subpass.color_references.size(), hash);
+	for (uint32_t i = 0; i < p_subpass.color_references.size(); i++) {
+		const RDD::AttachmentReference &reference = p_subpass.color_references[i];
+		hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(reference), hash);
+		if (reference.attachment != RDD::AttachmentReference::UNUSED && reference.attachment < p_attachments.size()) {
+			hash = hash_murmur3_one_64(p_attachments[reference.attachment].format, hash);
+			hash = hash_murmur3_one_64(p_attachments[reference.attachment].samples, hash);
+		}
+	}
+	const RDD::AttachmentReference *single_refs[] = { &p_subpass.depth_stencil_reference, &p_subpass.depth_resolve_reference, &p_subpass.fragment_shading_rate_reference };
+	for (const RDD::AttachmentReference *reference : single_refs) {
+		hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(*reference), hash);
+		if (reference->attachment != RDD::AttachmentReference::UNUSED && reference->attachment < p_attachments.size()) {
+			hash = hash_murmur3_one_64(p_attachments[reference->attachment].format, hash);
+			hash = hash_murmur3_one_64(p_attachments[reference->attachment].samples, hash);
+		}
+	}
+	hash = hash_murmur3_one_64(p_subpass.resolve_references.size(), hash);
+	for (uint32_t i = 0; i < p_subpass.resolve_references.size(); i++) {
+		const RDD::AttachmentReference &reference = p_subpass.resolve_references[i];
+		hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(reference), hash);
+		if (reference.attachment != RDD::AttachmentReference::UNUSED && reference.attachment < p_attachments.size()) {
+			hash = hash_murmur3_one_64(p_attachments[reference.attachment].format, hash);
+			hash = hash_murmur3_one_64(p_attachments[reference.attachment].samples, hash);
+		}
+	}
+	return hash;
+}
+
+static uint64_t _debug_hash_render_pass_compatibility(const VectorView<RDD::Attachment> &p_attachments, const VectorView<RDD::Subpass> &p_subpasses, uint32_t p_view_count, bool p_uses_fragment_density_map) {
+	uint64_t hash = hash_murmur3_one_64(p_subpasses.size());
+	for (uint32_t i = 0; i < p_subpasses.size(); i++) {
+		hash = hash_murmur3_one_64(_debug_hash_render_pass_subpass_compatibility(p_attachments, p_subpasses[i]), hash);
+	}
+	hash = hash_murmur3_one_64(p_view_count, hash);
+	hash = hash_murmur3_one_64(p_uses_fragment_density_map ? 1 : 0, hash);
+	return hash;
+}
+
 RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) {
 	// These are only used if we use multiview but we need to define them in scope.
 	const uint32_t view_mask = (1 << p_view_count) - 1;
@@ -5616,6 +5725,17 @@ RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Att
 	RenderPassInfo *render_pass = VersatileResource::allocate<RenderPassInfo>(resources_allocator);
 	render_pass->vk_render_pass = vk_render_pass;
 	render_pass->uses_fragment_density_map = uses_fragment_density_map;
+	render_pass->debug_create_serial = ++debug_render_pass_create_serial_counter;
+	render_pass->debug_exact_hash = _debug_hash_render_pass_exact(p_attachments, p_subpasses, p_subpass_dependencies, p_view_count, p_fragment_density_map_attachment);
+	render_pass->debug_compatibility_hash = _debug_hash_render_pass_compatibility(p_attachments, p_subpasses, p_view_count, uses_fragment_density_map);
+	render_pass->debug_subpass_count = p_subpasses.size();
+	render_pass->debug_attachment_count = p_attachments.size();
+	render_pass->debug_dependency_count = p_subpass_dependencies.size();
+	render_pass->debug_view_count = p_view_count;
+	render_pass->debug_subpass_compatibility_hashes.resize(p_subpasses.size());
+	for (uint32_t i = 0; i < p_subpasses.size(); i++) {
+		render_pass->debug_subpass_compatibility_hashes[i] = _debug_hash_render_pass_subpass_compatibility(p_attachments, p_subpasses[i]);
+	}
 	return RenderPassID(render_pass);
 }
 
@@ -6409,7 +6529,16 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.pipeline_handle = (uint64_t)vk_pipeline;
 	pipeline_provenance.pipeline_layout_handle = (uint64_t)shader_info->vk_pipeline_layout;
 	pipeline_provenance.render_pass_handle = (uint64_t)render_pass->vk_render_pass;
+	pipeline_provenance.render_pass_exact_hash = render_pass->debug_exact_hash;
+	pipeline_provenance.render_pass_compatibility_hash = render_pass->debug_compatibility_hash;
+	pipeline_provenance.render_subpass_compatibility_hash = p_render_subpass < render_pass->debug_subpass_compatibility_hashes.size() ? render_pass->debug_subpass_compatibility_hashes[p_render_subpass] : 0;
+	pipeline_provenance.render_pass_create_serial = render_pass->debug_create_serial;
 	pipeline_provenance.render_subpass = p_render_subpass;
+	pipeline_provenance.render_pass_subpass_count = render_pass->debug_subpass_count;
+	pipeline_provenance.render_pass_attachment_count = render_pass->debug_attachment_count;
+	pipeline_provenance.render_pass_dependency_count = render_pass->debug_dependency_count;
+	pipeline_provenance.render_pass_view_count = render_pass->debug_view_count;
+	pipeline_provenance.render_pass_uses_fragment_density_map = render_pass->uses_fragment_density_map;
 	pipeline_provenance.shader_name = shader_info->name;
 
 	// Destroy any modules created temporarily by re-spirv.
@@ -8788,24 +8917,26 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",backend_command_serial=" + itos(entry.end_backend_command_serial) + "}";
 		return text;
 	};
-	const auto pipeline_provenance_summary = [](const DebugPipelineBindingProvenance &provenance) {
+	const auto debug_uint64_or_none = [](uint64_t p_value) {
+		return p_value == 0 ? String("none") : String("\"0x") + String::num_uint64(p_value, 16) + "\"";
+	};
+	const auto pipeline_provenance_summary = [&](const DebugPipelineBindingProvenance &provenance) {
 		if (!provenance.valid && provenance.pipeline_handle == 0 && provenance.pipeline_layout_handle == 0 && provenance.render_pass_handle == 0 && provenance.shader_name.is_empty()) {
 			return String("none");
 		}
 		String text = "{pipeline_handle=\"0x" + String::num_uint64(provenance.pipeline_handle, 16) + "\"";
-		text += ",pipeline_layout_handle=";
-		if (provenance.pipeline_layout_handle == 0) {
-			text += "none";
-		} else {
-			text += "\"0x" + String::num_uint64(provenance.pipeline_layout_handle, 16) + "\"";
-		}
-		text += ",render_pass_handle=";
-		if (provenance.render_pass_handle == 0) {
-			text += "none";
-		} else {
-			text += "\"0x" + String::num_uint64(provenance.render_pass_handle, 16) + "\"";
-		}
+		text += ",pipeline_layout_handle=" + debug_uint64_or_none(provenance.pipeline_layout_handle);
+		text += ",render_pass_handle=" + debug_uint64_or_none(provenance.render_pass_handle);
+		text += ",render_pass_create_serial=" + itos(provenance.render_pass_create_serial);
+		text += ",render_pass_exact_hash=" + debug_uint64_or_none(provenance.render_pass_exact_hash);
+		text += ",render_pass_compatibility_hash=" + debug_uint64_or_none(provenance.render_pass_compatibility_hash);
+		text += ",render_subpass_compatibility_hash=" + debug_uint64_or_none(provenance.render_subpass_compatibility_hash);
 		text += ",render_subpass=" + itos(provenance.render_subpass);
+		text += ",render_pass_subpass_count=" + itos(provenance.render_pass_subpass_count);
+		text += ",render_pass_attachment_count=" + itos(provenance.render_pass_attachment_count);
+		text += ",render_pass_dependency_count=" + itos(provenance.render_pass_dependency_count);
+		text += ",render_pass_view_count=" + itos(provenance.render_pass_view_count);
+		text += ",render_pass_uses_fragment_density_map=" + String(provenance.render_pass_uses_fragment_density_map ? "true" : "false");
 		text += ",shader_name=";
 		if (provenance.shader_name.is_empty()) {
 			text += "none";
@@ -8823,28 +8954,49 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			return String("same_pipeline");
 		}
 		if (base.pipeline_layout_handle == other.pipeline_layout_handle && base.render_pass_handle == other.render_pass_handle && base.render_subpass == other.render_subpass && (base.pipeline_layout_handle != 0 || base.render_pass_handle != 0)) {
-			return String("different_pipeline_same_compatibility_context");
+			return String("different_pipeline_same_handle_context");
 		}
-		if ((base.pipeline_layout_handle != other.pipeline_layout_handle) || (base.render_pass_handle != other.render_pass_handle) || (base.render_subpass != other.render_subpass)) {
+		if (base.pipeline_layout_handle == other.pipeline_layout_handle && base.render_pass_exact_hash != 0 && base.render_pass_exact_hash == other.render_pass_exact_hash && base.render_subpass == other.render_subpass) {
+			return String("different_pipeline_same_exact_render_pass_recipe");
+		}
+		if (base.pipeline_layout_handle == other.pipeline_layout_handle && base.render_pass_compatibility_hash != 0 && base.render_pass_compatibility_hash == other.render_pass_compatibility_hash && base.render_subpass_compatibility_hash != 0 && base.render_subpass_compatibility_hash == other.render_subpass_compatibility_hash && base.render_subpass == other.render_subpass) {
+			return String("different_pipeline_same_render_pass_compatibility");
+		}
+		if ((base.pipeline_layout_handle != other.pipeline_layout_handle) || (base.render_pass_compatibility_hash != other.render_pass_compatibility_hash) || (base.render_subpass_compatibility_hash != other.render_subpass_compatibility_hash) || (base.render_subpass != other.render_subpass)) {
 			return String("different_pipeline_different_compatibility_context");
 		}
 		return String("different_pipeline_unknown_context_delta");
 	};
+	const auto render_pass_scope_pipeline_relation = [](const DebugCommandStateSnapshot &state) {
+		const DebugPipelineBindingProvenance &provenance = state.render_pipeline_provenance;
+		if ((!state.active_render_pass && state.active_render_pass_handle == 0) || (!provenance.valid && provenance.render_pass_handle == 0)) {
+			return String("missing");
+		}
+		if (state.active_render_pass_handle == provenance.render_pass_handle && state.subpass_index == provenance.render_subpass && state.active_render_pass_handle != 0) {
+			return String("same_handle");
+		}
+		if (state.active_render_pass_exact_hash != 0 && state.active_render_pass_exact_hash == provenance.render_pass_exact_hash && state.subpass_index == provenance.render_subpass) {
+			return String("different_handle_same_exact_render_pass_recipe");
+		}
+		if (state.active_render_pass_compatibility_hash != 0 && state.active_render_pass_compatibility_hash == provenance.render_pass_compatibility_hash && state.active_render_subpass_compatibility_hash != 0 && state.active_render_subpass_compatibility_hash == provenance.render_subpass_compatibility_hash && state.subpass_index == provenance.render_subpass) {
+			return String("different_handle_same_render_pass_compatibility");
+		}
+		return String("different_handle_different_compatibility_context");
+	};
 	const auto command_state_snapshot_summary = [&](const DebugCommandStateSnapshot &state) {
 		String text = "{render_pass_active=" + String(state.active_render_pass ? "true" : "false");
 		text += ",framebuffer_active=" + String(state.active_framebuffer ? "true" : "false");
-		text += ",render_pass_handle=";
-		if (state.active_render_pass_handle == 0) {
-			text += "none";
-		} else {
-			text += "\"0x" + String::num_uint64(state.active_render_pass_handle, 16) + "\"";
-		}
-		text += ",framebuffer_handle=";
-		if (state.active_framebuffer_handle == 0) {
-			text += "none";
-		} else {
-			text += "\"0x" + String::num_uint64(state.active_framebuffer_handle, 16) + "\"";
-		}
+		text += ",render_pass_handle=" + debug_uint64_or_none(state.active_render_pass_handle);
+		text += ",render_pass_create_serial=" + itos(state.active_render_pass_create_serial);
+		text += ",render_pass_exact_hash=" + debug_uint64_or_none(state.active_render_pass_exact_hash);
+		text += ",render_pass_compatibility_hash=" + debug_uint64_or_none(state.active_render_pass_compatibility_hash);
+		text += ",render_subpass_compatibility_hash=" + debug_uint64_or_none(state.active_render_subpass_compatibility_hash);
+		text += ",render_pass_subpass_count=" + itos(state.active_render_pass_subpass_count);
+		text += ",render_pass_attachment_count=" + itos(state.active_render_pass_attachment_count);
+		text += ",render_pass_dependency_count=" + itos(state.active_render_pass_dependency_count);
+		text += ",render_pass_view_count=" + itos(state.active_render_pass_view_count);
+		text += ",render_pass_uses_fragment_density_map=" + String(state.active_render_pass_uses_fragment_density_map ? "true" : "false");
+		text += ",framebuffer_handle=" + debug_uint64_or_none(state.active_framebuffer_handle);
 		text += ",subpass=" + itos(state.subpass_index);
 		text += ",render_pipeline_bound=" + String(state.render_pipeline_bound ? "true" : "false");
 		text += ",vertex_binding_count=" + itos(state.vertex_binding_count);
@@ -8856,6 +9008,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			text += "none";
 		}
 		text += ",breadcrumb=\"" + _debug_breadcrumb_to_string(state.breadcrumb) + "\"";
+		text += ",scope_pipeline_relation=\"" + render_pass_scope_pipeline_relation(state) + "\"";
 		text += ",pipeline_provenance=" + pipeline_provenance_summary(state.render_pipeline_provenance);
 		text += "}";
 		return text;
@@ -8864,6 +9017,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		String text = "{render_pass_active=" + String(before_state.active_render_pass != after_state.active_render_pass ? "changed" : "same");
 		text += ",framebuffer_active=" + String(before_state.active_framebuffer != after_state.active_framebuffer ? "changed" : "same");
 		text += ",render_pass_handle=" + String(before_state.active_render_pass_handle != after_state.active_render_pass_handle ? "changed" : "same");
+		text += ",render_pass_exact_hash=" + String(before_state.active_render_pass_exact_hash != after_state.active_render_pass_exact_hash ? "changed" : "same");
+		text += ",render_pass_compatibility_hash=" + String(before_state.active_render_pass_compatibility_hash != after_state.active_render_pass_compatibility_hash ? "changed" : "same");
+		text += ",render_subpass_compatibility_hash=" + String(before_state.active_render_subpass_compatibility_hash != after_state.active_render_subpass_compatibility_hash ? "changed" : "same");
 		text += ",framebuffer_handle=" + String(before_state.active_framebuffer_handle != after_state.active_framebuffer_handle ? "changed" : "same");
 		text += ",subpass=" + String(before_state.subpass_index != after_state.subpass_index ? "changed" : "same");
 		text += ",render_pipeline_bound=" + String(before_state.render_pipeline_bound != after_state.render_pipeline_bound ? "changed" : "same");
@@ -8871,6 +9027,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",index_buffer_bound=" + String(before_state.index_buffer_bound != after_state.index_buffer_bound ? "changed" : "same");
 		text += ",index_format=" + String(before_state.index_format != after_state.index_format ? "changed" : "same");
 		text += ",breadcrumb=" + String(before_state.breadcrumb != after_state.breadcrumb ? "changed" : "same");
+		text += ",scope_pipeline_relation=" + String(render_pass_scope_pipeline_relation(before_state) == render_pass_scope_pipeline_relation(after_state) ? "same" : "changed");
 		text += ",pipeline_provenance=" + String(pipeline_provenance_relation(before_state.render_pipeline_provenance, after_state.render_pipeline_provenance) == "same_pipeline" ? "same" : "changed") + "}";
 		return text;
 	};
@@ -9152,13 +9309,14 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 					target_label_entry.first_pipeline_bind_before_state.active_render_pass == target_label_entry.first_pipeline_bind_after_state.active_render_pass &&
 					target_label_entry.first_pipeline_bind_before_state.active_framebuffer == target_label_entry.first_pipeline_bind_after_state.active_framebuffer &&
 					target_label_entry.first_pipeline_bind_before_state.active_render_pass_handle == target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle &&
+					target_label_entry.first_pipeline_bind_before_state.active_render_pass_exact_hash == target_label_entry.first_pipeline_bind_after_state.active_render_pass_exact_hash &&
+					target_label_entry.first_pipeline_bind_before_state.active_render_pass_compatibility_hash == target_label_entry.first_pipeline_bind_after_state.active_render_pass_compatibility_hash &&
+					target_label_entry.first_pipeline_bind_before_state.active_render_subpass_compatibility_hash == target_label_entry.first_pipeline_bind_after_state.active_render_subpass_compatibility_hash &&
 					target_label_entry.first_pipeline_bind_before_state.active_framebuffer_handle == target_label_entry.first_pipeline_bind_after_state.active_framebuffer_handle &&
 					target_label_entry.first_pipeline_bind_before_state.subpass_index == target_label_entry.first_pipeline_bind_after_state.subpass_index;
-			const bool pipeline_packet_matches_active_scope =
-					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle != 0 &&
-					target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle != 0 &&
-					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle == target_label_entry.first_pipeline_bind_after_state.active_render_pass_handle &&
-					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass == target_label_entry.first_pipeline_bind_after_state.subpass_index;
+			const String pipeline_packet_scope_relation = render_pass_scope_pipeline_relation(target_label_entry.first_pipeline_bind_after_state);
+			const bool pipeline_packet_matches_active_scope = pipeline_packet_scope_relation == "same_handle";
+			const bool pipeline_packet_shares_compatible_scope = pipeline_packet_scope_relation == "same_handle" || pipeline_packet_scope_relation == "different_handle_same_exact_render_pass_recipe" || pipeline_packet_scope_relation == "different_handle_same_render_pass_compatibility";
 			const bool bind_delta_is_pipeline_only =
 					target_label_entry.first_pipeline_bind_before_state.active_render_pass == target_label_entry.first_pipeline_bind_after_state.active_render_pass &&
 					target_label_entry.first_pipeline_bind_before_state.active_framebuffer == target_label_entry.first_pipeline_bind_after_state.active_framebuffer &&
@@ -9184,7 +9342,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			if (!active_scope_stable_across_bind) {
 				bind_owned_attachment_class = "scope_churn_during_pipeline_bind";
 				narrower_bind_owned_seam = "active_pass_scope";
-			} else if (!pipeline_packet_matches_active_scope) {
+			} else if (!pipeline_packet_shares_compatible_scope) {
 				bind_owned_attachment_class = "pipeline_packet_scope_mismatch";
 				narrower_bind_owned_seam = "pipeline_compatibility_context";
 			} else if (!bind_delta_is_pipeline_only) {
@@ -9220,6 +9378,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			text += ",narrower_bind_owned_seam=\"" + narrower_bind_owned_seam + "\"";
 			text += ",active_scope_stable_across_bind=" + String(active_scope_stable_across_bind ? "true" : "false");
 			text += ",pipeline_packet_matches_active_scope=" + String(pipeline_packet_matches_active_scope ? "true" : "false");
+			text += ",pipeline_packet_shares_compatible_scope=" + String(pipeline_packet_shares_compatible_scope ? "true" : "false");
+			text += ",pipeline_packet_scope_relation=\"" + pipeline_packet_scope_relation + "\"";
 			text += ",bind_delta_is_pipeline_only=" + String(bind_delta_is_pipeline_only ? "true" : "false");
 			text += ",active_scope_before={render_pass_handle=";
 			if (target_label_entry.first_pipeline_bind_before_state.active_render_pass_handle == 0) {
@@ -9253,6 +9413,10 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			} else {
 				text += "\"0x" + String::num_uint64(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle, 16) + "\"";
 			}
+			text += ",render_pass_create_serial=" + itos(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_create_serial);
+			text += ",render_pass_exact_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_exact_hash);
+			text += ",render_pass_compatibility_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_compatibility_hash);
+			text += ",render_subpass_compatibility_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass_compatibility_hash);
 			text += ",render_subpass=" + itos(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass);
 			text += ",pipeline_layout_handle=";
 			if (target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle == 0) {
@@ -9267,6 +9431,15 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 				text += "\"" + target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name + "\"";
 			}
 			text += "}";
+			text += ",scope_packet_lineage={relation=\"" + pipeline_packet_scope_relation + "\"";
+			text += ",active_render_pass_create_serial=" + itos(target_label_entry.first_pipeline_bind_after_state.active_render_pass_create_serial);
+			text += ",active_render_pass_exact_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.active_render_pass_exact_hash);
+			text += ",active_render_pass_compatibility_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.active_render_pass_compatibility_hash);
+			text += ",active_render_subpass_compatibility_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.active_render_subpass_compatibility_hash);
+			text += ",pipeline_render_pass_create_serial=" + itos(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_create_serial);
+			text += ",pipeline_render_pass_exact_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_exact_hash);
+			text += ",pipeline_render_pass_compatibility_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_compatibility_hash);
+			text += ",pipeline_render_subpass_compatibility_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass_compatibility_hash) + "}";
 			text += "}";
 			text += ",neighboring_pass_pipeline_compare={previous=";
 			if (previous_meaningful_label_entry_index == -1) {
@@ -9452,6 +9625,19 @@ RenderingDeviceDriverVulkan::DebugCommandStateSnapshot RenderingDeviceDriverVulk
 	snapshot.active_render_pass = p_command_buffer->active_render_pass != nullptr;
 	snapshot.active_framebuffer = p_command_buffer->active_framebuffer != nullptr;
 	snapshot.active_render_pass_handle = p_command_buffer->active_render_pass != nullptr ? (uint64_t)p_command_buffer->active_render_pass->vk_render_pass : 0;
+	if (p_command_buffer->active_render_pass != nullptr) {
+		snapshot.active_render_pass_exact_hash = p_command_buffer->active_render_pass->debug_exact_hash;
+		snapshot.active_render_pass_compatibility_hash = p_command_buffer->active_render_pass->debug_compatibility_hash;
+		snapshot.active_render_pass_create_serial = p_command_buffer->active_render_pass->debug_create_serial;
+		snapshot.active_render_pass_subpass_count = p_command_buffer->active_render_pass->debug_subpass_count;
+		snapshot.active_render_pass_attachment_count = p_command_buffer->active_render_pass->debug_attachment_count;
+		snapshot.active_render_pass_dependency_count = p_command_buffer->active_render_pass->debug_dependency_count;
+		snapshot.active_render_pass_view_count = p_command_buffer->active_render_pass->debug_view_count;
+		snapshot.active_render_pass_uses_fragment_density_map = p_command_buffer->active_render_pass->uses_fragment_density_map;
+		if (p_command_buffer->active_render_subpass < p_command_buffer->active_render_pass->debug_subpass_compatibility_hashes.size()) {
+			snapshot.active_render_subpass_compatibility_hash = p_command_buffer->active_render_pass->debug_subpass_compatibility_hashes[p_command_buffer->active_render_subpass];
+		}
+	}
 	snapshot.active_framebuffer_handle = p_command_buffer->active_framebuffer != nullptr ? (uint64_t)p_command_buffer->active_framebuffer->vk_framebuffer : 0;
 	snapshot.subpass_index = p_command_buffer->active_render_subpass;
 	snapshot.render_pipeline_bound = p_command_buffer->debug_render_pipeline_bound;

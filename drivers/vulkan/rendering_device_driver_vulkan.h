@@ -469,7 +469,16 @@ private:
 		uint64_t pipeline_handle = 0;
 		uint64_t pipeline_layout_handle = 0;
 		uint64_t render_pass_handle = 0;
+		uint64_t render_pass_exact_hash = 0;
+		uint64_t render_pass_compatibility_hash = 0;
+		uint64_t render_subpass_compatibility_hash = 0;
+		uint64_t render_pass_create_serial = 0;
 		uint32_t render_subpass = 0;
+		uint32_t render_pass_subpass_count = 0;
+		uint32_t render_pass_attachment_count = 0;
+		uint32_t render_pass_dependency_count = 0;
+		uint32_t render_pass_view_count = 0;
+		bool render_pass_uses_fragment_density_map = false;
 		String shader_name;
 	};
 
@@ -477,8 +486,17 @@ private:
 		bool active_render_pass = false;
 		bool active_framebuffer = false;
 		uint64_t active_render_pass_handle = 0;
+		uint64_t active_render_pass_exact_hash = 0;
+		uint64_t active_render_pass_compatibility_hash = 0;
+		uint64_t active_render_subpass_compatibility_hash = 0;
+		uint64_t active_render_pass_create_serial = 0;
 		uint64_t active_framebuffer_handle = 0;
 		uint32_t subpass_index = 0;
+		uint32_t active_render_pass_subpass_count = 0;
+		uint32_t active_render_pass_attachment_count = 0;
+		uint32_t active_render_pass_dependency_count = 0;
+		uint32_t active_render_pass_view_count = 0;
+		bool active_render_pass_uses_fragment_density_map = false;
 		bool render_pipeline_bound = false;
 		uint32_t vertex_binding_count = 0;
 		bool index_buffer_bound = false;
@@ -864,6 +882,7 @@ private:
 	String pipeline_cache_id;
 	HashMap<uint64_t, bool> has_comp_alpha;
 	HashMap<uint64_t, DebugPipelineBindingProvenance> debug_render_pipeline_provenance_map;
+	uint64_t debug_render_pass_create_serial_counter = 0;
 
 public:
 	virtual void pipeline_free(PipelineID p_pipeline) override final;
@@ -889,6 +908,14 @@ private:
 	struct RenderPassInfo {
 		VkRenderPass vk_render_pass = VK_NULL_HANDLE;
 		bool uses_fragment_density_map = false;
+		uint64_t debug_create_serial = 0;
+		uint64_t debug_exact_hash = 0;
+		uint64_t debug_compatibility_hash = 0;
+		LocalVector<uint64_t> debug_subpass_compatibility_hashes;
+		uint32_t debug_subpass_count = 0;
+		uint32_t debug_attachment_count = 0;
+		uint32_t debug_dependency_count = 0;
+		uint32_t debug_view_count = 0;
 	};
 
 public:
