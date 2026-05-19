@@ -1869,9 +1869,11 @@ Validation/build stayed on the refreshed source-built branch and kept the staged
 - QA notes/docs/log references as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
 
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-**Results:** Pending.
+**Results:** QA reran the same minimum valid host-Vulkan source-built repro on the refreshed pipeline-recipe instrumentation, keeping the staging projection-only (`projection_only + disabled`) and using the same checkpoint harness at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`. Exact artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-recipe-qa-vulkan-sourcebuild-20260519-115113/`. Exact launch used: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-recipe-qa-vulkan-sourcebuild-20260519-115113 no_present compositor projection_only disabled 120` (artifact abort / exit `134`; durable package includes `context.txt`, `env.txt`, `exact_command.txt`, `stdout.log`, `exit_status.txt`). Durable notes and artifact references were appended to `REF-07`.
+
+On the failing `submit_serial=9` command summary, Tonemap serial `8` still resolves to a concrete `TonemapShaderRD:0` packet with `graphics_recipe_hash="0x9c44278c"`, and the nearest meaningful neighboring late-pass packet remains `Command Graph (L88) (Draw)` with `relation="different_pipeline_different_compatibility_context"`. The new `neighboring_pass_pipeline_compare.next.recipe_delta=` payload classifies the surviving contrast as `graphics_recipe_relation="different_graphics_recipe"` with `graphics_recipe_hash_changed=true` and `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`. So the seam does **not** collapse to one field/component hash; it remains broad across multiple recipe buckets even though other buckets stay unchanged in the same comparison (`shader_stage_recipe_hash`, `rasterization_recipe_hash`, `multisample_recipe_hash`, `depth_stencil_recipe_hash`, `dynamic_state_recipe_hash`, plus the same compatible render-pass lineage). This advances the read inside the pipeline-owned packet by narrowing the candidate space from “the whole pipeline packet” to a specific multi-bucket contrast, but it does **not** yet isolate a single toxic sub-field. The broader source-built baseline did not move: `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` still keeps the old render-pass-handle caveat demoted, `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}` still keeps the `8 -> 9` handshake clean, `tonemap_to_l88_transition.first_meaningful_expansion="l88_label"` still places the first downstream ownership expansion exactly at `L88`, and `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`. Repeated compositor-callback `vformat` formatting errors persisted as runtime noise, but they did not change the recipe classification.
 
 ---
 
@@ -1882,6 +1884,92 @@ Validation/build stayed on the refreshed source-built branch and kept the staged
 **Role:** `auditor`
 **References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-cq6` after beads `oc-8vs` and `oc-i2z` complete. Independently audit whether the new Tonemap pipeline-owned-state evidence really advances the seam inside the current first poisoned-boundary candidate, whether the QA artifact supports the claimed serial-8 pipeline-state classification, and what the next tightest backend-owned seam should be if a tighter Tonemap pipeline-state sub-seam survives. Update this plan with actual findings, add audit notes if useful, and close bead `oc-cq6` with a clear reason when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- audit notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the fresh coder commit `d42bd313` plus the saved QA artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-recipe-qa-vulkan-sourcebuild-20260519-115113/` and found the claim materially supported.
+
+The source change really does advance the seam *inside* Tonemap’s serial-`8` pipeline-owned packet instead of just renaming the old packet. In `render_pipeline_create()`, the new instrumentation now hashes/stores a concrete graphics-pipeline recipe packet (`graphics_recipe_hash`, per-bucket recipe hashes, and shape fields) into `DebugPipelineBindingProvenance`, then emits `recipe_delta=` through the Tonemap/L88 comparison lane in `_debug_command_buffer_tonemap_pass_scope_summary()`. That means the new evidence is derived directly from the live Vulkan pipeline creation inputs plus the already-tracked bind provenance, not from a guessed post-hoc label classification.
+
+The QA artifact matches that source instrumentation exactly on the failing `submit_serial=9` slice. In `stdout.log`, Tonemap serial `8` still resolves to `TonemapShaderRD:0` with `graphics_recipe_hash="0x9c44278c"`; the contiguous `8 -> 9` setup pair still stays clean (`setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",pair_contract_exact=true,...}`); the packet-vs-active-scope caveat remains demoted to compatible aliasing (`bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",pipeline_packet_shares_compatible_scope=true,...}`); and the nearest meaningful downstream comparison is still `Command Graph (L88) (Draw)` with `relation="different_pipeline_different_compatibility_context"`. The new `recipe_delta=` payload on that same Tonemap→L88 contrast reports `graphics_recipe_relation="different_graphics_recipe"`, `graphics_recipe_hash_changed=true`, and `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`, while the remaining buckets stay unchanged (`shader_stage_recipe`, `rasterization`, `multisample`, `depth_stencil`, `dynamic_state`, plus the same compatible render-pass lineage object). So the current evidence really does narrow the surviving seam from “whole pipeline-owned packet” to a smaller **multi-bucket** packet contrast, but it still does **not** collapse to a single toxic field.
+
+Audit verdict: `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate, and the remaining pipeline-owned seam is still broad across multiple recipe buckets rather than one isolated field. The tightest next backend-owned seam to inspect from the surviving changed set should be **`vertex_input_recipe` first**: it is the most structural and least already-explained delta in the surviving contrast, while `pipeline_layout` was already exercised by the clean serial-`8 -> 9` handshake, and `blend_recipe` / `specialization_constants` remain broader shader-config buckets. In practice, the next pass should instrument the Tonemap serial-`8` pipeline creation lane deeply enough to explain *why* its zero-vertex-input/fullscreen-style packet differs from the L88 draw packet and whether that difference is still necessary/sufficient on the failing submit.
+
+Concern discovered: the current classification is only as strong as the chosen nearest comparison packet (`L88`). That is enough to support the broad multi-bucket verdict, but it is **not** yet a proof that one of the four changed buckets is uniquely toxic by itself.
+
+---
+
+### Task 82: Inspect the Tonemap vertex-input recipe seam at serial `8` on failing `submit_serial=9`
+
+**Bead ID:** `oc-c03`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-c03` and keep the investigation projection-only on the refreshed source-built Godot binary. The current best read is that `Tonemap (L87) (Draw)` remains the first poisoned-boundary candidate, the render-pass mismatch has been demoted to expected compatible aliasing, the `8->9` setup pair contract is clean, and the remaining pipeline-owned seam is still broad across multiple recipe buckets compared with `L88`. Auditor guidance says to split `vertex_input_recipe` first as the sharpest surviving structural delta. Add small, reversible, high-signal instrumentation that inspects and contrasts Tonemap’s vertex-input recipe/state against the nearest meaningful compatible late-pass packet so we can tell whether the seam collapses to a narrower vertex-input-owned sub-boundary or stays broad. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-c03` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added small reversible vertex-input-specific instrumentation on top of the existing Tonemap/L88 pipeline provenance lane in commit `e33c77f9` (`Add Tonemap vertex-input recipe instrumentation`). `DebugPipelineBindingProvenance` now captures a tighter vertex-input packet summary at pipeline creation time: binding/attribute counts, total binding stride, per-binding instance-rate mask, attribute location/binding masks, separate binding-layout / attribute-layout / attribute-format hashes, and a coarse packet class (`null_vertex_input`, `streamed_vertex_input`, `instanced_vertex_input`). `_debug_command_buffer_tonemap_pass_scope_summary()` now emits those fields in each pipeline provenance summary plus a dedicated `vertex_input_delta=` block inside the Tonemap→neighbor recipe comparison so QA can tell whether the surviving seam collapses to a vertex-input-only sub-boundary or stays broad.
+
+**Validation / Repro:**
+- `git diff --check`
+- `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64`
+- Projection-only staged repro on the refreshed source-built binary:
+  `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled <artifact_root> no_present compositor projection_only disabled 120`
+
+**Artifact Root:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-vertex-input-coder-vulkan-sourcebuild-20260519-120705/`
+
+**Observed Result:** The failing `submit_serial=9` artifact now makes the vertex-input seam explicit. Tonemap serial `8` stays `vertex_input_class="null_vertex_input"` with zero bindings/zero attributes and no instance-rate usage. The nearest meaningful late-pass compare at `Command Graph (L88) (Draw)` resolves to `vertex_input_class="instanced_vertex_input"` with `binding_count=1`, `attribute_count=8`, `binding_stride_total=128`, `binding_input_rate_mask="0x1"`, `attribute_location_mask="0xff00"`, and non-empty layout/format hashes. The new `vertex_input_delta=` payload classifies that contrast as `relation="null_vs_streamed_vertex_input"` while the surviving changed component set is still `["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`.
+
+That means the seam **did not collapse to a narrower vertex-input-only poisoned boundary yet**. The instrumentation narrows the structural story: the sharpest surviving vertex-input contrast is now clearly “Tonemap null/fullscreen-style packet vs L88 instanced canvas packet,” but the broad bucket still survives because blend, specialization constants, and pipeline layout remain changed in the same Tonemap→L88 packet compare. The next QA pass should therefore focus on proving whether `vertex_input_recipe` can be isolated further inside that packet, while keeping the current default expectation that the surviving bucket is still broad until the new evidence says otherwise.
+
+---
+
+### Task 83: QA classify the Tonemap vertex-input recipe seam at serial `8` on failing `submit_serial=9`
+
+**Bead ID:** `oc-lb4`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-lb4` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new Tonemap vertex-input instrumentation on failing `submit_serial=9`. Determine whether the remaining pipeline-owned seam collapses to a narrower vertex-input-owned sub-boundary or stays broad, while confirming whether Tonemap still remains the first poisoned-boundary candidate. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-lb4` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Pending.
+
+---
+
+### Task 84: Audit the Tonemap vertex-input recipe findings at serial `8`
+
+**Bead ID:** `oc-2n1`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-2n1` after beads `oc-c03` and `oc-lb4` complete. Independently audit whether the new Tonemap vertex-input evidence really advances the seam inside the current first poisoned-boundary candidate, whether the QA artifact supports the claimed vertex-input classification, and what the next tightest backend-owned seam should be if the vertex-input bucket still does not isolate it. Update this plan with actual findings, add audit notes if useful, and close bead `oc-2n1` with a clear reason when complete.
 
 **Folders Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/`
