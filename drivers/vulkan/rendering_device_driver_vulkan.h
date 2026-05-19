@@ -464,6 +464,17 @@ private:
 		uint32_t unclassified_from_first_draw = 0;
 	};
 
+	struct DebugCommandStateSnapshot {
+		bool active_render_pass = false;
+		bool active_framebuffer = false;
+		uint32_t subpass_index = 0;
+		bool render_pipeline_bound = false;
+		uint32_t vertex_binding_count = 0;
+		bool index_buffer_bound = false;
+		IndexBufferFormat index_format = INDEX_BUFFER_FORMAT_UINT16;
+		uint32_t breadcrumb = 0;
+	};
+
 	struct DebugLabelEntry {
 		String label;
 		String operation_tag;
@@ -519,7 +530,10 @@ private:
 		String last_setup_backend_command;
 		uint64_t first_pipeline_bind_serial = 0;
 		uint64_t last_pipeline_bind_serial = 0;
+		DebugCommandStateSnapshot first_pipeline_bind_before_state;
+		DebugCommandStateSnapshot first_pipeline_bind_after_state;
 		uint64_t first_uniform_bind_serial = 0;
+		DebugCommandStateSnapshot first_uniform_bind_before_state;
 		uint64_t last_uniform_bind_serial = 0;
 		uint64_t first_draw_backend_command_serial = 0;
 		uint64_t last_draw_backend_command_serial = 0;
@@ -1022,6 +1036,7 @@ public:
 	static String _debug_command_buffer_opaque_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_tonemap_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer);
+	static DebugCommandStateSnapshot _debug_capture_command_state_snapshot(const CommandBufferInfo *p_command_buffer);
 	uint32_t _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
 	void _debug_record_active_render_pass_scope_command(CommandBufferInfo *p_command_buffer, const char *p_command_name);
 	void _debug_record_label_backend_command(CommandBufferInfo *p_command_buffer, const char *p_command_name);

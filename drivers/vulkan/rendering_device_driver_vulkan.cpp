@@ -5798,9 +5798,21 @@ void RenderingDeviceDriverVulkan::command_render_clear_attachments(CommandBuffer
 
 void RenderingDeviceDriverVulkan::command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
+	const DebugCommandStateSnapshot before_state = _debug_capture_command_state_snapshot(command_buffer);
 	vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)p_pipeline.id);
 	command_buffer->debug_render_pipeline_bound = true;
+	const DebugCommandStateSnapshot after_state = _debug_capture_command_state_snapshot(command_buffer);
 	_debug_record_label_backend_command(command_buffer, "bind_render_pipeline");
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			if (entry.first_pipeline_bind_serial == command_buffer->debug_backend_command_serial) {
+				entry.first_pipeline_bind_before_state = before_state;
+				entry.first_pipeline_bind_after_state = after_state;
+			}
+		}
+	}
 }
 
 void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
@@ -5833,9 +5845,19 @@ void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBuffer
 	}
 
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
+	const DebugCommandStateSnapshot before_state = _debug_capture_command_state_snapshot(command_buffer);
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
 	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
 	_debug_record_label_backend_command(command_buffer, "bind_render_uniform_sets");
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			if (entry.first_uniform_bind_serial == command_buffer->debug_backend_command_serial) {
+				entry.first_uniform_bind_before_state = before_state;
+			}
+		}
+	}
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) {
@@ -8747,6 +8769,33 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",backend_command_serial=" + itos(entry.end_backend_command_serial) + "}";
 		return text;
 	};
+	const auto command_state_snapshot_summary = [](const DebugCommandStateSnapshot &state) {
+		String text = "{render_pass_active=" + String(state.active_render_pass ? "true" : "false");
+		text += ",framebuffer_active=" + String(state.active_framebuffer ? "true" : "false");
+		text += ",subpass=" + itos(state.subpass_index);
+		text += ",render_pipeline_bound=" + String(state.render_pipeline_bound ? "true" : "false");
+		text += ",vertex_binding_count=" + itos(state.vertex_binding_count);
+		text += ",index_buffer_bound=" + String(state.index_buffer_bound ? "true" : "false");
+		text += ",index_format=";
+		if (state.index_buffer_bound) {
+			text += "\"" + _debug_index_format_to_string(state.index_format) + "\"";
+		} else {
+			text += "none";
+		}
+		text += ",breadcrumb=\"" + _debug_breadcrumb_to_string(state.breadcrumb) + "\"}";
+		return text;
+	};
+	const auto command_state_delta_summary = [&](const DebugCommandStateSnapshot &before_state, const DebugCommandStateSnapshot &after_state) {
+		String text = "{render_pass_active=" + String(before_state.active_render_pass != after_state.active_render_pass ? "changed" : "same");
+		text += ",framebuffer_active=" + String(before_state.active_framebuffer != after_state.active_framebuffer ? "changed" : "same");
+		text += ",subpass=" + String(before_state.subpass_index != after_state.subpass_index ? "changed" : "same");
+		text += ",render_pipeline_bound=" + String(before_state.render_pipeline_bound != after_state.render_pipeline_bound ? "changed" : "same");
+		text += ",vertex_binding_count=" + String(before_state.vertex_binding_count != after_state.vertex_binding_count ? "changed" : "same");
+		text += ",index_buffer_bound=" + String(before_state.index_buffer_bound != after_state.index_buffer_bound ? "changed" : "same");
+		text += ",index_format=" + String(before_state.index_format != after_state.index_format ? "changed" : "same");
+		text += ",breadcrumb=" + String(before_state.breadcrumb != after_state.breadcrumb ? "changed" : "same") + "}";
+		return text;
+	};
 
 	int32_t wrapper_chain_start = target_scope_index;
 	for (int32_t i = target_scope_index - 1; i >= 0; i--) {
@@ -8988,6 +9037,51 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			text += String(target_label_entry.last_setup_backend_command_serial < target_label_entry.first_draw_backend_command_serial ? "true" : "false");
 		}
 		text += "}";
+		text += ",pipeline_bind_seam=";
+		if (target_label_entry.first_pipeline_bind_serial == 0) {
+			text += "{status=missing_pipeline_bind}";
+		} else {
+			const bool pipeline_after_matches_uniform_before =
+					target_label_entry.first_uniform_bind_serial > 0 &&
+					target_label_entry.first_pipeline_bind_after_state.active_render_pass == target_label_entry.first_uniform_bind_before_state.active_render_pass &&
+					target_label_entry.first_pipeline_bind_after_state.active_framebuffer == target_label_entry.first_uniform_bind_before_state.active_framebuffer &&
+					target_label_entry.first_pipeline_bind_after_state.subpass_index == target_label_entry.first_uniform_bind_before_state.subpass_index &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_bound == target_label_entry.first_uniform_bind_before_state.render_pipeline_bound &&
+					target_label_entry.first_pipeline_bind_after_state.vertex_binding_count == target_label_entry.first_uniform_bind_before_state.vertex_binding_count &&
+					target_label_entry.first_pipeline_bind_after_state.index_buffer_bound == target_label_entry.first_uniform_bind_before_state.index_buffer_bound &&
+					target_label_entry.first_pipeline_bind_after_state.index_format == target_label_entry.first_uniform_bind_before_state.index_format &&
+					target_label_entry.first_pipeline_bind_after_state.breadcrumb == target_label_entry.first_uniform_bind_before_state.breadcrumb;
+			String owned_attachment_class = "pipeline_bind_direct_state_flip";
+			if (pipeline_to_uniform_gap_commands > 0) {
+				owned_attachment_class = "backend_gap_after_pipeline_bind";
+			} else if (target_label_entry.first_uniform_bind_serial == 0) {
+				owned_attachment_class = "pipeline_bind_terminal";
+			} else if (!pipeline_after_matches_uniform_before) {
+				owned_attachment_class = "state_delta_before_uniform_without_backend_gap";
+			} else if (target_label_entry.first_pipeline_bind_before_state.render_pipeline_bound == target_label_entry.first_pipeline_bind_after_state.render_pipeline_bound) {
+				owned_attachment_class = "pipeline_bind_without_tracked_pipeline_flip";
+			}
+			text += "{owned_attachment_class=\"" + owned_attachment_class + "\"";
+			text += ",pipeline_serial=" + itos(target_label_entry.first_pipeline_bind_serial);
+			text += ",uniform_serial=" + itos(target_label_entry.first_uniform_bind_serial);
+			text += ",pipeline_to_uniform_backend_gap_commands=" + itos(pipeline_to_uniform_gap_commands);
+			text += ",state_before=" + command_state_snapshot_summary(target_label_entry.first_pipeline_bind_before_state);
+			text += ",state_after=" + command_state_snapshot_summary(target_label_entry.first_pipeline_bind_after_state);
+			text += ",state_delta=" + command_state_delta_summary(target_label_entry.first_pipeline_bind_before_state, target_label_entry.first_pipeline_bind_after_state);
+			text += ",uniform_begin_state=";
+			if (target_label_entry.first_uniform_bind_serial == 0) {
+				text += "none";
+			} else {
+				text += command_state_snapshot_summary(target_label_entry.first_uniform_bind_before_state);
+			}
+			text += ",uniform_begin_matches_pipeline_after=";
+			if (target_label_entry.first_uniform_bind_serial == 0) {
+				text += "unknown";
+			} else {
+				text += String(pipeline_after_matches_uniform_before ? "true" : "false");
+			}
+			text += "}";
+		}
 		text += ",packet_shape={has_begin_render_pass=" + String(target_label_entry.first_render_pass_begin_serial > 0 ? "true" : "false");
 		text += ",has_bind_setup=" + String(target_label_entry.first_setup_backend_command_serial > 0 ? "true" : "false");
 		text += ",has_pipeline_bind=" + String(target_label_entry.first_pipeline_bind_serial > 0 ? "true" : "false");
@@ -9140,6 +9234,19 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 	}
 	text += "}";
 	return text;
+}
+
+RenderingDeviceDriverVulkan::DebugCommandStateSnapshot RenderingDeviceDriverVulkan::_debug_capture_command_state_snapshot(const CommandBufferInfo *p_command_buffer) {
+	DebugCommandStateSnapshot snapshot;
+	snapshot.active_render_pass = p_command_buffer->active_render_pass != nullptr;
+	snapshot.active_framebuffer = p_command_buffer->active_framebuffer != nullptr;
+	snapshot.subpass_index = p_command_buffer->active_render_subpass;
+	snapshot.render_pipeline_bound = p_command_buffer->debug_render_pipeline_bound;
+	snapshot.vertex_binding_count = p_command_buffer->debug_vertex_binding_count;
+	snapshot.index_buffer_bound = p_command_buffer->debug_index_buffer_bound;
+	snapshot.index_format = p_command_buffer->debug_index_format;
+	snapshot.breadcrumb = p_command_buffer->debug_last_breadcrumb;
+	return snapshot;
 }
 
 uint32_t RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name) {
