@@ -3420,6 +3420,8 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->active_render_pass = nullptr;
 	command_buffer->active_render_subpass = 0;
 	command_buffer->debug_render_pipeline_bound = false;
+	command_buffer->debug_bound_render_pipeline_handle = 0;
+	command_buffer->debug_bound_render_pipeline_provenance = DebugPipelineBindingProvenance();
 	command_buffer->debug_vertex_binding_count = 0;
 	command_buffer->debug_index_buffer_bound = false;
 	command_buffer->debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
@@ -3465,6 +3467,8 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->active_render_pass = render_pass;
 	command_buffer->active_render_subpass = p_subpass;
 	command_buffer->debug_render_pipeline_bound = false;
+	command_buffer->debug_bound_render_pipeline_handle = 0;
+	command_buffer->debug_bound_render_pipeline_provenance = DebugPipelineBindingProvenance();
 	command_buffer->debug_vertex_binding_count = 0;
 	command_buffer->debug_index_buffer_bound = false;
 	command_buffer->debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
@@ -5314,6 +5318,7 @@ void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID
 /******************/
 
 void RenderingDeviceDriverVulkan::pipeline_free(PipelineID p_pipeline) {
+	debug_render_pipeline_provenance_map.erase((uint64_t)p_pipeline.id);
 	vkDestroyPipeline(vk_device, (VkPipeline)p_pipeline.id, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE));
 }
 
@@ -5801,6 +5806,11 @@ void RenderingDeviceDriverVulkan::command_bind_render_pipeline(CommandBufferID p
 	const DebugCommandStateSnapshot before_state = _debug_capture_command_state_snapshot(command_buffer);
 	vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)p_pipeline.id);
 	command_buffer->debug_render_pipeline_bound = true;
+	command_buffer->debug_bound_render_pipeline_handle = (uint64_t)p_pipeline.id;
+	command_buffer->debug_bound_render_pipeline_provenance = DebugPipelineBindingProvenance();
+	if (const DebugPipelineBindingProvenance *pipeline_provenance = debug_render_pipeline_provenance_map.getptr((uint64_t)p_pipeline.id)) {
+		command_buffer->debug_bound_render_pipeline_provenance = *pipeline_provenance;
+	}
 	const DebugCommandStateSnapshot after_state = _debug_capture_command_state_snapshot(command_buffer);
 	_debug_record_label_backend_command(command_buffer, "bind_render_pipeline");
 	if (command_buffer->debug_active_label_stack_size > 0) {
@@ -6392,6 +6402,15 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		pipeline_statistics.file_access->flush();
 	}
 #endif
+
+	DebugPipelineBindingProvenance &pipeline_provenance = debug_render_pipeline_provenance_map[(uint64_t)vk_pipeline];
+	pipeline_provenance = DebugPipelineBindingProvenance();
+	pipeline_provenance.valid = true;
+	pipeline_provenance.pipeline_handle = (uint64_t)vk_pipeline;
+	pipeline_provenance.pipeline_layout_handle = (uint64_t)shader_info->vk_pipeline_layout;
+	pipeline_provenance.render_pass_handle = (uint64_t)render_pass->vk_render_pass;
+	pipeline_provenance.render_subpass = p_render_subpass;
+	pipeline_provenance.shader_name = shader_info->name;
 
 	// Destroy any modules created temporarily by re-spirv.
 	for (VkShaderModule vk_module : respv_shader_modules) {
@@ -8769,7 +8788,49 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",backend_command_serial=" + itos(entry.end_backend_command_serial) + "}";
 		return text;
 	};
-	const auto command_state_snapshot_summary = [](const DebugCommandStateSnapshot &state) {
+	const auto pipeline_provenance_summary = [](const DebugPipelineBindingProvenance &provenance) {
+		if (!provenance.valid && provenance.pipeline_handle == 0 && provenance.pipeline_layout_handle == 0 && provenance.render_pass_handle == 0 && provenance.shader_name.is_empty()) {
+			return String("none");
+		}
+		String text = "{pipeline_handle=\"0x" + String::num_uint64(provenance.pipeline_handle, 16) + "\"";
+		text += ",pipeline_layout_handle=";
+		if (provenance.pipeline_layout_handle == 0) {
+			text += "none";
+		} else {
+			text += "\"0x" + String::num_uint64(provenance.pipeline_layout_handle, 16) + "\"";
+		}
+		text += ",render_pass_handle=";
+		if (provenance.render_pass_handle == 0) {
+			text += "none";
+		} else {
+			text += "\"0x" + String::num_uint64(provenance.render_pass_handle, 16) + "\"";
+		}
+		text += ",render_subpass=" + itos(provenance.render_subpass);
+		text += ",shader_name=";
+		if (provenance.shader_name.is_empty()) {
+			text += "none";
+		} else {
+			text += "\"" + provenance.shader_name + "\"";
+		}
+		text += "}";
+		return text;
+	};
+	const auto pipeline_provenance_relation = [](const DebugPipelineBindingProvenance &base, const DebugPipelineBindingProvenance &other) {
+		if ((!base.valid && base.pipeline_handle == 0) || (!other.valid && other.pipeline_handle == 0)) {
+			return String("missing");
+		}
+		if (base.pipeline_handle == other.pipeline_handle && base.pipeline_handle != 0) {
+			return String("same_pipeline");
+		}
+		if (base.pipeline_layout_handle == other.pipeline_layout_handle && base.render_pass_handle == other.render_pass_handle && base.render_subpass == other.render_subpass && (base.pipeline_layout_handle != 0 || base.render_pass_handle != 0)) {
+			return String("different_pipeline_same_compatibility_context");
+		}
+		if ((base.pipeline_layout_handle != other.pipeline_layout_handle) || (base.render_pass_handle != other.render_pass_handle) || (base.render_subpass != other.render_subpass)) {
+			return String("different_pipeline_different_compatibility_context");
+		}
+		return String("different_pipeline_unknown_context_delta");
+	};
+	const auto command_state_snapshot_summary = [&](const DebugCommandStateSnapshot &state) {
 		String text = "{render_pass_active=" + String(state.active_render_pass ? "true" : "false");
 		text += ",framebuffer_active=" + String(state.active_framebuffer ? "true" : "false");
 		text += ",subpass=" + itos(state.subpass_index);
@@ -8782,7 +8843,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		} else {
 			text += "none";
 		}
-		text += ",breadcrumb=\"" + _debug_breadcrumb_to_string(state.breadcrumb) + "\"}";
+		text += ",breadcrumb=\"" + _debug_breadcrumb_to_string(state.breadcrumb) + "\"";
+		text += ",pipeline_provenance=" + pipeline_provenance_summary(state.render_pipeline_provenance);
+		text += "}";
 		return text;
 	};
 	const auto command_state_delta_summary = [&](const DebugCommandStateSnapshot &before_state, const DebugCommandStateSnapshot &after_state) {
@@ -8793,7 +8856,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",vertex_binding_count=" + String(before_state.vertex_binding_count != after_state.vertex_binding_count ? "changed" : "same");
 		text += ",index_buffer_bound=" + String(before_state.index_buffer_bound != after_state.index_buffer_bound ? "changed" : "same");
 		text += ",index_format=" + String(before_state.index_format != after_state.index_format ? "changed" : "same");
-		text += ",breadcrumb=" + String(before_state.breadcrumb != after_state.breadcrumb ? "changed" : "same") + "}";
+		text += ",breadcrumb=" + String(before_state.breadcrumb != after_state.breadcrumb ? "changed" : "same");
+		text += ",pipeline_provenance=" + String(pipeline_provenance_relation(before_state.render_pipeline_provenance, after_state.render_pipeline_provenance) == "same_pipeline" ? "same" : "changed") + "}";
 		return text;
 	};
 
@@ -8842,8 +8906,20 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			l88_scope_index = (int32_t)i;
 		}
 	}
-
+	const auto find_label_entry_index_by_label = [&](const String &p_label) {
+		if (p_label.is_empty()) {
+			return int32_t(-1);
+		}
+		for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
+			if (p_command_buffer->debug_label_entries[i].label == p_label) {
+				return int32_t(i);
+			}
+		}
+		return int32_t(-1);
+	};
 	const DebugRenderPassScope &target_scope = p_command_buffer->debug_render_pass_scopes[target_scope_index];
+	const int32_t previous_meaningful_label_entry_index = previous_meaningful_scope_index == -1 ? -1 : find_label_entry_index_by_label(p_command_buffer->debug_render_pass_scopes[previous_meaningful_scope_index].begin_owner_label);
+	const int32_t next_meaningful_label_entry_index = next_meaningful_scope_index == -1 ? -1 : find_label_entry_index_by_label(p_command_buffer->debug_render_pass_scopes[next_meaningful_scope_index].begin_owner_label);
 	String text = "{scope_count=" + itos(p_command_buffer->debug_render_pass_scope_count);
 	text += ",target=" + scope_summary(target_scope);
 	text += ",target_class=\"" + scope_class(target_scope) + "\"";
@@ -9050,7 +9126,12 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 					target_label_entry.first_pipeline_bind_after_state.vertex_binding_count == target_label_entry.first_uniform_bind_before_state.vertex_binding_count &&
 					target_label_entry.first_pipeline_bind_after_state.index_buffer_bound == target_label_entry.first_uniform_bind_before_state.index_buffer_bound &&
 					target_label_entry.first_pipeline_bind_after_state.index_format == target_label_entry.first_uniform_bind_before_state.index_format &&
-					target_label_entry.first_pipeline_bind_after_state.breadcrumb == target_label_entry.first_uniform_bind_before_state.breadcrumb;
+					target_label_entry.first_pipeline_bind_after_state.breadcrumb == target_label_entry.first_uniform_bind_before_state.breadcrumb &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_handle == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.pipeline_handle &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.pipeline_layout_handle &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_handle == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.render_pass_handle &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.render_subpass &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.shader_name;
 			String owned_attachment_class = "pipeline_bind_direct_state_flip";
 			if (pipeline_to_uniform_gap_commands > 0) {
 				owned_attachment_class = "backend_gap_after_pipeline_bind";
@@ -9080,6 +9161,29 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			} else {
 				text += String(pipeline_after_matches_uniform_before ? "true" : "false");
 			}
+			text += ",neighboring_pass_pipeline_compare={previous=";
+			if (previous_meaningful_label_entry_index == -1) {
+				text += "none";
+			} else {
+				const DebugLabelEntry &previous_entry = p_command_buffer->debug_label_entries[previous_meaningful_label_entry_index];
+				text += "{label=\"" + previous_entry.label + "\"";
+				text += ",pipeline_serial=" + itos(previous_entry.first_pipeline_bind_serial);
+				text += ",relation=\"" + pipeline_provenance_relation(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance, previous_entry.first_pipeline_bind_after_state.render_pipeline_provenance) + "\"";
+				text += ",provenance=" + command_state_snapshot_summary(previous_entry.first_pipeline_bind_after_state);
+				text += "}";
+			}
+			text += ",next=";
+			if (next_meaningful_label_entry_index == -1) {
+				text += "none";
+			} else {
+				const DebugLabelEntry &next_entry = p_command_buffer->debug_label_entries[next_meaningful_label_entry_index];
+				text += "{label=\"" + next_entry.label + "\"";
+				text += ",pipeline_serial=" + itos(next_entry.first_pipeline_bind_serial);
+				text += ",relation=\"" + pipeline_provenance_relation(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance, next_entry.first_pipeline_bind_after_state.render_pipeline_provenance) + "\"";
+				text += ",provenance=" + command_state_snapshot_summary(next_entry.first_pipeline_bind_after_state);
+				text += "}";
+			}
+			text += "}";
 			text += "}";
 		}
 		text += ",packet_shape={has_begin_render_pass=" + String(target_label_entry.first_render_pass_begin_serial > 0 ? "true" : "false");
@@ -9246,6 +9350,13 @@ RenderingDeviceDriverVulkan::DebugCommandStateSnapshot RenderingDeviceDriverVulk
 	snapshot.index_buffer_bound = p_command_buffer->debug_index_buffer_bound;
 	snapshot.index_format = p_command_buffer->debug_index_format;
 	snapshot.breadcrumb = p_command_buffer->debug_last_breadcrumb;
+	snapshot.render_pipeline_provenance = p_command_buffer->debug_bound_render_pipeline_provenance;
+	if (p_command_buffer->debug_render_pipeline_bound) {
+		snapshot.render_pipeline_provenance.valid = snapshot.render_pipeline_provenance.valid || p_command_buffer->debug_bound_render_pipeline_handle != 0;
+		if (snapshot.render_pipeline_provenance.pipeline_handle == 0) {
+			snapshot.render_pipeline_provenance.pipeline_handle = p_command_buffer->debug_bound_render_pipeline_handle;
+		}
+	}
 	return snapshot;
 }
 

@@ -464,6 +464,15 @@ private:
 		uint32_t unclassified_from_first_draw = 0;
 	};
 
+	struct DebugPipelineBindingProvenance {
+		bool valid = false;
+		uint64_t pipeline_handle = 0;
+		uint64_t pipeline_layout_handle = 0;
+		uint64_t render_pass_handle = 0;
+		uint32_t render_subpass = 0;
+		String shader_name;
+	};
+
 	struct DebugCommandStateSnapshot {
 		bool active_render_pass = false;
 		bool active_framebuffer = false;
@@ -473,6 +482,7 @@ private:
 		bool index_buffer_bound = false;
 		IndexBufferFormat index_format = INDEX_BUFFER_FORMAT_UINT16;
 		uint32_t breadcrumb = 0;
+		DebugPipelineBindingProvenance render_pipeline_provenance;
 	};
 
 	struct DebugLabelEntry {
@@ -623,6 +633,8 @@ private:
 		RenderPassInfo *active_render_pass = nullptr;
 		uint32_t active_render_subpass = 0;
 		bool debug_render_pipeline_bound = false;
+		uint64_t debug_bound_render_pipeline_handle = 0;
+		DebugPipelineBindingProvenance debug_bound_render_pipeline_provenance;
 		uint32_t debug_vertex_binding_count = 0;
 		bool debug_index_buffer_bound = false;
 		IndexBufferFormat debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
@@ -849,6 +861,7 @@ private:
 	PipelineCache pipelines_cache;
 	String pipeline_cache_id;
 	HashMap<uint64_t, bool> has_comp_alpha;
+	HashMap<uint64_t, DebugPipelineBindingProvenance> debug_render_pipeline_provenance_map;
 
 public:
 	virtual void pipeline_free(PipelineID p_pipeline) override final;
