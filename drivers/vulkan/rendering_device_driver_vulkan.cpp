@@ -4549,6 +4549,24 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 		pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipeline_layout_create_info.setLayoutCount = shader_info.vk_descriptor_set_layouts.size();
 		pipeline_layout_create_info.pSetLayouts = shader_info.vk_descriptor_set_layouts.ptr();
+		shader_info.debug_pipeline_layout_descriptor_set_layout_count = pipeline_layout_create_info.setLayoutCount;
+		shader_info.debug_pipeline_layout_descriptor_set_layout_hash = hash_murmur3_one_64(pipeline_layout_create_info.setLayoutCount);
+		shader_info.debug_pipeline_layout_descriptor_set_layout_preview = "[";
+		for (uint32_t i = 0; i < pipeline_layout_create_info.setLayoutCount; i++) {
+			const uint64_t set_layout_handle = (uint64_t)shader_info.vk_descriptor_set_layouts[i];
+			shader_info.debug_pipeline_layout_descriptor_set_layout_hash = hash_murmur3_one_64(set_layout_handle, shader_info.debug_pipeline_layout_descriptor_set_layout_hash);
+			if (i == 0) {
+				shader_info.debug_pipeline_layout_first_descriptor_set_layout_handle = set_layout_handle;
+			}
+			shader_info.debug_pipeline_layout_last_descriptor_set_layout_handle = set_layout_handle;
+			if (i > 0) {
+				shader_info.debug_pipeline_layout_descriptor_set_layout_preview += ", ";
+			}
+			shader_info.debug_pipeline_layout_descriptor_set_layout_preview += "\"0x" + String::num_uint64(set_layout_handle, 16) + "\"";
+		}
+		shader_info.debug_pipeline_layout_descriptor_set_layout_preview += "]";
+		shader_info.debug_pipeline_layout_push_constant_hash = hash_murmur3_one_64(0);
+		shader_info.debug_pipeline_layout_push_constant_preview = "[]";
 
 		if (shader_refl.push_constant_size > 0) {
 			VkPushConstantRange *push_constant_range = ALLOCA_SINGLE(VkPushConstantRange);
@@ -4557,6 +4575,15 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 			push_constant_range->size = shader_refl.push_constant_size;
 			pipeline_layout_create_info.pushConstantRangeCount = 1;
 			pipeline_layout_create_info.pPushConstantRanges = push_constant_range;
+			shader_info.debug_pipeline_layout_push_constant_range_count = pipeline_layout_create_info.pushConstantRangeCount;
+			shader_info.debug_pipeline_layout_push_constant_stage_mask = push_constant_range->stageFlags;
+			shader_info.debug_pipeline_layout_push_constant_total_size = push_constant_range->size;
+			shader_info.debug_pipeline_layout_push_constant_total_offset = push_constant_range->offset;
+			shader_info.debug_pipeline_layout_push_constant_hash = hash_murmur3_one_64(pipeline_layout_create_info.pushConstantRangeCount);
+			shader_info.debug_pipeline_layout_push_constant_hash = hash_murmur3_one_64(push_constant_range->stageFlags, shader_info.debug_pipeline_layout_push_constant_hash);
+			shader_info.debug_pipeline_layout_push_constant_hash = hash_murmur3_one_64(push_constant_range->offset, shader_info.debug_pipeline_layout_push_constant_hash);
+			shader_info.debug_pipeline_layout_push_constant_hash = hash_murmur3_one_64(push_constant_range->size, shader_info.debug_pipeline_layout_push_constant_hash);
+			shader_info.debug_pipeline_layout_push_constant_preview = "[{stage_mask=\"0x" + String::num_uint64(push_constant_range->stageFlags, 16) + "\",offset=" + itos(push_constant_range->offset) + ",size=" + itos(push_constant_range->size) + "}]";
 		}
 
 		res = vkCreatePipelineLayout(vk_device, &pipeline_layout_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE_LAYOUT), &shader_info.vk_pipeline_layout);
@@ -6824,6 +6851,17 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.valid = true;
 	pipeline_provenance.pipeline_handle = (uint64_t)vk_pipeline;
 	pipeline_provenance.pipeline_layout_handle = (uint64_t)shader_info->vk_pipeline_layout;
+	pipeline_provenance.pipeline_layout_descriptor_set_layout_hash = shader_info->debug_pipeline_layout_descriptor_set_layout_hash;
+	pipeline_provenance.pipeline_layout_push_constant_hash = shader_info->debug_pipeline_layout_push_constant_hash;
+	pipeline_provenance.pipeline_layout_first_descriptor_set_layout_handle = shader_info->debug_pipeline_layout_first_descriptor_set_layout_handle;
+	pipeline_provenance.pipeline_layout_last_descriptor_set_layout_handle = shader_info->debug_pipeline_layout_last_descriptor_set_layout_handle;
+	pipeline_provenance.pipeline_layout_descriptor_set_layout_count = shader_info->debug_pipeline_layout_descriptor_set_layout_count;
+	pipeline_provenance.pipeline_layout_push_constant_range_count = shader_info->debug_pipeline_layout_push_constant_range_count;
+	pipeline_provenance.pipeline_layout_push_constant_stage_mask = shader_info->debug_pipeline_layout_push_constant_stage_mask;
+	pipeline_provenance.pipeline_layout_push_constant_total_size = shader_info->debug_pipeline_layout_push_constant_total_size;
+	pipeline_provenance.pipeline_layout_push_constant_total_offset = shader_info->debug_pipeline_layout_push_constant_total_offset;
+	pipeline_provenance.pipeline_layout_descriptor_set_layout_preview = shader_info->debug_pipeline_layout_descriptor_set_layout_preview;
+	pipeline_provenance.pipeline_layout_push_constant_preview = shader_info->debug_pipeline_layout_push_constant_preview;
 	pipeline_provenance.render_pass_handle = (uint64_t)render_pass->vk_render_pass;
 	pipeline_provenance.render_pass_exact_hash = render_pass->debug_exact_hash;
 	pipeline_provenance.render_pass_compatibility_hash = render_pass->debug_compatibility_hash;
@@ -9319,6 +9357,17 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		}
 		String text = "{pipeline_handle=\"0x" + String::num_uint64(provenance.pipeline_handle, 16) + "\"";
 		text += ",pipeline_layout_handle=" + debug_uint64_or_none(provenance.pipeline_layout_handle);
+		text += ",pipeline_layout_recipe={descriptor_set_layout_count=" + itos(provenance.pipeline_layout_descriptor_set_layout_count);
+		text += ",descriptor_set_layout_hash=" + debug_uint64_or_none(provenance.pipeline_layout_descriptor_set_layout_hash);
+		text += ",first_descriptor_set_layout_handle=" + debug_uint64_or_none(provenance.pipeline_layout_first_descriptor_set_layout_handle);
+		text += ",last_descriptor_set_layout_handle=" + debug_uint64_or_none(provenance.pipeline_layout_last_descriptor_set_layout_handle);
+		text += ",descriptor_set_layout_preview=" + provenance.pipeline_layout_descriptor_set_layout_preview;
+		text += ",push_constant_range_count=" + itos(provenance.pipeline_layout_push_constant_range_count);
+		text += ",push_constant_hash=" + debug_uint64_or_none(provenance.pipeline_layout_push_constant_hash);
+		text += ",push_constant_stage_mask=\"0x" + String::num_uint64(provenance.pipeline_layout_push_constant_stage_mask, 16) + "\"";
+		text += ",push_constant_total_offset=" + itos(provenance.pipeline_layout_push_constant_total_offset);
+		text += ",push_constant_total_size=" + itos(provenance.pipeline_layout_push_constant_total_size);
+		text += ",push_constant_preview=" + provenance.pipeline_layout_push_constant_preview + "}";
 		text += ",render_pass_handle=" + debug_uint64_or_none(provenance.render_pass_handle);
 		text += ",render_pass_create_serial=" + itos(provenance.render_pass_create_serial);
 		text += ",render_pass_exact_hash=" + debug_uint64_or_none(provenance.render_pass_exact_hash);
@@ -9582,6 +9631,52 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",min_id=" + (other.specialization_constant_count > 0 ? itos(other.specialization_constant_min_id) : String("none"));
 		text += ",max_id=" + (other.specialization_constant_count > 0 ? itos(other.specialization_constant_max_id) : String("none"));
 		text += ",preview=" + (other.specialization_constant_count > 0 ? other.specialization_constant_preview : String("[]")) + "}}";
+		String pipeline_layout_relation = "different_pipeline_layout_recipe";
+		if (base.pipeline_layout_handle == other.pipeline_layout_handle && base.pipeline_layout_handle != 0) {
+			pipeline_layout_relation = "same_pipeline_layout_handle";
+		} else if (base.pipeline_layout_descriptor_set_layout_hash == other.pipeline_layout_descriptor_set_layout_hash &&
+				base.pipeline_layout_push_constant_hash == other.pipeline_layout_push_constant_hash &&
+				base.pipeline_layout_descriptor_set_layout_count == other.pipeline_layout_descriptor_set_layout_count &&
+				base.pipeline_layout_push_constant_range_count == other.pipeline_layout_push_constant_range_count) {
+			pipeline_layout_relation = "same_layout_recipe_different_handle";
+		} else if (base.pipeline_layout_descriptor_set_layout_hash != other.pipeline_layout_descriptor_set_layout_hash &&
+				base.pipeline_layout_push_constant_hash == other.pipeline_layout_push_constant_hash) {
+			pipeline_layout_relation = "different_descriptor_set_layouts_same_push_constants";
+		} else if (base.pipeline_layout_descriptor_set_layout_hash == other.pipeline_layout_descriptor_set_layout_hash &&
+				base.pipeline_layout_push_constant_hash != other.pipeline_layout_push_constant_hash) {
+			pipeline_layout_relation = "same_descriptor_set_layouts_different_push_constants";
+		}
+		text += ",pipeline_layout_delta={relation=\"" + pipeline_layout_relation + "\"";
+		text += ",handle_changed=" + String(base.pipeline_layout_handle != other.pipeline_layout_handle ? "true" : "false");
+		text += ",descriptor_set_layout_hash_changed=" + String(base.pipeline_layout_descriptor_set_layout_hash != other.pipeline_layout_descriptor_set_layout_hash ? "true" : "false");
+		text += ",descriptor_set_layout_count_changed=" + String(base.pipeline_layout_descriptor_set_layout_count != other.pipeline_layout_descriptor_set_layout_count ? "true" : "false");
+		text += ",first_descriptor_set_layout_handle_changed=" + String(base.pipeline_layout_first_descriptor_set_layout_handle != other.pipeline_layout_first_descriptor_set_layout_handle ? "true" : "false");
+		text += ",last_descriptor_set_layout_handle_changed=" + String(base.pipeline_layout_last_descriptor_set_layout_handle != other.pipeline_layout_last_descriptor_set_layout_handle ? "true" : "false");
+		text += ",push_constant_hash_changed=" + String(base.pipeline_layout_push_constant_hash != other.pipeline_layout_push_constant_hash ? "true" : "false");
+		text += ",push_constant_range_count_changed=" + String(base.pipeline_layout_push_constant_range_count != other.pipeline_layout_push_constant_range_count ? "true" : "false");
+		text += ",push_constant_stage_mask_changed=" + String(base.pipeline_layout_push_constant_stage_mask != other.pipeline_layout_push_constant_stage_mask ? "true" : "false");
+		text += ",push_constant_total_offset_changed=" + String(base.pipeline_layout_push_constant_total_offset != other.pipeline_layout_push_constant_total_offset ? "true" : "false");
+		text += ",push_constant_total_size_changed=" + String(base.pipeline_layout_push_constant_total_size != other.pipeline_layout_push_constant_total_size ? "true" : "false");
+		text += ",base={handle=" + debug_uint64_or_none(base.pipeline_layout_handle);
+		text += ",descriptor_set_layout_count=" + itos(base.pipeline_layout_descriptor_set_layout_count);
+		text += ",descriptor_set_layout_hash=" + debug_uint64_or_none(base.pipeline_layout_descriptor_set_layout_hash);
+		text += ",descriptor_set_layout_preview=" + base.pipeline_layout_descriptor_set_layout_preview;
+		text += ",push_constant_range_count=" + itos(base.pipeline_layout_push_constant_range_count);
+		text += ",push_constant_hash=" + debug_uint64_or_none(base.pipeline_layout_push_constant_hash);
+		text += ",push_constant_stage_mask=\"0x" + String::num_uint64(base.pipeline_layout_push_constant_stage_mask, 16) + "\"";
+		text += ",push_constant_total_offset=" + itos(base.pipeline_layout_push_constant_total_offset);
+		text += ",push_constant_total_size=" + itos(base.pipeline_layout_push_constant_total_size);
+		text += ",push_constant_preview=" + base.pipeline_layout_push_constant_preview + "}";
+		text += ",other={handle=" + debug_uint64_or_none(other.pipeline_layout_handle);
+		text += ",descriptor_set_layout_count=" + itos(other.pipeline_layout_descriptor_set_layout_count);
+		text += ",descriptor_set_layout_hash=" + debug_uint64_or_none(other.pipeline_layout_descriptor_set_layout_hash);
+		text += ",descriptor_set_layout_preview=" + other.pipeline_layout_descriptor_set_layout_preview;
+		text += ",push_constant_range_count=" + itos(other.pipeline_layout_push_constant_range_count);
+		text += ",push_constant_hash=" + debug_uint64_or_none(other.pipeline_layout_push_constant_hash);
+		text += ",push_constant_stage_mask=\"0x" + String::num_uint64(other.pipeline_layout_push_constant_stage_mask, 16) + "\"";
+		text += ",push_constant_total_offset=" + itos(other.pipeline_layout_push_constant_total_offset);
+		text += ",push_constant_total_size=" + itos(other.pipeline_layout_push_constant_total_size);
+		text += ",push_constant_preview=" + other.pipeline_layout_push_constant_preview + "}}";
 		text += ",shape_delta={shader_stage_count=" + String(base.shader_stage_count == other.shader_stage_count ? "same" : "changed");
 		text += ",vertex_binding_description_count=" + String(base.vertex_binding_description_count == other.vertex_binding_description_count ? "same" : "changed");
 		text += ",vertex_attribute_count=" + String(base.vertex_attribute_count == other.vertex_attribute_count ? "same" : "changed");

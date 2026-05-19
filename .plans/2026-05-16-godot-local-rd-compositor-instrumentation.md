@@ -2146,6 +2146,32 @@ Recommended next tight backend-owned seam: inspect the **Tonemap -> `Command Gra
 
 ---
 
+### Task 91: Inspect the Tonemap pipeline-layout seam at serial `8` on failing `submit_serial=9`
+
+**Bead ID:** `oc-mf8`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-mf8` and keep the investigation projection-only on the refreshed source-built Godot binary. The current best read is that `Tonemap (L87) (Draw)` remains the first poisoned-boundary candidate, vertex input / blend / specialization have each been structurally sharpened but do not isolate the seam, and auditor guidance says the next tightest remaining neighboring-pass recipe lane is the Tonemap -> `Command Graph (L88) (Draw)` `pipeline_layout` delta. Add small, reversible, high-signal instrumentation that inspects and contrasts Tonemap’s pipeline-layout provenance/state against the immediate meaningful neighboring late-pass packet so we can tell whether the seam collapses to a narrower pipeline-layout-owned sub-boundary or stays broad. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-mf8` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a small reversible Vulkan-side pipeline-layout instrumentation slice in `drivers/vulkan/rendering_device_driver_vulkan.{h,cpp}`. The new slice records per-pipeline layout provenance directly at pipeline creation/bind time — descriptor-set-layout count/hash/preview, first/last descriptor-set-layout handles, push-constant count/hash/stage-mask/size/offset, plus a summarized `pipeline_layout_recipe={...}` on each pipeline provenance packet. The immediate Tonemap -> `Command Graph (L88) (Draw)` neighboring-pass compare now emits `pipeline_layout_delta={...}` with an explicit relation classifier and per-field change flags so QA can tell whether the remaining seam collapses to layout ownership or stays broad.
+
+Validation: source build passed with `scons -j8 platform=linuxbsd target=editor dev_build=yes`. A fresh projection-only staged repro was then run with the source-built Vulkan editor against `projection_only__disabled`, producing artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-layout-seam-vulkan-sourcebuild-20260519-184726/`. On failing `submit_serial=9`, the new evidence says the seam does **not** collapse to a narrow pipeline-layout-only boundary: the immediate Tonemap -> `L88` compare still reports `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`, while the new layout lane sharpens from opaque handle drift to a concrete recipe mismatch: `pipeline_layout_delta={relation="different_pipeline_layout_recipe", handle_changed=true, descriptor_set_layout_hash_changed=true, descriptor_set_layout_count_changed=false, first_descriptor_set_layout_handle_changed=true, last_descriptor_set_layout_handle_changed=true, push_constant_hash_changed=true, push_constant_range_count_changed=false, push_constant_stage_mask_changed=true, push_constant_total_offset_changed=false, push_constant_total_size_changed=true, ...}`. Tonemap’s bound layout is now concretely `descriptor_set_layout_count=4`, `push_constant_stage_mask="0x10"`, `push_constant_total_size=112`, while the immediate `L88` neighbor is also count-4 but changes descriptor-set lineage and narrows to `push_constant_stage_mask="0x11"`, `push_constant_total_size=32`.
+
+That means the remaining Tonemap -> `L88` seam stays broad even after the layout lane is structurally explained; pipeline layout is a real differing bucket, but not an isolating one. The Tonemap-owned bind/setup side still stays clean in the same artifact (`bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` and `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}`), so this pass strengthens the read that the failure remains attached to the broader Tonemap-vs-neighbor recipe boundary rather than collapsing to Tonemap’s local `8 -> 9` layout handshake alone. Landed in commit `6281470c` (`debug: inspect tonemap pipeline layout seam`) and pushed to `gambit/gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

@@ -468,6 +468,17 @@ private:
 		bool valid = false;
 		uint64_t pipeline_handle = 0;
 		uint64_t pipeline_layout_handle = 0;
+		uint64_t pipeline_layout_descriptor_set_layout_hash = 0;
+		uint64_t pipeline_layout_push_constant_hash = 0;
+		uint64_t pipeline_layout_first_descriptor_set_layout_handle = 0;
+		uint64_t pipeline_layout_last_descriptor_set_layout_handle = 0;
+		uint32_t pipeline_layout_descriptor_set_layout_count = 0;
+		uint32_t pipeline_layout_push_constant_range_count = 0;
+		uint32_t pipeline_layout_push_constant_stage_mask = 0;
+		uint32_t pipeline_layout_push_constant_total_size = 0;
+		uint32_t pipeline_layout_push_constant_total_offset = 0;
+		String pipeline_layout_descriptor_set_layout_preview;
+		String pipeline_layout_push_constant_preview;
 		uint64_t render_pass_handle = 0;
 		uint64_t render_pass_exact_hash = 0;
 		uint64_t render_pass_compatibility_hash = 0;
@@ -868,6 +879,17 @@ private:
 		TightLocalVector<Vector<uint8_t>> spirv_stage_bytes;
 		TightLocalVector<uint64_t> original_stage_size;
 		VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
+		uint64_t debug_pipeline_layout_descriptor_set_layout_hash = 0;
+		uint64_t debug_pipeline_layout_push_constant_hash = 0;
+		uint64_t debug_pipeline_layout_first_descriptor_set_layout_handle = 0;
+		uint64_t debug_pipeline_layout_last_descriptor_set_layout_handle = 0;
+		uint32_t debug_pipeline_layout_descriptor_set_layout_count = 0;
+		uint32_t debug_pipeline_layout_push_constant_range_count = 0;
+		uint32_t debug_pipeline_layout_push_constant_stage_mask = 0;
+		uint32_t debug_pipeline_layout_push_constant_total_size = 0;
+		uint32_t debug_pipeline_layout_push_constant_total_offset = 0;
+		String debug_pipeline_layout_descriptor_set_layout_preview;
+		String debug_pipeline_layout_push_constant_preview;
 	};
 
 public:
