@@ -6758,10 +6758,57 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		dynamic_state_recipe_hash = hash_murmur3_one_64(vk_dynamic_states[i], dynamic_state_recipe_hash);
 	}
 	uint64_t specialization_constant_hash = hash_murmur3_one_64(p_specialization_constants.size());
+	uint64_t specialization_constant_id_hash = hash_murmur3_one_64(p_specialization_constants.size());
+	uint64_t specialization_constant_value_hash = hash_murmur3_one_64(p_specialization_constants.size());
+	uint32_t specialization_constant_type_mask = 0;
+	uint32_t specialization_constant_bool_count = 0;
+	uint32_t specialization_constant_int_count = 0;
+	uint32_t specialization_constant_float_count = 0;
+	uint32_t specialization_constant_min_id = 0xffffffff;
+	uint32_t specialization_constant_max_id = 0;
+	String specialization_constant_preview = "[";
 	for (uint32_t i = 0; i < p_specialization_constants.size(); i++) {
-		specialization_constant_hash = hash_murmur3_one_64(p_specialization_constants[i].constant_id, specialization_constant_hash);
-		specialization_constant_hash = hash_murmur3_one_64((uint32_t)p_specialization_constants[i].int_value, specialization_constant_hash);
+		const PipelineSpecializationConstant &constant = p_specialization_constants[i];
+		specialization_constant_hash = hash_murmur3_one_64(constant.constant_id, specialization_constant_hash);
+		specialization_constant_hash = hash_murmur3_one_64((uint32_t)constant.int_value, specialization_constant_hash);
+		specialization_constant_id_hash = hash_murmur3_one_64(constant.constant_id, specialization_constant_id_hash);
+		specialization_constant_value_hash = hash_murmur3_one_64((uint32_t)constant.int_value, specialization_constant_value_hash);
+		specialization_constant_type_mask |= 1U << (uint32_t)constant.type;
+		specialization_constant_min_id = MIN(specialization_constant_min_id, constant.constant_id);
+		specialization_constant_max_id = MAX(specialization_constant_max_id, constant.constant_id);
+		switch (constant.type) {
+			case PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL:
+				specialization_constant_bool_count++;
+				break;
+			case PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT:
+				specialization_constant_int_count++;
+				break;
+			case PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT:
+				specialization_constant_float_count++;
+				break;
+		}
+		if (i > 0) {
+			specialization_constant_preview += ", ";
+		}
+		specialization_constant_preview += "{";
+		specialization_constant_preview += "id=" + itos(constant.constant_id);
+		specialization_constant_preview += ",type=\"" + String(constant.type == PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL ? "bool" : (constant.type == PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT ? "float" : "int")) + "\"";
+		specialization_constant_preview += ",bits=\"0x" + String::num_uint64((uint32_t)constant.int_value, 16) + "\"";
+		specialization_constant_preview += ",value=";
+		switch (constant.type) {
+			case PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL:
+				specialization_constant_preview += constant.bool_value ? "true" : "false";
+				break;
+			case PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT:
+				specialization_constant_preview += String::num_real(constant.float_value);
+				break;
+			case PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT:
+				specialization_constant_preview += itos(constant.int_value);
+				break;
+		}
+		specialization_constant_preview += "}";
 	}
+	specialization_constant_preview += "]";
 	uint64_t graphics_recipe_hash = hash_murmur3_one_64(shader_stage_recipe_hash);
 	graphics_recipe_hash = hash_murmur3_one_64(vertex_input_recipe_hash, graphics_recipe_hash);
 	graphics_recipe_hash = hash_murmur3_one_64((uint32_t)p_render_primitive, graphics_recipe_hash);
@@ -6800,6 +6847,15 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.blend_constant_value_hash = blend_constant_value_hash;
 	pipeline_provenance.dynamic_state_recipe_hash = dynamic_state_recipe_hash;
 	pipeline_provenance.specialization_constant_hash = specialization_constant_hash;
+	pipeline_provenance.specialization_constant_id_hash = specialization_constant_id_hash;
+	pipeline_provenance.specialization_constant_value_hash = specialization_constant_value_hash;
+	pipeline_provenance.specialization_constant_type_mask = specialization_constant_type_mask;
+	pipeline_provenance.specialization_constant_bool_count = specialization_constant_bool_count;
+	pipeline_provenance.specialization_constant_int_count = specialization_constant_int_count;
+	pipeline_provenance.specialization_constant_float_count = specialization_constant_float_count;
+	pipeline_provenance.specialization_constant_min_id = specialization_constant_min_id;
+	pipeline_provenance.specialization_constant_max_id = specialization_constant_max_id;
+	pipeline_provenance.specialization_constant_preview = specialization_constant_preview;
 	pipeline_provenance.shader_stage_count = shader_info->vk_stages_create_info.size();
 	pipeline_provenance.shader_stage_mask = shader_stage_mask;
 	pipeline_provenance.vertex_binding_description_count = vertex_binding_description_count;
@@ -9291,6 +9347,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",blend_constant_value_hash=" + debug_uint64_or_none(provenance.blend_constant_value_hash);
 		text += ",dynamic_state_recipe_hash=" + debug_uint64_or_none(provenance.dynamic_state_recipe_hash);
 		text += ",specialization_constant_hash=" + debug_uint64_or_none(provenance.specialization_constant_hash);
+		text += ",specialization_constant_id_hash=" + debug_uint64_or_none(provenance.specialization_constant_id_hash);
+		text += ",specialization_constant_value_hash=" + debug_uint64_or_none(provenance.specialization_constant_value_hash);
 		text += ",recipe_shape={shader_stage_count=" + itos(provenance.shader_stage_count);
 		text += ",shader_stage_mask=\"0x" + String::num_uint64(provenance.shader_stage_mask, 16) + "\"";
 		text += ",vertex_binding_description_count=" + itos(provenance.vertex_binding_description_count);
@@ -9304,6 +9362,18 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",vertex_attribute_layout_hash=" + debug_uint64_or_none(provenance.vertex_attribute_layout_hash);
 		text += ",vertex_attribute_format_hash=" + debug_uint64_or_none(provenance.vertex_attribute_format_hash);
 		text += ",vertex_input_uses_instance_rate=" + String(provenance.vertex_input_uses_instance_rate ? "true" : "false");
+		text += ",specialization_constants={count=" + itos(provenance.specialization_constant_count);
+		text += ",type_mask=\"0x" + String::num_uint64(provenance.specialization_constant_type_mask, 16) + "\"";
+		text += ",bool_count=" + itos(provenance.specialization_constant_bool_count);
+		text += ",int_count=" + itos(provenance.specialization_constant_int_count);
+		text += ",float_count=" + itos(provenance.specialization_constant_float_count);
+		text += ",id_hash=" + debug_uint64_or_none(provenance.specialization_constant_id_hash);
+		text += ",value_hash=" + debug_uint64_or_none(provenance.specialization_constant_value_hash);
+		text += ",min_id=";
+		text += provenance.specialization_constant_count > 0 ? itos(provenance.specialization_constant_min_id) : String("none");
+		text += ",max_id=";
+		text += provenance.specialization_constant_count > 0 ? itos(provenance.specialization_constant_max_id) : String("none");
+		text += ",preview=" + (provenance.specialization_constant_count > 0 ? provenance.specialization_constant_preview : String("[]")) + "}";
 		text += ",specialization_constant_count=" + itos(provenance.specialization_constant_count);
 		text += ",color_attachment_count=" + itos(provenance.color_attachment_count);
 		text += ",active_color_attachment_mask=\"0x" + String::num_uint64(provenance.active_color_attachment_mask, 16) + "\"";
@@ -9469,6 +9539,49 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",uses_constant_factors_changed=" + String(base.blend_uses_constant_factors != other.blend_uses_constant_factors ? "true" : "false");
 		text += ",base=" + pipeline_blend_summary(base);
 		text += ",other=" + pipeline_blend_summary(other) + "}";
+		String specialization_relation = "different_specialization_recipe";
+		if (base.specialization_constant_hash == other.specialization_constant_hash) {
+			specialization_relation = "same_specialization_recipe";
+		} else if (base.specialization_constant_count == 0 && other.specialization_constant_count == 0) {
+			specialization_relation = "same_empty_specialization_recipe";
+		} else if (base.specialization_constant_id_hash == other.specialization_constant_id_hash && base.specialization_constant_value_hash != other.specialization_constant_value_hash) {
+			specialization_relation = "same_ids_different_values";
+		} else if (base.specialization_constant_id_hash != other.specialization_constant_id_hash && base.specialization_constant_value_hash == other.specialization_constant_value_hash) {
+			specialization_relation = "different_ids_same_values";
+		} else if (base.specialization_constant_count == other.specialization_constant_count && base.specialization_constant_type_mask == other.specialization_constant_type_mask && base.specialization_constant_bool_count == other.specialization_constant_bool_count && base.specialization_constant_int_count == other.specialization_constant_int_count && base.specialization_constant_float_count == other.specialization_constant_float_count) {
+			specialization_relation = "same_shape_different_recipe";
+		}
+		text += ",specialization_delta={relation=\"" + specialization_relation + "\"";
+		text += ",hash_changed=" + String(base.specialization_constant_hash != other.specialization_constant_hash ? "true" : "false");
+		text += ",id_hash_changed=" + String(base.specialization_constant_id_hash != other.specialization_constant_id_hash ? "true" : "false");
+		text += ",value_hash_changed=" + String(base.specialization_constant_value_hash != other.specialization_constant_value_hash ? "true" : "false");
+		text += ",count_changed=" + String(base.specialization_constant_count != other.specialization_constant_count ? "true" : "false");
+		text += ",type_mask_changed=" + String(base.specialization_constant_type_mask != other.specialization_constant_type_mask ? "true" : "false");
+		text += ",bool_count_changed=" + String(base.specialization_constant_bool_count != other.specialization_constant_bool_count ? "true" : "false");
+		text += ",int_count_changed=" + String(base.specialization_constant_int_count != other.specialization_constant_int_count ? "true" : "false");
+		text += ",float_count_changed=" + String(base.specialization_constant_float_count != other.specialization_constant_float_count ? "true" : "false");
+		text += ",min_id_changed=" + String((base.specialization_constant_count == 0 && other.specialization_constant_count == 0) || base.specialization_constant_min_id == other.specialization_constant_min_id ? "false" : "true");
+		text += ",max_id_changed=" + String((base.specialization_constant_count == 0 && other.specialization_constant_count == 0) || base.specialization_constant_max_id == other.specialization_constant_max_id ? "false" : "true");
+		text += ",base={count=" + itos(base.specialization_constant_count);
+		text += ",type_mask=\"0x" + String::num_uint64(base.specialization_constant_type_mask, 16) + "\"";
+		text += ",bool_count=" + itos(base.specialization_constant_bool_count);
+		text += ",int_count=" + itos(base.specialization_constant_int_count);
+		text += ",float_count=" + itos(base.specialization_constant_float_count);
+		text += ",id_hash=" + debug_uint64_or_none(base.specialization_constant_id_hash);
+		text += ",value_hash=" + debug_uint64_or_none(base.specialization_constant_value_hash);
+		text += ",min_id=" + (base.specialization_constant_count > 0 ? itos(base.specialization_constant_min_id) : String("none"));
+		text += ",max_id=" + (base.specialization_constant_count > 0 ? itos(base.specialization_constant_max_id) : String("none"));
+		text += ",preview=" + (base.specialization_constant_count > 0 ? base.specialization_constant_preview : String("[]")) + "}";
+		text += ",other={count=" + itos(other.specialization_constant_count);
+		text += ",type_mask=\"0x" + String::num_uint64(other.specialization_constant_type_mask, 16) + "\"";
+		text += ",bool_count=" + itos(other.specialization_constant_bool_count);
+		text += ",int_count=" + itos(other.specialization_constant_int_count);
+		text += ",float_count=" + itos(other.specialization_constant_float_count);
+		text += ",id_hash=" + debug_uint64_or_none(other.specialization_constant_id_hash);
+		text += ",value_hash=" + debug_uint64_or_none(other.specialization_constant_value_hash);
+		text += ",min_id=" + (other.specialization_constant_count > 0 ? itos(other.specialization_constant_min_id) : String("none"));
+		text += ",max_id=" + (other.specialization_constant_count > 0 ? itos(other.specialization_constant_max_id) : String("none"));
+		text += ",preview=" + (other.specialization_constant_count > 0 ? other.specialization_constant_preview : String("[]")) + "}}";
 		text += ",shape_delta={shader_stage_count=" + String(base.shader_stage_count == other.shader_stage_count ? "same" : "changed");
 		text += ",vertex_binding_description_count=" + String(base.vertex_binding_description_count == other.vertex_binding_description_count ? "same" : "changed");
 		text += ",vertex_attribute_count=" + String(base.vertex_attribute_count == other.vertex_attribute_count ? "same" : "changed");

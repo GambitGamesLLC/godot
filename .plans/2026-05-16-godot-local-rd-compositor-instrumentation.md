@@ -2075,6 +2075,30 @@ The audit also agrees with QA that this does **not** collapse the poisoned bound
 
 ---
 
+### Task 88: Inspect the Tonemap specialization-constant seam at serial `8` on failing `submit_serial=9`
+
+**Bead ID:** `oc-8c1`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-8c1` and keep the investigation projection-only on the refreshed source-built Godot binary. The current best read is that `Tonemap (L87) (Draw)` remains the first poisoned-boundary candidate, vertex input is now structurally explained, the blend lane has been narrowed to attachment-recipe-only contrast with shared constant provenance, and the remaining broad Tonemap -> `L88` pipeline-owned seam still includes `specialization_constants` plus `pipeline_layout`. Auditor guidance says to split `specialization_constants` next as the tightest still-unexplained neighboring-pass recipe lane. Add small, reversible, high-signal instrumentation that inspects and contrasts Tonemap’s specialization-constant recipe/state against the immediate meaningful neighboring late-pass packet so we can tell whether the seam collapses to a narrower specialization-constant-owned sub-boundary or stays broad. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-8c1` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a small, reversible specialization-constant provenance slice on top of the existing Tonemap/L88 neighboring-pass pipeline compare without widening the repro model or dropping into shader-side probes. `drivers/vulkan/rendering_device_driver_vulkan.h/.cpp` now preserve a tighter specialization packet for each created graphics pipeline: aggregate specialization hash plus separate ID/value hashes, type-mask and per-type counts, min/max constant IDs, and a compact preview of the concrete constants captured at pipeline creation. `_debug_command_buffer_tonemap_pass_scope_summary()` now emits those fields in each `pipeline_provenance=` summary and adds a dedicated `specialization_delta={...}` block inside the Tonemap -> neighboring-pass recipe compare so QA can tell whether the surviving seam collapses to a specialization-owned sub-boundary (`same_ids_different_values`, `different_ids_same_values`, etc.) or stays broad alongside the already-surviving `pipeline_layout` / other recipe buckets.
+
+Validation/build stayed source-built and projection-only on branch `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; targeted object check `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; refreshed editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; binary string check `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "specialization_delta={relation="`; and headless sanity check `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version` (`4.7.beta.custom_build.e398bda96`). No staged repro was run in this coder pass, so there is no fresh artifact root yet; QA should use the refreshed source-built binary to decide whether the remaining Tonemap -> `Command Graph (L88) (Draw)` seam narrows specifically to specialization constants or remains a broader multi-bucket contrast. Implementation landed on the active branch as `debug: inspect tonemap specialization seam` (current branch tip; see `git log -1`).
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

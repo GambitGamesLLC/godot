@@ -491,6 +491,15 @@ private:
 		uint64_t blend_constant_value_hash = 0;
 		uint64_t dynamic_state_recipe_hash = 0;
 		uint64_t specialization_constant_hash = 0;
+		uint64_t specialization_constant_id_hash = 0;
+		uint64_t specialization_constant_value_hash = 0;
+		uint32_t specialization_constant_type_mask = 0;
+		uint32_t specialization_constant_bool_count = 0;
+		uint32_t specialization_constant_int_count = 0;
+		uint32_t specialization_constant_float_count = 0;
+		uint32_t specialization_constant_min_id = 0xffffffff;
+		uint32_t specialization_constant_max_id = 0;
+		String specialization_constant_preview;
 		uint32_t shader_stage_count = 0;
 		uint32_t shader_stage_mask = 0;
 		uint32_t vertex_binding_description_count = 0;
