@@ -3425,6 +3425,13 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_vertex_binding_count = 0;
 	command_buffer->debug_index_buffer_bound = false;
 	command_buffer->debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
+	command_buffer->debug_blend_constants_set = false;
+	command_buffer->debug_blend_constants[0] = 0.0f;
+	command_buffer->debug_blend_constants[1] = 0.0f;
+	command_buffer->debug_blend_constants[2] = 0.0f;
+	command_buffer->debug_blend_constants[3] = 0.0f;
+	command_buffer->debug_blend_constants_hash = 0;
+	command_buffer->debug_blend_constants_last_set_serial = 0;
 	command_buffer->debug_segment_frame_index = current_segment_frame_index;
 	command_buffer->debug_segment_frames_drawn = current_segment_frames_drawn;
 	command_buffer->debug_last_breadcrumb = BreadcrumbMarker::NONE;
@@ -3472,6 +3479,13 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_vertex_binding_count = 0;
 	command_buffer->debug_index_buffer_bound = false;
 	command_buffer->debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
+	command_buffer->debug_blend_constants_set = false;
+	command_buffer->debug_blend_constants[0] = 0.0f;
+	command_buffer->debug_blend_constants[1] = 0.0f;
+	command_buffer->debug_blend_constants[2] = 0.0f;
+	command_buffer->debug_blend_constants[3] = 0.0f;
+	command_buffer->debug_blend_constants_hash = 0;
+	command_buffer->debug_blend_constants_last_set_serial = 0;
 	command_buffer->debug_segment_frame_index = current_segment_frame_index;
 	command_buffer->debug_segment_frames_drawn = current_segment_frames_drawn;
 	command_buffer->debug_last_breadcrumb = BreadcrumbMarker::NONE;
@@ -6110,8 +6124,25 @@ void RenderingDeviceDriverVulkan::command_render_bind_index_buffer(CommandBuffer
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color &p_constants) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdSetBlendConstants(command_buffer->vk_command_buffer, p_constants.components);
+	command_buffer->debug_blend_constants_set = true;
+	command_buffer->debug_blend_constants[0] = p_constants.r;
+	command_buffer->debug_blend_constants[1] = p_constants.g;
+	command_buffer->debug_blend_constants[2] = p_constants.b;
+	command_buffer->debug_blend_constants[3] = p_constants.a;
+	auto float_bits = [](float p_value) {
+		uint32_t bits = 0;
+		memcpy(&bits, &p_value, sizeof(bits));
+		return bits;
+	};
+	uint64_t blend_constants_hash = hash_murmur3_one_64(float_bits(p_constants.r));
+	blend_constants_hash = hash_murmur3_one_64(float_bits(p_constants.g), blend_constants_hash);
+	blend_constants_hash = hash_murmur3_one_64(float_bits(p_constants.b), blend_constants_hash);
+	blend_constants_hash = hash_murmur3_one_64(float_bits(p_constants.a), blend_constants_hash);
+	command_buffer->debug_blend_constants_hash = blend_constants_hash;
+	command_buffer->debug_blend_constants_last_set_serial = command_buffer->debug_backend_command_serial + 1;
+	_debug_record_label_backend_command(command_buffer, "set_blend_constants");
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width) {
@@ -6668,19 +6699,59 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	blend_recipe_hash = hash_murmur3_one_64(color_blend_state_create_info.logicOp, blend_recipe_hash);
 	const uint32_t color_attachment_count = p_color_attachments.size();
 	uint32_t active_color_attachment_mask = 0;
+	uint32_t blend_enabled_attachment_mask = 0;
+	uint64_t blend_write_mask_hash = 0;
+	uint64_t blend_attachment_recipe_hash = hash_murmur3_one_64(color_attachment_count);
+	bool has_active_blend_attachment = false;
+	uint32_t first_active_blend_attachment_index = 0;
+	bool first_active_blend_enable = false;
+	uint32_t first_active_blend_color_write_mask = 0;
+	uint32_t first_active_src_color_blend_factor = 0;
+	uint32_t first_active_dst_color_blend_factor = 0;
+	uint32_t first_active_color_blend_op = 0;
+	uint32_t first_active_src_alpha_blend_factor = 0;
+	uint32_t first_active_dst_alpha_blend_factor = 0;
+	uint32_t first_active_alpha_blend_op = 0;
+	bool blend_uses_constant_factors = false;
 	blend_recipe_hash = hash_murmur3_one_64(color_attachment_count, blend_recipe_hash);
 	for (uint32_t i = 0; i < p_color_attachments.size(); i++) {
 		blend_recipe_hash = hash_murmur3_one_64((uint32_t)p_color_attachments[i], blend_recipe_hash);
+		blend_attachment_recipe_hash = hash_murmur3_one_64((uint32_t)p_color_attachments[i], blend_attachment_recipe_hash);
 		if (p_color_attachments[i] != ATTACHMENT_UNUSED) {
 			if (i < 32) {
 				active_color_attachment_mask |= (1u << i);
 			}
-			blend_recipe_hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)&vk_attachment_states[i], sizeof(VkPipelineColorBlendAttachmentState)), blend_recipe_hash);
+			const uint64_t attachment_hash = hash_murmur3_buffer((const uint8_t *)&vk_attachment_states[i], sizeof(VkPipelineColorBlendAttachmentState));
+			blend_recipe_hash = hash_murmur3_one_64(attachment_hash, blend_recipe_hash);
+			blend_attachment_recipe_hash = hash_murmur3_one_64(attachment_hash, blend_attachment_recipe_hash);
+			blend_write_mask_hash = hash_murmur3_one_64(vk_attachment_states[i].colorWriteMask, blend_write_mask_hash);
+			if (vk_attachment_states[i].blendEnable) {
+				if (i < 32) {
+					blend_enabled_attachment_mask |= (1u << i);
+				}
+				blend_uses_constant_factors |= vk_attachment_states[i].srcColorBlendFactor == VK_BLEND_FACTOR_CONSTANT_COLOR || vk_attachment_states[i].srcColorBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR || vk_attachment_states[i].srcColorBlendFactor == VK_BLEND_FACTOR_CONSTANT_ALPHA || vk_attachment_states[i].srcColorBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA || vk_attachment_states[i].dstColorBlendFactor == VK_BLEND_FACTOR_CONSTANT_COLOR || vk_attachment_states[i].dstColorBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR || vk_attachment_states[i].dstColorBlendFactor == VK_BLEND_FACTOR_CONSTANT_ALPHA || vk_attachment_states[i].dstColorBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA || vk_attachment_states[i].srcAlphaBlendFactor == VK_BLEND_FACTOR_CONSTANT_COLOR || vk_attachment_states[i].srcAlphaBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR || vk_attachment_states[i].srcAlphaBlendFactor == VK_BLEND_FACTOR_CONSTANT_ALPHA || vk_attachment_states[i].srcAlphaBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA || vk_attachment_states[i].dstAlphaBlendFactor == VK_BLEND_FACTOR_CONSTANT_COLOR || vk_attachment_states[i].dstAlphaBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR || vk_attachment_states[i].dstAlphaBlendFactor == VK_BLEND_FACTOR_CONSTANT_ALPHA || vk_attachment_states[i].dstAlphaBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+			}
+			if (!has_active_blend_attachment) {
+				has_active_blend_attachment = true;
+				first_active_blend_attachment_index = i;
+				first_active_blend_enable = vk_attachment_states[i].blendEnable;
+				first_active_blend_color_write_mask = vk_attachment_states[i].colorWriteMask;
+				first_active_src_color_blend_factor = vk_attachment_states[i].srcColorBlendFactor;
+				first_active_dst_color_blend_factor = vk_attachment_states[i].dstColorBlendFactor;
+				first_active_color_blend_op = vk_attachment_states[i].colorBlendOp;
+				first_active_src_alpha_blend_factor = vk_attachment_states[i].srcAlphaBlendFactor;
+				first_active_dst_alpha_blend_factor = vk_attachment_states[i].dstAlphaBlendFactor;
+				first_active_alpha_blend_op = vk_attachment_states[i].alphaBlendOp;
+			}
 		}
 	}
+	uint64_t blend_constant_value_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[0]));
 	blend_recipe_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[0]), blend_recipe_hash);
+	blend_constant_value_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[1]), blend_constant_value_hash);
 	blend_recipe_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[1]), blend_recipe_hash);
+	blend_constant_value_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[2]), blend_constant_value_hash);
 	blend_recipe_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[2]), blend_recipe_hash);
+	blend_constant_value_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[3]), blend_constant_value_hash);
 	blend_recipe_hash = hash_murmur3_one_64(float_bits(color_blend_state_create_info.blendConstants[3]), blend_recipe_hash);
 	uint64_t dynamic_state_recipe_hash = hash_murmur3_one_64(vk_dynamic_states_count);
 	for (uint32_t i = 0; i < vk_dynamic_states_count; i++) {
@@ -6725,6 +6796,8 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.multisample_recipe_hash = multisample_recipe_hash;
 	pipeline_provenance.depth_stencil_recipe_hash = depth_stencil_recipe_hash;
 	pipeline_provenance.blend_recipe_hash = blend_recipe_hash;
+	pipeline_provenance.blend_attachment_recipe_hash = blend_attachment_recipe_hash;
+	pipeline_provenance.blend_constant_value_hash = blend_constant_value_hash;
 	pipeline_provenance.dynamic_state_recipe_hash = dynamic_state_recipe_hash;
 	pipeline_provenance.specialization_constant_hash = specialization_constant_hash;
 	pipeline_provenance.shader_stage_count = shader_info->vk_stages_create_info.size();
@@ -6742,6 +6815,8 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.specialization_constant_count = p_specialization_constants.size();
 	pipeline_provenance.color_attachment_count = color_attachment_count;
 	pipeline_provenance.active_color_attachment_mask = active_color_attachment_mask;
+	pipeline_provenance.blend_enabled_attachment_mask = blend_enabled_attachment_mask;
+	pipeline_provenance.blend_write_mask_hash = blend_write_mask_hash;
 	pipeline_provenance.dynamic_state_flags = (uint32_t)p_dynamic_state;
 	pipeline_provenance.sample_mask_word_count = sample_mask_word_count;
 	pipeline_provenance.render_primitive = p_render_primitive;
@@ -6750,6 +6825,14 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.sample_count = multisample_state_create_info.rasterizationSamples;
 	pipeline_provenance.depth_compare_op = depth_stencil_state_create_info.depthCompareOp;
 	pipeline_provenance.logic_op = color_blend_state_create_info.logicOp;
+	pipeline_provenance.first_active_blend_attachment_index = first_active_blend_attachment_index;
+	pipeline_provenance.first_active_blend_color_write_mask = first_active_blend_color_write_mask;
+	pipeline_provenance.first_active_src_color_blend_factor = first_active_src_color_blend_factor;
+	pipeline_provenance.first_active_dst_color_blend_factor = first_active_dst_color_blend_factor;
+	pipeline_provenance.first_active_color_blend_op = first_active_color_blend_op;
+	pipeline_provenance.first_active_src_alpha_blend_factor = first_active_src_alpha_blend_factor;
+	pipeline_provenance.first_active_dst_alpha_blend_factor = first_active_dst_alpha_blend_factor;
+	pipeline_provenance.first_active_alpha_blend_op = first_active_alpha_blend_op;
 	pipeline_provenance.raster_discard_primitives = rasterization_state_create_info.rasterizerDiscardEnable;
 	pipeline_provenance.raster_wireframe = rasterization_state_create_info.polygonMode == VK_POLYGON_MODE_LINE;
 	pipeline_provenance.depth_test_enabled = depth_stencil_state_create_info.depthTestEnable;
@@ -6760,6 +6843,9 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.alpha_to_coverage_enabled = multisample_state_create_info.alphaToCoverageEnable;
 	pipeline_provenance.alpha_to_one_enabled = multisample_state_create_info.alphaToOneEnable;
 	pipeline_provenance.logic_op_enabled = color_blend_state_create_info.logicOpEnable;
+	pipeline_provenance.has_active_blend_attachment = has_active_blend_attachment;
+	pipeline_provenance.first_active_blend_enable = first_active_blend_enable;
+	pipeline_provenance.blend_uses_constant_factors = blend_uses_constant_factors;
 
 	// Destroy any modules created temporarily by re-spirv.
 	for (VkShaderModule vk_module : respv_shader_modules) {
@@ -9140,6 +9226,37 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 	const auto debug_uint64_or_none = [](uint64_t p_value) {
 		return p_value == 0 ? String("none") : String("\"0x") + String::num_uint64(p_value, 16) + "\"";
 	};
+	const auto blend_factor_uses_constants = [](uint32_t p_factor) {
+		return p_factor == VK_BLEND_FACTOR_CONSTANT_COLOR || p_factor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR || p_factor == VK_BLEND_FACTOR_CONSTANT_ALPHA || p_factor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+	};
+	const auto pipeline_blend_summary = [&](const DebugPipelineBindingProvenance &provenance) {
+		String text = "{attachment_recipe_hash=" + debug_uint64_or_none(provenance.blend_attachment_recipe_hash);
+		text += ",constant_value_hash=" + debug_uint64_or_none(provenance.blend_constant_value_hash);
+		text += ",active_attachment_mask=\"0x" + String::num_uint64(provenance.active_color_attachment_mask, 16) + "\"";
+		text += ",blend_enabled_attachment_mask=\"0x" + String::num_uint64(provenance.blend_enabled_attachment_mask, 16) + "\"";
+		text += ",blend_write_mask_hash=" + debug_uint64_or_none(provenance.blend_write_mask_hash);
+		text += ",dynamic_blend_constants=" + String((provenance.dynamic_state_flags & (uint32_t)DYNAMIC_STATE_BLEND_CONSTANTS) != 0 ? "true" : "false");
+		text += ",logic_op_enabled=" + String(provenance.logic_op_enabled ? "true" : "false");
+		text += ",blend_uses_constant_factors=" + String(provenance.blend_uses_constant_factors ? "true" : "false");
+		text += ",has_active_attachment=" + String(provenance.has_active_blend_attachment ? "true" : "false");
+		text += ",first_active_attachment=";
+		if (!provenance.has_active_blend_attachment) {
+			text += "none";
+		} else {
+			text += "{index=" + itos(provenance.first_active_blend_attachment_index);
+			text += ",blend_enable=" + String(provenance.first_active_blend_enable ? "true" : "false");
+			text += ",color_write_mask=\"0x" + String::num_uint64(provenance.first_active_blend_color_write_mask, 16) + "\"";
+			text += ",src_color=" + itos(provenance.first_active_src_color_blend_factor);
+			text += ",dst_color=" + itos(provenance.first_active_dst_color_blend_factor);
+			text += ",color_op=" + itos(provenance.first_active_color_blend_op);
+			text += ",src_alpha=" + itos(provenance.first_active_src_alpha_blend_factor);
+			text += ",dst_alpha=" + itos(provenance.first_active_dst_alpha_blend_factor);
+			text += ",alpha_op=" + itos(provenance.first_active_alpha_blend_op);
+			text += ",uses_constant_factors=" + String(blend_factor_uses_constants(provenance.first_active_src_color_blend_factor) || blend_factor_uses_constants(provenance.first_active_dst_color_blend_factor) || blend_factor_uses_constants(provenance.first_active_src_alpha_blend_factor) || blend_factor_uses_constants(provenance.first_active_dst_alpha_blend_factor) ? "true" : "false") + "}";
+		}
+		text += "}";
+		return text;
+	};
 	const auto pipeline_provenance_summary = [&](const DebugPipelineBindingProvenance &provenance) {
 		if (!provenance.valid && provenance.pipeline_handle == 0 && provenance.pipeline_layout_handle == 0 && provenance.render_pass_handle == 0 && provenance.shader_name.is_empty()) {
 			return String("none");
@@ -9170,6 +9287,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",multisample_recipe_hash=" + debug_uint64_or_none(provenance.multisample_recipe_hash);
 		text += ",depth_stencil_recipe_hash=" + debug_uint64_or_none(provenance.depth_stencil_recipe_hash);
 		text += ",blend_recipe_hash=" + debug_uint64_or_none(provenance.blend_recipe_hash);
+		text += ",blend_attachment_recipe_hash=" + debug_uint64_or_none(provenance.blend_attachment_recipe_hash);
+		text += ",blend_constant_value_hash=" + debug_uint64_or_none(provenance.blend_constant_value_hash);
 		text += ",dynamic_state_recipe_hash=" + debug_uint64_or_none(provenance.dynamic_state_recipe_hash);
 		text += ",specialization_constant_hash=" + debug_uint64_or_none(provenance.specialization_constant_hash);
 		text += ",recipe_shape={shader_stage_count=" + itos(provenance.shader_stage_count);
@@ -9188,6 +9307,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",specialization_constant_count=" + itos(provenance.specialization_constant_count);
 		text += ",color_attachment_count=" + itos(provenance.color_attachment_count);
 		text += ",active_color_attachment_mask=\"0x" + String::num_uint64(provenance.active_color_attachment_mask, 16) + "\"";
+		text += ",blend_enabled_attachment_mask=\"0x" + String::num_uint64(provenance.blend_enabled_attachment_mask, 16) + "\"";
+		text += ",blend_write_mask_hash=" + debug_uint64_or_none(provenance.blend_write_mask_hash);
 		text += ",dynamic_state_flags=\"0x" + String::num_uint64(provenance.dynamic_state_flags, 16) + "\"";
 		text += ",sample_mask_word_count=" + itos(provenance.sample_mask_word_count);
 		text += ",render_primitive=" + itos(provenance.render_primitive);
@@ -9205,7 +9326,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",depth_bounds_enabled=" + String(provenance.depth_bounds_enabled ? "true" : "false");
 		text += ",stencil_test_enabled=" + String(provenance.stencil_test_enabled ? "true" : "false");
 		text += ",logic_op_enabled=" + String(provenance.logic_op_enabled ? "true" : "false");
-		text += ",logic_op=" + itos(provenance.logic_op) + "}";
+		text += ",logic_op=" + itos(provenance.logic_op);
+		text += ",blend_summary=" + pipeline_blend_summary(provenance) + "}";
 		text += "}";
 		return text;
 	};
@@ -9327,6 +9449,26 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",binding_layout_hash=" + debug_uint64_or_none(other.vertex_binding_layout_hash);
 		text += ",attribute_layout_hash=" + debug_uint64_or_none(other.vertex_attribute_layout_hash);
 		text += ",attribute_format_hash=" + debug_uint64_or_none(other.vertex_attribute_format_hash) + "}}";
+		String blend_relation = "different_blend_recipe";
+		if (base.blend_recipe_hash == other.blend_recipe_hash) {
+			blend_relation = "same_blend_recipe";
+		} else if (base.blend_attachment_recipe_hash == other.blend_attachment_recipe_hash && base.blend_constant_value_hash != other.blend_constant_value_hash) {
+			blend_relation = "same_attachment_recipe_different_constants";
+		} else if (base.blend_attachment_recipe_hash != other.blend_attachment_recipe_hash && base.blend_constant_value_hash == other.blend_constant_value_hash) {
+			blend_relation = "different_attachment_recipe_same_constants";
+		}
+		text += ",blend_delta={relation=\"" + blend_relation + "\"";
+		text += ",attachment_recipe_hash_changed=" + String(base.blend_attachment_recipe_hash != other.blend_attachment_recipe_hash ? "true" : "false");
+		text += ",constant_value_hash_changed=" + String(base.blend_constant_value_hash != other.blend_constant_value_hash ? "true" : "false");
+		text += ",active_attachment_mask_changed=" + String(base.active_color_attachment_mask != other.active_color_attachment_mask ? "true" : "false");
+		text += ",blend_enabled_attachment_mask_changed=" + String(base.blend_enabled_attachment_mask != other.blend_enabled_attachment_mask ? "true" : "false");
+		text += ",blend_write_mask_hash_changed=" + String(base.blend_write_mask_hash != other.blend_write_mask_hash ? "true" : "false");
+		text += ",dynamic_blend_constants_changed=" + String(((base.dynamic_state_flags & (uint32_t)DYNAMIC_STATE_BLEND_CONSTANTS) != 0) != ((other.dynamic_state_flags & (uint32_t)DYNAMIC_STATE_BLEND_CONSTANTS) != 0) ? "true" : "false");
+		text += ",logic_op_enabled_changed=" + String(base.logic_op_enabled != other.logic_op_enabled ? "true" : "false");
+		text += ",logic_op_changed=" + String(base.logic_op != other.logic_op ? "true" : "false");
+		text += ",uses_constant_factors_changed=" + String(base.blend_uses_constant_factors != other.blend_uses_constant_factors ? "true" : "false");
+		text += ",base=" + pipeline_blend_summary(base);
+		text += ",other=" + pipeline_blend_summary(other) + "}";
 		text += ",shape_delta={shader_stage_count=" + String(base.shader_stage_count == other.shader_stage_count ? "same" : "changed");
 		text += ",vertex_binding_description_count=" + String(base.vertex_binding_description_count == other.vertex_binding_description_count ? "same" : "changed");
 		text += ",vertex_attribute_count=" + String(base.vertex_attribute_count == other.vertex_attribute_count ? "same" : "changed");
@@ -9394,6 +9536,10 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		} else {
 			text += "none";
 		}
+		text += ",blend_constants={set=" + String(state.blend_constants_set ? "true" : "false");
+		text += ",hash=" + debug_uint64_or_none(state.blend_constants_hash);
+		text += ",last_set_serial=" + itos(state.blend_constants_last_set_serial);
+		text += ",values=[" + String::num_real(state.blend_constants[0]) + ", " + String::num_real(state.blend_constants[1]) + ", " + String::num_real(state.blend_constants[2]) + ", " + String::num_real(state.blend_constants[3]) + "]}";
 		text += ",breadcrumb=\"" + _debug_breadcrumb_to_string(state.breadcrumb) + "\"";
 		text += ",scope_pipeline_relation=\"" + render_pass_scope_pipeline_relation(state) + "\"";
 		text += ",pipeline_provenance=" + pipeline_provenance_summary(state.render_pipeline_provenance);
@@ -9413,6 +9559,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",vertex_binding_count=" + String(before_state.vertex_binding_count != after_state.vertex_binding_count ? "changed" : "same");
 		text += ",index_buffer_bound=" + String(before_state.index_buffer_bound != after_state.index_buffer_bound ? "changed" : "same");
 		text += ",index_format=" + String(before_state.index_format != after_state.index_format ? "changed" : "same");
+		text += ",blend_constants_set=" + String(before_state.blend_constants_set != after_state.blend_constants_set ? "changed" : "same");
+		text += ",blend_constants_hash=" + String(before_state.blend_constants_hash != after_state.blend_constants_hash ? "changed" : "same");
+		text += ",blend_constants_last_set_serial=" + String(before_state.blend_constants_last_set_serial != after_state.blend_constants_last_set_serial ? "changed" : "same");
 		text += ",breadcrumb=" + String(before_state.breadcrumb != after_state.breadcrumb ? "changed" : "same");
 		text += ",scope_pipeline_relation=" + String(render_pass_scope_pipeline_relation(before_state) == render_pass_scope_pipeline_relation(after_state) ? "same" : "changed");
 		text += ",pipeline_provenance=" + String(pipeline_provenance_relation(before_state.render_pipeline_provenance, after_state.render_pipeline_provenance) == "same_pipeline" ? "same" : "changed") + "}";
@@ -9686,6 +9835,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 					target_label_entry.first_pipeline_bind_after_state.vertex_binding_count == target_label_entry.first_uniform_bind_before_state.vertex_binding_count &&
 					target_label_entry.first_pipeline_bind_after_state.index_buffer_bound == target_label_entry.first_uniform_bind_before_state.index_buffer_bound &&
 					target_label_entry.first_pipeline_bind_after_state.index_format == target_label_entry.first_uniform_bind_before_state.index_format &&
+					target_label_entry.first_pipeline_bind_after_state.blend_constants_set == target_label_entry.first_uniform_bind_before_state.blend_constants_set &&
+					target_label_entry.first_pipeline_bind_after_state.blend_constants_hash == target_label_entry.first_uniform_bind_before_state.blend_constants_hash &&
+					target_label_entry.first_pipeline_bind_after_state.blend_constants_last_set_serial == target_label_entry.first_uniform_bind_before_state.blend_constants_last_set_serial &&
 					target_label_entry.first_pipeline_bind_after_state.breadcrumb == target_label_entry.first_uniform_bind_before_state.breadcrumb &&
 					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_handle == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.pipeline_handle &&
 					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle == target_label_entry.first_uniform_bind_before_state.render_pipeline_provenance.pipeline_layout_handle &&
@@ -9713,6 +9865,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 					target_label_entry.first_pipeline_bind_before_state.vertex_binding_count == target_label_entry.first_pipeline_bind_after_state.vertex_binding_count &&
 					target_label_entry.first_pipeline_bind_before_state.index_buffer_bound == target_label_entry.first_pipeline_bind_after_state.index_buffer_bound &&
 					target_label_entry.first_pipeline_bind_before_state.index_format == target_label_entry.first_pipeline_bind_after_state.index_format &&
+					target_label_entry.first_pipeline_bind_before_state.blend_constants_set == target_label_entry.first_pipeline_bind_after_state.blend_constants_set &&
+					target_label_entry.first_pipeline_bind_before_state.blend_constants_hash == target_label_entry.first_pipeline_bind_after_state.blend_constants_hash &&
+					target_label_entry.first_pipeline_bind_before_state.blend_constants_last_set_serial == target_label_entry.first_pipeline_bind_after_state.blend_constants_last_set_serial &&
 					target_label_entry.first_pipeline_bind_before_state.breadcrumb == target_label_entry.first_pipeline_bind_after_state.breadcrumb;
 			String owned_attachment_class = "pipeline_bind_direct_state_flip";
 			if (pipeline_to_uniform_gap_commands > 0) {
@@ -10117,6 +10272,13 @@ RenderingDeviceDriverVulkan::DebugCommandStateSnapshot RenderingDeviceDriverVulk
 	snapshot.vertex_binding_count = p_command_buffer->debug_vertex_binding_count;
 	snapshot.index_buffer_bound = p_command_buffer->debug_index_buffer_bound;
 	snapshot.index_format = p_command_buffer->debug_index_format;
+	snapshot.blend_constants_set = p_command_buffer->debug_blend_constants_set;
+	snapshot.blend_constants[0] = p_command_buffer->debug_blend_constants[0];
+	snapshot.blend_constants[1] = p_command_buffer->debug_blend_constants[1];
+	snapshot.blend_constants[2] = p_command_buffer->debug_blend_constants[2];
+	snapshot.blend_constants[3] = p_command_buffer->debug_blend_constants[3];
+	snapshot.blend_constants_hash = p_command_buffer->debug_blend_constants_hash;
+	snapshot.blend_constants_last_set_serial = p_command_buffer->debug_blend_constants_last_set_serial;
 	snapshot.breadcrumb = p_command_buffer->debug_last_breadcrumb;
 	snapshot.render_pipeline_provenance = p_command_buffer->debug_bound_render_pipeline_provenance;
 	if (p_command_buffer->debug_render_pipeline_bound) {

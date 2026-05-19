@@ -487,6 +487,8 @@ private:
 		uint64_t multisample_recipe_hash = 0;
 		uint64_t depth_stencil_recipe_hash = 0;
 		uint64_t blend_recipe_hash = 0;
+		uint64_t blend_attachment_recipe_hash = 0;
+		uint64_t blend_constant_value_hash = 0;
 		uint64_t dynamic_state_recipe_hash = 0;
 		uint64_t specialization_constant_hash = 0;
 		uint32_t shader_stage_count = 0;
@@ -504,6 +506,8 @@ private:
 		uint32_t specialization_constant_count = 0;
 		uint32_t color_attachment_count = 0;
 		uint32_t active_color_attachment_mask = 0;
+		uint32_t blend_enabled_attachment_mask = 0;
+		uint64_t blend_write_mask_hash = 0;
 		uint32_t dynamic_state_flags = 0;
 		uint32_t sample_mask_word_count = 0;
 		uint32_t render_primitive = 0;
@@ -512,6 +516,14 @@ private:
 		uint32_t sample_count = 0;
 		uint32_t depth_compare_op = 0;
 		uint32_t logic_op = 0;
+		uint32_t first_active_blend_attachment_index = 0;
+		uint32_t first_active_blend_color_write_mask = 0;
+		uint32_t first_active_src_color_blend_factor = 0;
+		uint32_t first_active_dst_color_blend_factor = 0;
+		uint32_t first_active_color_blend_op = 0;
+		uint32_t first_active_src_alpha_blend_factor = 0;
+		uint32_t first_active_dst_alpha_blend_factor = 0;
+		uint32_t first_active_alpha_blend_op = 0;
 		bool raster_discard_primitives = false;
 		bool raster_wireframe = false;
 		bool depth_test_enabled = false;
@@ -522,6 +534,9 @@ private:
 		bool alpha_to_coverage_enabled = false;
 		bool alpha_to_one_enabled = false;
 		bool logic_op_enabled = false;
+		bool has_active_blend_attachment = false;
+		bool first_active_blend_enable = false;
+		bool blend_uses_constant_factors = false;
 	};
 
 	struct DebugCommandStateSnapshot {
@@ -543,6 +558,10 @@ private:
 		uint32_t vertex_binding_count = 0;
 		bool index_buffer_bound = false;
 		IndexBufferFormat index_format = INDEX_BUFFER_FORMAT_UINT16;
+		bool blend_constants_set = false;
+		float blend_constants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		uint64_t blend_constants_hash = 0;
+		uint64_t blend_constants_last_set_serial = 0;
 		uint32_t breadcrumb = 0;
 		DebugPipelineBindingProvenance render_pipeline_provenance;
 	};
@@ -725,6 +744,10 @@ private:
 		uint32_t debug_vertex_binding_count = 0;
 		bool debug_index_buffer_bound = false;
 		IndexBufferFormat debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
+		bool debug_blend_constants_set = false;
+		float debug_blend_constants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		uint64_t debug_blend_constants_hash = 0;
+		uint64_t debug_blend_constants_last_set_serial = 0;
 		uint32_t debug_segment_frame_index = UINT32_MAX;
 		uint32_t debug_segment_frames_drawn = 0;
 		uint32_t debug_last_breadcrumb = 0;
