@@ -505,6 +505,30 @@ private:
 		DebugPipelineBindingProvenance render_pipeline_provenance;
 	};
 
+	struct DebugUniformBindingProvenance {
+		bool valid = false;
+		uint64_t bind_shader_pipeline_layout_handle = 0;
+		String bind_shader_name;
+		uint32_t first_set_index = 0;
+		uint32_t set_count = 0;
+		uint32_t dynamic_offset_count = 0;
+		uint32_t dynamic_buffer_count_total = 0;
+		uint64_t bind_expected_first_descriptor_set_layout_handle = 0;
+		uint64_t bind_expected_last_descriptor_set_layout_handle = 0;
+		uint64_t first_descriptor_set_handle = 0;
+		uint64_t last_descriptor_set_handle = 0;
+		uint64_t first_uniform_set_descriptor_set_layout_handle = 0;
+		uint64_t last_uniform_set_descriptor_set_layout_handle = 0;
+		uint64_t first_uniform_set_shader_pipeline_layout_handle = 0;
+		uint64_t last_uniform_set_shader_pipeline_layout_handle = 0;
+		uint32_t first_uniform_set_declared_set_index = 0;
+		uint32_t last_uniform_set_declared_set_index = 0;
+		bool all_sets_match_bind_shader_layout = true;
+		bool all_sets_match_bind_shader_pipeline_layout = true;
+		bool all_sets_match_bind_shader_name = true;
+		bool all_sets_match_declared_set_index = true;
+	};
+
 	struct DebugLabelEntry {
 		String label;
 		String operation_tag;
@@ -564,6 +588,7 @@ private:
 		DebugCommandStateSnapshot first_pipeline_bind_after_state;
 		uint64_t first_uniform_bind_serial = 0;
 		DebugCommandStateSnapshot first_uniform_bind_before_state;
+		DebugUniformBindingProvenance first_uniform_bind_provenance;
 		uint64_t last_uniform_bind_serial = 0;
 		uint64_t first_draw_backend_command_serial = 0;
 		uint64_t last_draw_backend_command_serial = 0;
@@ -825,6 +850,10 @@ private:
 		VkDescriptorPool vk_linear_descriptor_pool = VK_NULL_HANDLE;
 		DescriptorSetPools::Iterator pool_sets_it;
 		TightLocalVector<BufferInfo const *, uint32_t> dynamic_buffers;
+		uint64_t debug_descriptor_set_layout_handle = 0;
+		uint64_t debug_shader_pipeline_layout_handle = 0;
+		uint32_t debug_set_index = 0;
+		String debug_shader_name;
 	};
 
 	bool adreno_5xx_empty_descriptor_set_layout_workaround = false;

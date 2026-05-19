@@ -5035,6 +5035,10 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	for (uint32_t i = 0u; i < num_dynamic_buffers; ++i) {
 		usi->dynamic_buffers[i] = dynamic_buffers[i];
 	}
+	usi->debug_descriptor_set_layout_handle = p_set_index < shader_info->vk_descriptor_set_layouts.size() ? (uint64_t)shader_info->vk_descriptor_set_layouts[p_set_index] : 0;
+	usi->debug_shader_pipeline_layout_handle = (uint64_t)shader_info->vk_pipeline_layout;
+	usi->debug_set_index = p_set_index;
+	usi->debug_shader_name = shader_info->name;
 
 	return UniformSetID(usi);
 }
@@ -5977,6 +5981,49 @@ void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBuffer
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const DebugCommandStateSnapshot before_state = _debug_capture_command_state_snapshot(command_buffer);
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
+	DebugUniformBindingProvenance uniform_bind_provenance;
+	uniform_bind_provenance.valid = true;
+	uniform_bind_provenance.bind_shader_pipeline_layout_handle = (uint64_t)shader_info->vk_pipeline_layout;
+	uniform_bind_provenance.bind_shader_name = shader_info->name;
+	uniform_bind_provenance.first_set_index = p_first_set_index;
+	uniform_bind_provenance.set_count = p_set_count;
+	uniform_bind_provenance.dynamic_offset_count = curr_dynamic_offset;
+	if (p_set_count > 0) {
+		uniform_bind_provenance.bind_expected_first_descriptor_set_layout_handle =
+				p_first_set_index < shader_info->vk_descriptor_set_layouts.size() ? (uint64_t)shader_info->vk_descriptor_set_layouts[p_first_set_index] : 0;
+		const uint32_t last_set_index = p_first_set_index + p_set_count - 1;
+		uniform_bind_provenance.bind_expected_last_descriptor_set_layout_handle =
+				last_set_index < shader_info->vk_descriptor_set_layouts.size() ? (uint64_t)shader_info->vk_descriptor_set_layouts[last_set_index] : 0;
+	}
+	for (uint32_t i = 0; i < p_set_count; i++) {
+		const UniformSetInfo *usi = (const UniformSetInfo *)p_uniform_sets[i].id;
+		uniform_bind_provenance.dynamic_buffer_count_total += usi->dynamic_buffers.size();
+		if (i == 0) {
+			uniform_bind_provenance.first_descriptor_set_handle = (uint64_t)usi->vk_descriptor_set;
+			uniform_bind_provenance.first_uniform_set_descriptor_set_layout_handle = usi->debug_descriptor_set_layout_handle;
+			uniform_bind_provenance.first_uniform_set_shader_pipeline_layout_handle = usi->debug_shader_pipeline_layout_handle;
+			uniform_bind_provenance.first_uniform_set_declared_set_index = usi->debug_set_index;
+		}
+		if (i + 1 == p_set_count) {
+			uniform_bind_provenance.last_descriptor_set_handle = (uint64_t)usi->vk_descriptor_set;
+			uniform_bind_provenance.last_uniform_set_descriptor_set_layout_handle = usi->debug_descriptor_set_layout_handle;
+			uniform_bind_provenance.last_uniform_set_shader_pipeline_layout_handle = usi->debug_shader_pipeline_layout_handle;
+			uniform_bind_provenance.last_uniform_set_declared_set_index = usi->debug_set_index;
+		}
+		if (usi->debug_shader_pipeline_layout_handle != uniform_bind_provenance.bind_shader_pipeline_layout_handle) {
+			uniform_bind_provenance.all_sets_match_bind_shader_pipeline_layout = false;
+		}
+		if (usi->debug_shader_name != shader_info->name) {
+			uniform_bind_provenance.all_sets_match_bind_shader_name = false;
+		}
+		const uint32_t expected_set_index = p_first_set_index + i;
+		if (usi->debug_set_index != expected_set_index) {
+			uniform_bind_provenance.all_sets_match_declared_set_index = false;
+		}
+		if (expected_set_index >= shader_info->vk_descriptor_set_layouts.size() || usi->debug_descriptor_set_layout_handle != (uint64_t)shader_info->vk_descriptor_set_layouts[expected_set_index]) {
+			uniform_bind_provenance.all_sets_match_bind_shader_layout = false;
+		}
+	}
 	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
 	_debug_record_label_backend_command(command_buffer, "bind_render_uniform_sets");
 	if (command_buffer->debug_active_label_stack_size > 0) {
@@ -5985,6 +6032,7 @@ void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBuffer
 			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
 			if (entry.first_uniform_bind_serial == command_buffer->debug_backend_command_serial) {
 				entry.first_uniform_bind_before_state = before_state;
+				entry.first_uniform_bind_provenance = uniform_bind_provenance;
 			}
 		}
 	}
@@ -9441,6 +9489,89 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			text += ",pipeline_render_pass_compatibility_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_compatibility_hash);
 			text += ",pipeline_render_subpass_compatibility_hash=" + debug_uint64_or_none(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_subpass_compatibility_hash) + "}";
 			text += "}";
+			text += ",setup_pair_contract=";
+			if (target_label_entry.first_uniform_bind_serial == 0 || !target_label_entry.first_uniform_bind_provenance.valid) {
+				text += "{status=missing_uniform_bind}";
+			} else {
+				const bool pipeline_layout_matches_bind_shader =
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle != 0 &&
+					target_label_entry.first_uniform_bind_provenance.bind_shader_pipeline_layout_handle != 0 &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle == target_label_entry.first_uniform_bind_provenance.bind_shader_pipeline_layout_handle;
+				const bool pipeline_shader_matches_bind_shader =
+					!target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name.is_empty() &&
+					!target_label_entry.first_uniform_bind_provenance.bind_shader_name.is_empty() &&
+					target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name == target_label_entry.first_uniform_bind_provenance.bind_shader_name;
+				const bool uniform_packet_matches_bind_shader =
+					target_label_entry.first_uniform_bind_provenance.all_sets_match_bind_shader_layout &&
+					target_label_entry.first_uniform_bind_provenance.all_sets_match_bind_shader_pipeline_layout &&
+					target_label_entry.first_uniform_bind_provenance.all_sets_match_bind_shader_name &&
+					target_label_entry.first_uniform_bind_provenance.all_sets_match_declared_set_index;
+				const bool pair_contract_exact = pipeline_after_matches_uniform_before && pipeline_layout_matches_bind_shader && uniform_packet_matches_bind_shader;
+				String contract_class = "pair_contract_clean";
+				String next_seam_candidate = "pipeline_owned_state";
+				if (!pipeline_after_matches_uniform_before) {
+					contract_class = "pipeline_to_uniform_state_drift";
+					next_seam_candidate = "cross_pair_contract";
+				} else if (!pipeline_layout_matches_bind_shader || !pipeline_shader_matches_bind_shader) {
+					contract_class = "pipeline_shader_layout_mismatch_at_uniform_bind";
+					next_seam_candidate = "cross_pair_contract";
+				} else if (!uniform_packet_matches_bind_shader) {
+					contract_class = "uniform_packet_mismatch";
+					next_seam_candidate = "uniform_owned_state";
+				}
+				text += "{contract_class=\"" + contract_class + "\"";
+				text += ",next_seam_candidate=\"" + next_seam_candidate + "\"";
+				text += ",pair_contract_exact=" + String(pair_contract_exact ? "true" : "false");
+				text += ",pipeline_after_matches_uniform_before=" + String(pipeline_after_matches_uniform_before ? "true" : "false");
+				text += ",pipeline_layout_matches_bind_shader=" + String(pipeline_layout_matches_bind_shader ? "true" : "false");
+				text += ",pipeline_shader_matches_bind_shader=" + String(pipeline_shader_matches_bind_shader ? "true" : "false");
+				text += ",uniform_packet_matches_bind_shader=" + String(uniform_packet_matches_bind_shader ? "true" : "false");
+				text += ",pipeline_owner={serial=" + itos(target_label_entry.first_pipeline_bind_serial);
+				text += ",shader_name=";
+				if (target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name.is_empty()) {
+					text += "none";
+				} else {
+					text += "\"" + target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.shader_name + "\"";
+				}
+				text += ",pipeline_layout_handle=";
+				if (target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle == 0) {
+					text += "none";
+				} else {
+					text += "\"0x" + String::num_uint64(target_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.pipeline_layout_handle, 16) + "\"";
+				}
+				text += ",state_after=" + command_state_snapshot_summary(target_label_entry.first_pipeline_bind_after_state) + "}";
+				text += ",uniform_owner={serial=" + itos(target_label_entry.first_uniform_bind_serial);
+				text += ",bind_shader_name=";
+				if (target_label_entry.first_uniform_bind_provenance.bind_shader_name.is_empty()) {
+					text += "none";
+				} else {
+					text += "\"" + target_label_entry.first_uniform_bind_provenance.bind_shader_name + "\"";
+				}
+				text += ",bind_shader_pipeline_layout_handle=";
+				if (target_label_entry.first_uniform_bind_provenance.bind_shader_pipeline_layout_handle == 0) {
+					text += "none";
+				} else {
+					text += "\"0x" + String::num_uint64(target_label_entry.first_uniform_bind_provenance.bind_shader_pipeline_layout_handle, 16) + "\"";
+				}
+				text += ",first_set_index=" + itos(target_label_entry.first_uniform_bind_provenance.first_set_index);
+				text += ",set_count=" + itos(target_label_entry.first_uniform_bind_provenance.set_count);
+				text += ",dynamic_offset_count=" + itos(target_label_entry.first_uniform_bind_provenance.dynamic_offset_count);
+				text += ",dynamic_buffer_count_total=" + itos(target_label_entry.first_uniform_bind_provenance.dynamic_buffer_count_total);
+				text += ",before_state=" + command_state_snapshot_summary(target_label_entry.first_uniform_bind_before_state);
+				text += ",descriptor_sets={first=" + debug_uint64_or_none(target_label_entry.first_uniform_bind_provenance.first_descriptor_set_handle);
+				text += ",last=" + debug_uint64_or_none(target_label_entry.first_uniform_bind_provenance.last_descriptor_set_handle);
+				text += ",first_layout=" + debug_uint64_or_none(target_label_entry.first_uniform_bind_provenance.first_uniform_set_descriptor_set_layout_handle);
+				text += ",last_layout=" + debug_uint64_or_none(target_label_entry.first_uniform_bind_provenance.last_uniform_set_descriptor_set_layout_handle);
+				text += ",first_declared_set_index=" + itos(target_label_entry.first_uniform_bind_provenance.first_uniform_set_declared_set_index);
+				text += ",last_declared_set_index=" + itos(target_label_entry.first_uniform_bind_provenance.last_uniform_set_declared_set_index) + "}}";
+				text += ",contract_checks={all_sets_match_bind_shader_layout=" + String(target_label_entry.first_uniform_bind_provenance.all_sets_match_bind_shader_layout ? "true" : "false");
+				text += ",all_sets_match_bind_shader_pipeline_layout=" + String(target_label_entry.first_uniform_bind_provenance.all_sets_match_bind_shader_pipeline_layout ? "true" : "false");
+				text += ",all_sets_match_bind_shader_name=" + String(target_label_entry.first_uniform_bind_provenance.all_sets_match_bind_shader_name ? "true" : "false");
+				text += ",all_sets_match_declared_set_index=" + String(target_label_entry.first_uniform_bind_provenance.all_sets_match_declared_set_index ? "true" : "false");
+				text += ",expected_first_descriptor_set_layout_handle=" + debug_uint64_or_none(target_label_entry.first_uniform_bind_provenance.bind_expected_first_descriptor_set_layout_handle);
+				text += ",expected_last_descriptor_set_layout_handle=" + debug_uint64_or_none(target_label_entry.first_uniform_bind_provenance.bind_expected_last_descriptor_set_layout_handle) + "}";
+				text += "}";
+			}
 			text += ",neighboring_pass_pipeline_compare={previous=";
 			if (previous_meaningful_label_entry_index == -1) {
 				text += "none";

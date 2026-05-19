@@ -565,10 +565,10 @@ Validation completed on the touched code paths with `python3 misc/scripts/file_f
 
 ### Task 24: QA map `submit_serial=8` → `submit_serial=9` semaphore and command path
 
-**Bead ID:** `oc-zbz`  
-**SubAgent:** `primary` (for `qa`)  
-**Role:** `qa`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-zbz`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-zbz` and keep the investigation projection-only. Run the minimum valid host-Vulkan repro (`projection_only + disabled`) using the new Vulkan submit/work mapping diagnostics. Determine whether `submit_serial=8` is the transfer-worker submission, whether `submit_serial=9` is the following frame-1 command submission waiting on that same semaphore chain, and what command-label path / breadcrumb context is attached to `submit_serial=9` when the later `fence_wait_error` fires. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-zbz` with a clear reason if the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -589,10 +589,10 @@ Important caveat: the source-built editor binary used for the valid repro still 
 
 ### Task 25: Investigate the transfer-submit → frame-submit hazard on failing `submit_serial=9`
 
-**Bead ID:** `oc-d79`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-d79`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-d79` and keep the investigation projection-only. The current evidence says `submit_serial=8` is the transfer-worker submission and `submit_serial=9` is the following frame-1 main submission that waits on that semaphore chain, then later dies at `fence_wait`. Add small, reversible, high-signal instrumentation that helps determine what specific hazard lives in that transfer-submit → frame-submit handoff: semaphore provenance/consumption, transfer payload ownership, frame-submit work classification, or other backend-side state that could explain why submit 9 queues cleanly but later fails. Prefer failure-mechanics instrumentation over prettier logging. Update this plan with actual results, run relevant validation, commit/push the updates, and close bead `oc-d79` with a clear reason if complete.
 
 **Folders Created/Deleted/Modified:**
@@ -618,10 +618,10 @@ Validation completed with `python3 misc/scripts/file_format.py drivers/vulkan/re
 
 ### Task 26: QA verify `submit_serial=9` wait provenance from `submit_serial=8`
 
-**Bead ID:** `oc-y6n`  
-**SubAgent:** `primary` (for `qa`)  
-**Role:** `qa`  
-**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-y6n`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-y6n` and keep the investigation projection-only. Run the refreshed source-built host-Vulkan repro (`projection_only + disabled`) and use the new transfer→frame provenance diagnostics to determine whether `submit_serial=9` is waiting on the exact semaphore last signaled by `submit_serial=8`, whether that semaphore already had a prior consumer, and whether the attached wait/signal provenance or command summary indicates stale/reused ownership rather than a pure projection workload failure. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-y6n` with a clear reason if the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -1727,9 +1727,9 @@ Recommended next tight backend-owned seam: stay inside Tonemap serial `8`, but i
 - QA notes/docs/log references as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
 
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-**Results:** Pending.
+**Results:** QA reran the same minimum valid host-Vulkan source-built repro at `projection_only + disabled` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` plus the staged harness `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`, saving the durable artifact package at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656/`. The fresh source-built run preserved the established downstream envelope (`submit_serial=9` fence-wait failure, later `BLIT_PASS`) while answering the new render-pass lineage question directly. Inside `tonemap_pass_scope.target.tonemap_local_attachment.local_packet_split.pipeline_bind_seam.bind_owned_attachment`, Tonemap serial `8` now classifies as `pipeline_packet_scope_relation="different_handle_same_render_pass_compatibility"` with `active_scope_stable_across_bind=true`, `pipeline_packet_matches_active_scope=false`, `pipeline_packet_shares_compatible_scope=true`, and `bind_delta_is_pipeline_only=true`. The paired `scope_packet_lineage=` block shows why: the active scope and Tonemap packet use different render-pass handles / create serials / exact hashes (`active=create_serial 13, exact 0x5c19e291`; `packet=create_serial 9, exact 0x547d0135`), but they share the same compatibility hash and subpass-compatibility hash (`0x425f4d3d` / `0x81df0cad`). So the old Tonemap packet-vs-active-scope mismatch narrows to expected compatible aliasing/wrapping, not a raw incompatible render-pass break. QA also confirmed that the next meaningful `Command Graph (L88) (Draw)` packet carries the same active-scope relation pattern (`scope_pipeline_relation="different_handle_same_render_pass_compatibility"`) under the same active scope, which means this specific packet-vs-active-scope compatibility pattern is broader than Tonemap alone across the late surviving local-packet slice. But the direct Tonemap-vs-L88 neighboring packet comparison still lands at `different_pipeline_different_compatibility_context`, because the two packets differ at pipeline identity / layout / shader (`TonemapShaderRD:0` vs `CanvasShaderRD:0`) even though both point at the same compatible render-pass lineage object. Earlier surviving draw labels before Tonemap still remain wrapper-only pass scopes rather than comparable self-owned local payload packets, so the strongest shared-pattern evidence is Tonemap plus `L88`, not an earlier surviving draw packet. Tonemap therefore still remains the first self-owned poisoned-boundary candidate: it is still the first meaningful surviving local payload packet, while `L88` remains the immediately following heavier downstream amplification packet. QA appended the durable evidence package and interpretation to `doc/gdgs-compositor-staged-qa-2026-05-17.md`. Minor runtime noise persisted (`vformat` formatting errors in the callback breadcrumb text), but it did not change the classification.
 
 ---
 
@@ -1740,6 +1740,73 @@ Recommended next tight backend-owned seam: stay inside Tonemap serial `8`, but i
 **Role:** `auditor`
 **References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-3ta` after beads `oc-3jv` and `oc-hge` complete. Independently audit whether the new active render-pass provenance evidence really resolves or narrows the Tonemap serial-8 compatibility-lineage caveat, whether the QA artifact supports the claimed provenance/aliasing interpretation, and what the next tightest backend-owned seam should be if a narrower compatibility-lineage issue survives. Update this plan with actual findings, add audit notes if useful, and close bead `oc-3ta` with a clear reason when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- audit notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor independently re-checked the active plan/log, Godot source commit `47799b38` (`debug: add render pass provenance lineage`), and the saved QA artifact at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656/`. The source change really does add the needed provenance fields on both sides of the comparison: render-pass create serial, exact hash, compatibility hash, and per-subpass compatibility hash are now captured for live active scope state (`_debug_capture_command_state_snapshot`) and for graphics-pipeline provenance (`render_pipeline_create`), then compared by the new `render_pass_scope_pipeline_relation(...)` / `scope_packet_lineage` logic inside the Tonemap pass summary. The artifact matches that implementation exactly. On Tonemap pipeline-bind serial `8`, the active scope records handle/create/exact lineage `{handle=0x56701a965130, create_serial=13, exact=0x5c19e291}` while the bound Tonemap packet records `{handle=0x56701a3e8bd0, create_serial=9, exact=0x547d0135}`, yet both sides share `render_pass_compatibility_hash=0x425f4d3d` and `render_subpass_compatibility_hash=0x81df0cad`, producing `pipeline_packet_scope_relation="different_handle_same_render_pass_compatibility"` plus `pipeline_packet_shares_compatible_scope=true`. That means the prior caveat is now materially resolved: the surviving mismatch is a different-handle compatible alias / wrapper lineage, not evidence of an incompatible render-pass context break at Tonemap. The same active-scope-vs-packet relation also appears on the neighboring `Command Graph (L88) (Draw)` packet under the same active scope, which further demotes the raw handle mismatch as the first tight seam because the pattern is not unique to Tonemap. The direct Tonemap-vs-L88 packet comparison still reports `different_pipeline_different_compatibility_context`, but the evidence in the same payload shows that difference is driven by pipeline identity / layout / shader (`TonemapShaderRD:0` vs `CanvasShaderRD:0`), not by the active-scope compatible-alias handle split. Audit verdict: the expected-aliasing interpretation is supported, Tonemap still remains the first self-owned poisoned-boundary candidate, and the next tightest backend-owned seam should stay inside Tonemap’s already-isolated local packet—specifically the pipeline-bind-owned seam at serial `8` (`bind_render_pipeline`) with `bind_render_uniform_sets` at serial `9` treated as the first downstream setup amplifier. Concern noted: this still does not prove the pipeline bind alone is uniquely causal, because the Tonemap setup packet remains contiguous across serials `8 -> 9`; it only proves the older render-pass-handle mismatch caveat is no longer the best surviving explanation.
+
+---
+
+### Task 76: Inspect the Tonemap setup pair contract at serials `8->9` on failing `submit_serial=9`
+
+**Bead ID:** `oc-aol`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-aol` and keep the investigation projection-only on the refreshed source-built Godot binary. The current best read is that `Tonemap (L87) (Draw)` remains the first poisoned-boundary candidate, the raw render-pass handle mismatch has been demoted to expected compatible aliasing, and the remaining honest uncertainty is whether the harmful setup requires the contiguous Tonemap pair `bind_render_pipeline` at serial `8` plus `bind_render_uniform_sets` at serial `9`. Add small, reversible, high-signal instrumentation that inspects the setup-pair contract across serials `8->9` so we can classify whether the next tight seam lives in the pipeline-owned state alone, the uniform-set-owned state alone, or the specific contract/handshake between them. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-aol` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrow Tonemap `setup_pair_contract=` diagnostic on top of the existing serial-8 pipeline-bind / serial-9 uniform-bind seam instrumentation without changing renderer behavior or reopening the already-demoted render-pass-handle caveat. `drivers/vulkan/rendering_device_driver_vulkan.h` now persists lightweight uniform-set creation/bind provenance (`UniformSetInfo` debug fields plus `DebugUniformBindingProvenance` on the first Tonemap uniform bind), and `drivers/vulkan/rendering_device_driver_vulkan.cpp` now captures that provenance during `command_bind_render_uniform_sets()` and emits a new `setup_pair_contract={...}` block inside `tonemap_local_attachment.local_packet_split.pipeline_bind_seam=`. The payload is intentionally contract-focused: it records whether serial `9` carries forward the exact post-serial-8 pipeline state (`pipeline_after_matches_uniform_before`), whether the bound pipeline layout/shader matches the uniform-bind shader/layout, whether the descriptor-set packet itself matches the requested shader layout / declared set indices, and a coarse `next_seam_candidate` hint (`pipeline_owned_state`, `uniform_owned_state`, or `cross_pair_contract`). This keeps the evidence render-pass / command-buffer owned so the next QA pass can classify whether the surviving Tonemap seam is pipeline-owned alone, uniform-owned alone, or the specific 8->9 handshake.
+
+Validation/build stayed on the refreshed source-built Godot branch and preserved the staged repro model: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; targeted object build `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; full incremental editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; binary string check `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "setup_pair_contract="`; and headless sanity check `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version` (`4.7.beta.custom_build.18bd92b14`). No staged repro was run in this coder pass, so there is no new artifact root yet; QA should use the refreshed binary to capture the actual setup-pair classification on failing `submit_serial=9`. Landed as commit `25111733` (`debug: inspect tonemap setup pair contract`) and pushed to `gambit/gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`.
+
+---
+
+### Task 77: QA classify the Tonemap setup pair contract at serials `8->9` on failing `submit_serial=9`
+
+**Bead ID:** `oc-0cd`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-0cd` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new Tonemap setup-pair instrumentation on failing `submit_serial=9`. Determine whether the tightest surviving Tonemap seam now lives in the pipeline-owned state alone, the uniform-set-owned state alone, or the specific contract/handshake between serial `8` and serial `9`, while confirming whether Tonemap still remains the first poisoned-boundary candidate. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-0cd` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Pending.
+
+---
+
+### Task 78: Audit the Tonemap setup pair contract findings at serials `8->9`
+
+**Bead ID:** `oc-0e7`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-0e7` after beads `oc-aol` and `oc-0cd` complete. Independently audit whether the new Tonemap setup-pair evidence really advances the seam inside the current first poisoned-boundary candidate, whether the QA artifact supports the claimed serial-8->9 contract classification, and what the next tightest backend-owned seam should be if the pair contract survives. Update this plan with actual findings, add audit notes if useful, and close bead `oc-0e7` with a clear reason when complete.
 
 **Folders Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/`
