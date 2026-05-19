@@ -1378,9 +1378,9 @@ Validation/build stayed on the refreshed source-built Godot branch and kept the 
 - QA notes/docs/log references as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
 
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-**Results:** Pending.
+**Results:** QA reran the minimum valid host-Vulkan source-built repro with the refreshed Tonemap-local instrumentation using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` plus `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` at `projection_only__disabled`, saving the durable artifact package under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-local-packet-split-vulkan-sourcebuild-20260519-070538-rerun/` (`context.txt`, `stdout.log`, `exit_status.txt`; process abort / exit `134`). The new `local_packet_split=` block on failing `submit_serial=9` cleanly classifies the internal Tonemap-owned seam: `phase_counts={render_pass_begin=1,pipeline_binds=1,uniform_binds=1,draw_calls=1,render_pass_end=1}`, `phase_serials={begin_render_pass=7,setup_first=8,setup_last=9,draw_first=10,draw_last=10,end_render_pass=11}`, `phase_commands={setup_first="bind_render_pipeline",setup_last="bind_render_uniform_sets"}`, `phase_gaps={begin_to_setup_backend_gap_commands=0,setup_to_draw_backend_gap_commands=0,draw_to_end_backend_gap_commands=0}`, and `first_internal_expansion="bind_setup"`. That means the tightest surviving internal Tonemap seam is the bind/setup phase — not render-pass begin, the single Tonemap draw, or render-pass end — and the packet remains fully contiguous once it starts. The earlier Tonemap-first read also held unchanged on the same run: `tonemap_local_attachment=` still has zero descendant payload / exact scope alignment, `tonemap_to_l88_transition.first_meaningful_expansion="l88_label"` still places the first downstream ownership expansion exactly at `Command Graph (L88) (Draw)`, and the broader failure envelope remains `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`. The only runtime noise on this pass was the previously seen repeated `vformat` formatting errors from callback breadcrumb text; they did not affect the Tonemap-local classification.
 
 ---
 
@@ -1391,6 +1391,77 @@ Validation/build stayed on the refreshed source-built Godot branch and kept the 
 **Role:** `auditor`
 **References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-kqh` after beads `oc-5f9` and `oc-19h` complete. Independently audit whether the new Tonemap-local evidence really advances the seam inside the current first poisoned-boundary candidate, whether the QA artifact supports the claimed internal Tonemap transition, and what the next tightest backend-owned seam should be if one Tonemap sub-boundary survives. Update this plan with actual findings, add audit notes if useful, and close bead `oc-kqh` with a clear reason when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- audit notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-read the active plan, the living QA log in `REF-07`, the prior audit trail in `REF-08`, the fresh Tonemap-local source diff from commit `d9d83920` (`debug: split tonemap local packet`), and the captured source-built artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-local-packet-split-vulkan-sourcebuild-20260519-070538-rerun/`. Verdict: the new evidence **does** advance the seam inside the current first poisoned-boundary candidate, but only one notch inward. It does **not** move the first poisoned-boundary candidate away from `Tonemap (L87) (Draw)`; instead it shows that the first surviving internal Tonemap-owned expansion happens at the **bind/setup** phase, with the local packet still fully contiguous once it starts.
+
+The QA artifact supports that claim directly. On failing `submit_serial=9`, `tonemap_local_attachment.local_packet_split=` reports `phase_counts={render_pass_begin=1,pipeline_binds=1,uniform_binds=1,draw_calls=1,render_pass_end=1}`, `phase_serials={begin_render_pass=7,setup_first=8,setup_last=9,draw_first=10,draw_last=10,end_render_pass=11}`, `phase_commands={setup_first="bind_render_pipeline",setup_last="bind_render_uniform_sets"}`, `phase_gaps={begin_to_setup_backend_gap_commands=0,setup_to_draw_backend_gap_commands=0,draw_to_end_backend_gap_commands=0}`, and `first_internal_expansion="bind_setup"`. That matches the source instrumentation exactly: commit `d9d83920` added direct-command serial capture for `first_render_pass_begin_serial`, `first/last_setup_backend_command_serial`, `first/last_draw_backend_command_serial`, and `first_render_pass_end_serial`, then emitted `local_packet_split=` from those captured serials plus gap counts in `drivers/vulkan/rendering_device_driver_vulkan.cpp`. The observed QA output is therefore aligned with what the new instrumentation was designed to measure.
+
+Important audit caveat: this is still a **phase-bucket** answer, not a proof that the first toxic backend command is already isolated to one exact setup call. The current data cleanly demotes render-pass begin, the lone draw, and render-pass end below the combined setup bucket, but `bind_setup` still contains two distinct backend commands at adjacent serials (`bind_render_pipeline` at `8`, `bind_render_uniform_sets` at `9`). So the conclusion is supported as stated — Tonemap remains the first poisoned-boundary candidate, and bind/setup is the tightest surviving internal Tonemap seam — but the bucket itself is not yet exhausted.
+
+Recommended next tight backend-owned seam: split the surviving **Tonemap bind/setup bucket** itself, with the first priority on `bind_render_pipeline` vs `bind_render_uniform_sets` inside the same local packet. Because the packet is contiguous (`begin=7 -> setup=8..9 -> draw=10 -> end=11` with zero backend gap commands between phases), the best next question is whether the first meaningful internal ownership expansion survives exactly at pipeline bind, only after uniform-set bind, or only once the later draw executes despite the setup bucket being present. The repeated compositor `vformat` formatting errors remain log-noise worth fixing for hygiene, but they do not contradict the Tonemap-local seam classification.
+
+---
+
+### Task 61: Split the Tonemap bind/setup bucket on failing `submit_serial=9`
+
+**Bead ID:** `oc-apv`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-apv` and keep the investigation projection-only on the refreshed source-built Godot binary. The current best read is that `Tonemap (L87) (Draw)` remains the first poisoned-boundary candidate, and the tightest surviving internal Tonemap seam is now the contiguous bind/setup bucket. Add small, reversible, high-signal instrumentation that splits the Tonemap bind/setup bucket so we can classify whether the surviving sub-boundary happens exactly at `bind_render_pipeline`, at `bind_render_uniform_sets`, or only after both setup commands complete. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-apv` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrower Tonemap bind/setup split on top of the existing `tonemap_local_attachment.local_packet_split=` payload without changing renderer behavior or reopening the already-demoted Tonemap→L88 lane. `drivers/vulkan/rendering_device_driver_vulkan.h` now persists dedicated serial slots for direct Tonemap `bind_render_pipeline` and `bind_render_uniform_sets` commands, and `drivers/vulkan/rendering_device_driver_vulkan.cpp` now records those serials in `_debug_record_label_backend_command()` while extending the Tonemap summary with per-command setup serials (`pipeline_first/last`, `uniform_first/last`), an explicit `pipeline_to_uniform_backend_gap_commands` counter, a `setup_sub_boundary=` classification tag, ordered `setup_sequence=` booleans, and packet-shape flags that distinguish pipeline bind from uniform-set bind instead of collapsing both into one setup bucket. This keeps the evidence backend-owned and pass-scope-local: the next QA pass can now answer whether the first surviving Tonemap sub-boundary lands exactly at `bind_render_pipeline`, at `bind_render_uniform_sets`, or only after both setup commands complete before the draw. Validation/build stayed on the refreshed source-built Godot branch and kept the staged repro model intact: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; targeted object build `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; full incremental editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; binary string check `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "setup_sub_boundary="`; and headless binary sanity check `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version` (`4.7.beta.custom_build.01751e427`). No staged repro was run in this coder pass, so there is no new artifact root yet; QA should use the refreshed binary to capture the actual bind/setup classification. Commit hash: `8cc4f524`.
+
+---
+
+### Task 62: QA classify the Tonemap bind/setup bucket on failing `submit_serial=9`
+
+**Bead ID:** `oc-0nj`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-0nj` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new Tonemap bind/setup instrumentation on failing `submit_serial=9`. Determine whether the tightest surviving Tonemap sub-boundary happens exactly at `bind_render_pipeline`, at `bind_render_uniform_sets`, or only after both setup commands complete, while confirming whether Tonemap still remains the first poisoned-boundary candidate. Compare the result against the earlier `local_packet_split=` evidence, save durable notes/artifact references, update this plan with actual findings, and close bead `oc-0nj` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Pending.
+
+---
+
+### Task 63: Audit the Tonemap bind/setup findings and next seam
+
+**Bead ID:** `oc-ab8`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ab8` after beads `oc-apv` and `oc-0nj` complete. Independently audit whether the new Tonemap bind/setup evidence really advances the seam inside the current first poisoned-boundary candidate, whether the QA artifact supports the claimed bind/setup sub-boundary, and what the next tightest backend-owned seam should be if one setup command survives. Update this plan with actual findings, add audit notes if useful, and close bead `oc-ab8` with a clear reason when complete.
 
 **Folders Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/`
