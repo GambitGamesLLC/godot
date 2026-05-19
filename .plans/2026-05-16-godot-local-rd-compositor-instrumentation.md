@@ -2099,6 +2099,53 @@ Validation/build stayed source-built and projection-only on branch `gambit/instr
 
 ---
 
+### Task 89: QA classify the Tonemap specialization-constant seam at serial `8` on failing `submit_serial=9`
+
+**Bead ID:** `oc-76k`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-76k` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new Tonemap specialization-constant instrumentation on failing `submit_serial=9`. Determine whether the remaining Tonemap -> `Command Graph (L88) (Draw)` seam collapses to a specialization-constant-owned sub-boundary or remains broad alongside `pipeline_layout` or other remaining recipe buckets, while confirming whether Tonemap still remains the first poisoned-boundary candidate. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-76k` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same source-built host-Vulkan `projection_only__disabled` staged repro with `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/` via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`. Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-specialization-seam-vulkan-sourcebuild-20260519-164911` (`stdout.log` under that root). The rerun reproduced the expected failure envelope (exit `134`, first failing frame-1 main submission still `submit_serial=9`, later collapse still reaches `BLIT_PASS`). The new Tonemap -> `Command Graph (L88) (Draw)` `specialization_delta={...}` payload proved specialization constants are a real surviving changed recipe bucket at the Tonemap-vs-`L88` seam: Tonemap/base carries zero specialization constants while `L88` carries one `int` specialization constant (`id=0`, `value=0`). But the same `recipe_delta.changed_components` list stayed broad — `["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]` — and the comparison still classified as `different_pipeline_different_compatibility_context`, so the seam did **not** collapse to specialization constants alone. Tonemap therefore still classifies as the first poisoned-boundary candidate, with the tightest surviving answer now: a broad multi-bucket pipeline-owned seam that includes specialization constants alongside pipeline layout, vertex input, and blend recipe differences. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+---
+
+### Task 90: Audit the Tonemap specialization-constant findings at serial `8`
+
+**Bead ID:** `oc-px0`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-px0` after beads `oc-8c1` and `oc-76k` complete. Independently audit whether the new Tonemap specialization-constant evidence really advances the seam inside the current first poisoned-boundary candidate, whether the QA artifact supports the claimed specialization classification, and what the next tightest backend-owned seam should be if the specialization bucket still does not isolate it. Update this plan with actual findings, add audit notes if useful, and close bead `oc-px0` with a clear reason when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- audit notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-read the active plan, the living QA log in `REF-07`, the earlier audit notes in `REF-08`, the fresh source diff from commit `1c2d852d` (`debug: inspect tonemap specialization seam`), and the saved QA artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-specialization-seam-vulkan-sourcebuild-20260519-164911/`. Verdict: the new evidence **does** advance the seam one notch inside the current first poisoned-boundary candidate, but only as a sharper classification of the specialization-constant bucket — not as an isolation of the poisoned boundary to specialization constants alone. Source inspection matches that scope exactly: commit `1c2d852d` extends the Vulkan pipeline provenance with specialization-constant ID/value hashes, type/count summaries, min/max IDs, and a concrete preview payload, then emits `specialization_delta={...}` inside the existing Tonemap -> `Command Graph (L88) (Draw)` neighboring-pass compare. The QA artifact supports that claim directly on failing `submit_serial=9`: Tonemap/base reports an empty specialization recipe (`count=0`, `preview=[]`), while the immediate `L88` neighbor reports exactly one `int` specialization constant (`other={count=1,type_mask="0x2",int_count=1,min_id=0,max_id=0,preview=[{id=0,type="int",bits="0x0",value=0}]}`), and the compare correspondingly classifies `specialization_delta={relation="different_specialization_recipe",hash_changed=true,id_hash_changed=true,value_hash_changed=true,count_changed=true,type_mask_changed=true,...}`. That is real progress beyond the earlier opaque specialization hash, because the bucket is no longer just “different somehow”; it is now concretely “Tonemap has none, L88 has one trivial int specialization constant (id 0 -> value 0)."
+
+However, the same artifact also shows that the poisoned boundary still does **not** collapse to specialization constants. The same immediate neighboring-pass compare remains broad at `recipe_delta.changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`, while the older narrowing lanes remain reduced rather than reopening: `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` still keeps the serial-8 bind-owned lane exhausted, `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}` still keeps the `8 -> 9` handshake clean, and `tonemap_to_l88_transition={backend_gap_commands=0,...,first_meaningful_expansion="l88_label"}` still shows no hidden backend gap between Tonemap and `L88`. So the audit answer is: specialization-constant evidence now explains that bucket structurally, but it still does not isolate the poisoned boundary causally. Tonemap remains the first self-owned poisoned-boundary candidate, and `L88` remains the immediate heavier downstream packet.
+
+Recommended next tight backend-owned seam: inspect the **Tonemap -> `Command Graph (L88) (Draw)` pipeline-layout delta** inside the same immediate neighboring-pass pipeline compare. After this pass, vertex input is structurally explained (`null_vertex_input` vs streamed/instanced input), blend is structurally explained (`different_attachment_recipe_same_constants`), and specialization constants are now structurally explained (`none` vs one trivial `int` constant). The remaining least-explained bucket is pipeline layout, and the earlier clean Tonemap bind/setup contract only de-risks Tonemap’s own `8 -> 9` handshake — it does not explain why Tonemap’s layout packet diverges from `L88`’s neighboring packet. That makes pipeline layout the tightest remaining backend-owned seam to split next if the investigation is to keep narrowing inside the current Tonemap-owned candidate.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
