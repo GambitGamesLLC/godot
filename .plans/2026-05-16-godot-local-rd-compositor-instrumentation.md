@@ -1244,6 +1244,27 @@ The contrast block also sharpened the Tonemap-vs-`L88` distinction without movin
 
 Validated with an incremental source build (`scons -j8 platform=linuxbsd target=editor dev_build=yes`) and a fresh host Wayland/Vulkan staged repro using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `projection_only__disabled`. On the reproduced `submit_serial=9` failure, the new payload reports `next_meaningful_scope_is_l88=true`, `scope_distance=1`, Tonemap beginning with no active render pass/pipeline/index state, `L88` beginning with `render_pipeline_bound=true` but still no active render pass/index buffer, `l88_local_attachment.consumer_class="draw_payload"`, `scope_matches_label_plus_descendants=true`, and `tonemap_to_l88_delta={draw_calls=9,draw_indexed_calls=10,uniform_binds=10,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,...}`. That keeps Tonemap as the first surviving self-owned poisoned-boundary candidate while making the `L88` downstream amplification packet explicit in the same pass. Fresh artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-t58-tonemap-l88-contrast/`.
 
+
+### Task 54: QA confirm the refreshed `tonemap_l88_contrast=` block on failing `submit_serial=9`
+
+**Bead ID:** `oc-nw5`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-nw5` and keep the investigation projection-only on the refreshed source-built Godot binary. Use the active plan and the living QA log as source of truth. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Inspect the new `tonemap_l88_contrast=` block on failing `submit_serial=9`. Confirm whether `next_meaningful_scope_is_l88=true` and `scope_distance=1` remain stable, whether Tonemap still reads as the first self-owned poisoned-boundary candidate, and whether `L88` still reads as heavier downstream amplification rather than a seam that displaces Tonemap. Save durable notes/artifact references into the repo-owned QA log, update this plan with actual findings, close bead `oc-nw5` with a clear reason if complete, and report back with artifact root plus exact finding.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan staged repro (`projection_only + disabled`) on 2026-05-18 using the refreshed source-built editor `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`, still via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` on the host GPU path (`DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`). Durable notes and artifact references were appended to `REF-07` under artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-nw5-tonemap-l88-qa/`. The failing `submit_serial=9` payload reproduced the refined Tonemap-vs-L88 answer cleanly: `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}` remained stable, `Tonemap (L87) (Draw)` still stayed the first self-owned poisoned-boundary candidate, and `Command Graph (L88) (Draw)` still stayed the immediately following heavier self-owned local packet rather than displacing Tonemap as the first surviving seam. Supporting details stayed internally consistent: Tonemap still begins with no active render pass/pipeline/index state, `L88` still begins with `render_pipeline_bound=true`, `tonemap_to_l88_delta={draw_calls=9,draw_indexed_calls=10,uniform_binds=10,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,...}` still marks a materially heavier downstream packet, and `l88_local_attachment` / `scope_alignment` still show a self-owned local draw payload with zero descendant leakage or scope residual mismatch. The outer failure envelope stayed unchanged in the same run (`submit_serial=8` transfer-worker handoff -> `submit_serial=9` failing frame-1 main submission -> `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`). This closes `oc-nw5` because the requested refreshed-source-build confirmation package is complete and preserves the Tonemap-first read.
+
 ---
 
 ## Final Results

@@ -2871,3 +2871,90 @@ Supported by the runtime evidence:
 - `L88` is materially heavier than Tonemap, but it still reads as downstream amplification rather than a tighter first-cause seam
 - both Tonemap and `L88` currently align as self-owned local packets with zero descendant payload and zero scope-vs-label-plus-descendants residual mismatch
 - the broader downstream envelope (`fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`) remains unchanged
+
+
+## 2026-05-18 — bead `oc-nw5` QA validation (`tonemap_l88_contrast=` on refreshed source-built binary)
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-nw5-tonemap-l88-qa/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-nw5-tonemap-l88-qa/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-nw5-tonemap-l88-qa/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-nw5-tonemap-l88-qa/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### `tonemap_l88_contrast=` stays stable and preserves the Tonemap-first read
+
+On the failing `submit_serial=9` command summary, QA observed:
+
+- `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}`
+- `tonemap_begin_state={render_pass_active=false,render_pipeline_bound=false,vertex_binding_count=0,index_buffer_bound=false,begin_breadcrumb="NONE"}`
+- `l88_begin_state={render_pass_active=false,render_pipeline_bound=true,vertex_binding_count=0,index_buffer_bound=false,begin_breadcrumb="NONE"}`
+- `tonemap_to_l88_delta={draw_calls=9,draw_indexed_calls=10,pipeline_binds=0,uniform_binds=10,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,secondary_command_buffers=0,secondary_draw_labels=0}`
+- `l88_is_heavier_than_tonemap={draw_calls=true,draw_indexed_calls=true,pipeline_binds=false,uniform_binds=true,vertex_buffer_binds=true,index_buffer_binds=true,secondary_draw_labels=false}`
+
+That confirms the three questions for this pass cleanly:
+
+- `next_meaningful_scope_is_l88=true` remains stable
+- `scope_distance=1` remains stable
+- `Tonemap (L87) (Draw)` still reads as the first self-owned poisoned-boundary candidate rather than being displaced by `Command Graph (L88) (Draw)`
+
+#### `L88` still reads as heavier downstream amplification, not a seam that displaces Tonemap
+
+The same payload still shows `L88` as a self-owned local packet rather than hidden descendant work:
+
+- `l88_local_attachment.consumer_class="draw_payload"`
+- `nested_scope={descendant_labels=0,descendant_draw_labels=0,...}`
+- `scope_alignment={scope_matches_label_plus_descendants=true,scope_minus_label_plus_descendants={... all zero ...}}`
+
+And the workload contrast still stays one-sided in the downstream direction:
+
+- `l88_scope_summary.commands={render_pass_begin=1,render_pass_end=1,pipeline_binds=1,uniform_binds=11,vertex_buffer_binds=10,index_buffer_binds=1,draw_calls=10,draw_indexed_calls=10,...}`
+- compared with Tonemap’s local packet: `pipeline_binds=1`, `uniform_binds=1`, `draw_calls=1`, `draw_indexed_calls=0`
+
+So the refreshed source-built repro still supports the same interpretation as bead `oc-t58`: `Command Graph (L88) (Draw)` is the immediately following heavier local draw packet, but it still reads as downstream amplification after Tonemap rather than a tighter first surviving seam.
+
+#### The outer failure envelope remains unchanged
+
+The same valid repro keeps the established failure chain intact:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the first failing frame-1 main submission waiting on that semaphore lineage
+- the explicit failure still first appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This pass closes bead `oc-nw5` with a refreshed source-built confirmation package.
+
+Supported by the runtime evidence:
+
+- `next_meaningful_scope_is_l88=true` remains stable
+- `scope_distance=1` remains stable
+- `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate on failing `submit_serial=9`
+- `Command Graph (L88) (Draw)` still remains the next heavier self-owned local packet and still reads as downstream amplification rather than a seam that displaces Tonemap
+- the broader downstream failure envelope (`fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`) remains unchanged

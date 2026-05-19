@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GDGS / Godot Investigation Visual Map</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2e;
+      --panel-2: #18213a;
+      --text: #e8eefc;
+      --muted: #9fb0d4;
+      --line: #30415f;
+      --accent: #6ee7ff;
+      --accent-2: #8b5cf6;
+      --warn: #ffd166;
+      --good: #38d39f;
+      --bad: #ff6b6b;
+      --empty: #7f8aa7;
+      --shadow: 0 10px 30px rgba(0,0,0,.28);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #08101f 0%, #0d1325 100%);
+      color: var(--text);
+    }
+    a { color: var(--accent); }
+    .wrap {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 28px 20px 56px;
+    }
+    header {
+      margin-bottom: 24px;
+      padding: 22px 24px;
+      background: linear-gradient(135deg, rgba(110,231,255,.10), rgba(139,92,246,.10));
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.25rem; margin-top: 0; }
+    p, li { color: var(--text); }
+    .lede { color: var(--muted); max-width: 90ch; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .card {
+      background: rgba(19, 26, 46, .92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .span-12 { grid-column: span 12; }
+    .span-8 { grid-column: span 8; }
+    .span-7 { grid-column: span 7; }
+    .span-6 { grid-column: span 6; }
+    .span-5 { grid-column: span 5; }
+    .span-4 { grid-column: span 4; }
+    @media (max-width: 960px) {
+      .span-8, .span-7, .span-6, .span-5, .span-4 { grid-column: span 12; }
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+    .chip strong { color: var(--text); }
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+      align-items: stretch;
+    }
+    @media (max-width: 1100px) {
+      .pipeline { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .pipeline { grid-template-columns: 1fr; }
+    }
+    .stage {
+      position: relative;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 14px 16px;
+      min-height: 152px;
+    }
+    .stage:after {
+      content: "→";
+      position: absolute;
+      right: -14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 1.5rem;
+      opacity: .7;
+    }
+    .stage:last-child:after,
+    .pipeline .stage:nth-child(2n):after {
+      display: none;
+    }
+    @media (min-width: 1101px) {
+      .pipeline .stage:last-child:after { display: none; }
+      .pipeline .stage:nth-child(2n):after { display: block; }
+    }
+    .kicker {
+      display: inline-block;
+      font-size: .75rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .stage h3 { font-size: 1rem; margin-bottom: 6px; }
+    .stage p { margin: 0; color: var(--muted); font-size: .95rem; }
+    .stage.projection { border-color: rgba(255, 209, 102, .55); box-shadow: inset 0 0 0 1px rgba(255, 209, 102, .2); }
+    .stage.submit { border-color: rgba(255, 107, 107, .55); box-shadow: inset 0 0 0 1px rgba(255, 107, 107, .2); }
+    .legend { display: grid; gap: 8px; margin-top: 12px; }
+    .legend-row { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+    .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(255,255,255,.2); }
+    .timeline {
+      display: grid;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .scope {
+      border: 1px solid var(--line);
+      border-left: 6px solid var(--empty);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+      padding: 12px 14px;
+    }
+    .scope.empty { border-left-color: var(--empty); }
+    .scope.meaningful { border-left-color: var(--good); }
+    .scope.heavy { border-left-color: var(--warn); }
+    .scope.fail { border-left-color: var(--bad); }
+    .scope h3 { font-size: 1rem; margin-bottom: 6px; }
+    .meta { color: var(--muted); font-size: .92rem; }
+    .callout {
+      border: 1px solid rgba(110,231,255,.25);
+      background: rgba(110,231,255,.06);
+      padding: 12px 14px;
+      border-radius: 14px;
+      margin-top: 12px;
+    }
+    .equation {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(139,92,246,.08);
+      border: 1px solid rgba(139,92,246,.26);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #efe8ff;
+      overflow-x: auto;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 800px) {
+      .two-col { grid-template-columns: 1fr; }
+    }
+    ul { margin: 10px 0 0 18px; padding: 0; }
+    li + li { margin-top: 6px; }
+    .footer {
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: .92rem;
+    }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>GDGS / Godot investigation visual map</h1>
+      <p class="lede">
+        This page explains the current state of the GDGS compositor crash investigation in plain English. It is aimed at a technically literate reader who does <em>not</em> already know Godot rendering internals. The short version: the first bad event still appears to be the GDGS projection dispatch, but the later Vulkan failure becomes visible on a bigger frame submission called <code>submit_serial=9</code>.
+      </p>
+      <div class="chips">
+        <span class="chip"><strong>Current first bad stage:</strong> GDGS projection_only</span>
+        <span class="chip"><strong>Current failing backend submit:</strong> submit_serial=9</span>
+        <span class="chip"><strong>First meaningful pass-scope seam:</strong> Tonemap (L87) (Draw)</span>
+        <span class="chip"><strong>Later heavier scope:</strong> Command Graph (L88) (Draw)</span>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="card span-12">
+        <h2>1) Simplified frame pipeline map</h2>
+        <div class="pipeline">
+          <div class="stage">
+            <div class="kicker">Stage A</div>
+            <h3>GDGS compositor callback enters</h3>
+            <p>Godot calls into the GDGS compositor effect during frame rendering. The callback itself can survive when no real GDGS compute work is done.</p>
+          </div>
+          <div class="stage projection">
+            <div class="kicker">Stage B</div>
+            <h3>GDGS projection dispatch</h3>
+            <p>The first real compute pass. This is currently the first meaningful stage that makes the later failure inevitable.</p>
+          </div>
+          <div class="stage">
+            <div class="kicker">Stage C</div>
+            <h3>Projection returns to Godot</h3>
+            <p>Tracked GDGS-side resources still look stable here. The callback returns through the no-writeback gate.</p>
+          </div>
+          <div class="stage submit">
+            <div class="kicker">Stage D</div>
+            <h3>Vulkan queue submit <code>submit_serial=9</code></h3>
+            <p>The first suspicious backend transition after the stable return seam. It is the frame-1 main submission that waits on the transfer-worker handoff.</p>
+          </div>
+          <div class="stage">
+            <div class="kicker">Stage E</div>
+            <h3>Frame-1 command graph runs</h3>
+            <p>This submission contains a long copy-heavy body, then a short late tail of render/compute/draw scopes.</p>
+          </div>
+          <div class="stage submit">
+            <div class="kicker">Stage F</div>
+            <h3><code>fence_wait_error submit_serial=9 wait_result=-4</code></h3>
+            <p>The GPU/driver reports that waiting for submit 9 failed. This is the first explicit backend failure point we can see.</p>
+          </div>
+          <div class="stage">
+            <div class="kicker">Stage G</div>
+            <h3>Later lost-device breadcrumb: <code>BLIT_PASS</code></h3>
+            <p>Once the device is already lost, later breadcrumbs collapse to BLIT_PASS. That is a later symptom, not the earliest proven cause.</p>
+          </div>
+        </div>
+        <div class="legend">
+          <div class="legend-row"><span class="swatch" style="background: rgba(255,209,102,.7);"></span> GDGS projection-specific seam</div>
+          <div class="legend-row"><span class="swatch" style="background: rgba(255,107,107,.7);"></span> Vulkan/backend failure visibility point</div>
+        </div>
+      </div>
+
+      <div class="card span-7">
+        <h2>2) Where GDGS projection sits</h2>
+        <p>
+          The investigation repeatedly showed that <code>callback_only</code> and <code>prepared_no_dispatch</code> survive, while <code>projection_only</code> is the first stage that fails. That means the bug is not “the compositor callback exists” and not “any compute dispatch here is cursed.” A real scratch-only compute dispatch was later proven safe. The first bad seam is specifically the GDGS projection lane or fallout triggered by it.
+        </p>
+        <div class="callout">
+          <strong>Plain English:</strong> the machine can enter the compositor callback and can even do a tiny known-good compute job. The trouble starts when GDGS runs its real projection workload.
+        </div>
+      </div>
+
+      <div class="card span-5">
+        <h2>3) Where <code>submit_serial=9</code> fits</h2>
+        <p>
+          After projection returns, Godot submits later frame work to Vulkan. The critical chain is:
+        </p>
+        <div class="equation">transfer worker → submit_serial=8 signals semaphore<br>frame-1 main submission → submit_serial=9 waits on that semaphore<br>later fence wait on submit_serial=9 fails</div>
+        <p class="footer">
+          The semaphore handoff itself looks coherent; the current evidence does <em>not</em> point to stale or reused semaphore ownership as the primary problem.
+        </p>
+      </div>
+
+      <div class="card span-12">
+        <h2>4) Pass-scope seam map inside failing <code>submit_serial=9</code></h2>
+        <p class="lede">
+          The engine-side instrumentation progressively demoted several scary-looking scopes into empty wrappers. That matters because it tells us where the first <em>real</em> workload seam survives.
+        </p>
+        <div class="timeline">
+          <div class="scope empty">
+            <h3>Render Depth Pre-Pass (L15) (Draw)</h3>
+            <div class="meta">Status: demoted to empty wrapper</div>
+            <ul>
+              <li>Acts as a <code>render_pass_wrapper</code>.</li>
+              <li>Shows begin/end render-pass commands, but no direct draw payload, no pipeline binds, and no nested labeled payload at this seam.</li>
+            </ul>
+          </div>
+          <div class="scope empty">
+            <h3>Render Opaque Pass (L16) (Draw)</h3>
+            <div class="meta">Status: demoted to empty wrapper</div>
+            <ul>
+              <li>The next neighboring pass after L15.</li>
+              <li>Still wrapper-only in the inspected command summary.</li>
+            </ul>
+          </div>
+          <div class="scope empty">
+            <h3>Render 3D Transparent Pass (L86) (Draw)</h3>
+            <div class="meta">Status: demoted to empty wrapper</div>
+            <ul>
+              <li>Still part of the wrapper-only chain.</li>
+              <li>Not the first surviving meaningful pass-scope workload.</li>
+            </ul>
+          </div>
+          <div class="scope meaningful">
+            <h3>Tonemap (L87) (Draw)</h3>
+            <div class="meta">Status: first meaningful surviving pass-scope seam</div>
+            <ul>
+              <li>Classifies as <code>draw_payload</code>.</li>
+              <li>Small but real workload: one draw call, one pipeline bind, one uniform bind.</li>
+              <li>This is the first pass scope that still carries direct local payload after the wrapper chain ends.</li>
+            </ul>
+          </div>
+          <div class="scope heavy">
+            <h3>Command Graph (L88) (Draw)</h3>
+            <div class="meta">Status: next heavier meaningful scope</div>
+            <ul>
+              <li>Also <code>draw_payload</code>, but materially heavier than Tonemap.</li>
+              <li>Observed with many draw calls and more binding activity.</li>
+              <li>Good contrast point: Tonemap is the first surviving seam; L88 is the next larger meaningful workload.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <h2>5) What does <code>fence_wait_error submit_serial=9 wait_result=-4</code> mean?</h2>
+        <div class="callout">
+          <strong>Plain English:</strong> Godot asked Vulkan, “has that batch of GPU work finished yet?” Vulkan answered with a device-lost error instead of “yes” or “still waiting.” In practice, that means the GPU/driver considers something in that submission path unhealthy enough that the device is no longer trustworthy.
+        </div>
+        <ul>
+          <li><code>submit_serial=9</code> = the ninth tracked queue submission in this run, specifically the frame-1 main submission after projection returns.</li>
+          <li><code>fence_wait</code> = CPU waiting for that GPU submission to finish.</li>
+          <li><code>wait_result=-4</code> = Vulkan device-lost error in this context.</li>
+        </ul>
+      </div>
+
+      <div class="card span-6">
+        <h2>6) What does later <code>BLIT_PASS</code> mean?</h2>
+        <div class="callout">
+          <strong>Plain English:</strong> once the GPU device is already lost, later breadcrumb logging only tells us where the engine happened to notice the wreckage. <code>BLIT_PASS</code> is the last breadcrumb the system still remembered, not proof that the original bug started there.
+        </div>
+        <ul>
+          <li>It is a late symptom marker.</li>
+          <li>It does <em>not</em> contradict the earlier projection-first finding.</li>
+          <li>It also does <em>not</em> override the newer seam work showing the first meaningful surviving pass-scope payload at Tonemap.</li>
+        </ul>
+      </div>
+
+      <div class="card span-12">
+        <h2>7) Current best mental model</h2>
+        <div class="two-col">
+          <div>
+            <h3>Simplified</h3>
+            <ul>
+              <li>GDGS projection is still the earliest proven bad stage.</li>
+              <li>The handoff back into Godot looks stable at the tracked resource/snapshot seam.</li>
+              <li>The first explicit backend failure becomes visible when Godot later waits on Vulkan submit 9.</li>
+              <li>Several intermediate scary-looking pass scopes turned out to be empty wrappers.</li>
+              <li>The first meaningful surviving pass-scope seam after those wrappers is Tonemap.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Technical</h3>
+            <ul>
+              <li><code>projection_only</code> is the first failing staged boundary; scratch-only compute is safe.</li>
+              <li>Tracked projection-owned resources stayed stable through <code>render_for_compositor_sync_snapshot</code>.</li>
+              <li><code>submit_serial=8</code> is the transfer-worker handoff; <code>submit_serial=9</code> is the waiting frame-1 main submission.</li>
+              <li>The failing command buffer is copy-heavy overall, but pass-scope inspection demoted L15/L16/L86 into wrappers.</li>
+              <li><code>Tonemap (L87) (Draw)</code> is the first surviving pass-scope workload; <code>Command Graph (L88) (Draw)</code> is the next heavier one.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card span-12">
+        <h2>8) Why this page exists</h2>
+        <p>
+          The investigation has accumulated a lot of precise but easy-to-lose detail. This map compresses the current state into one durable picture: GDGS projection is still the first bad stage, <code>submit_serial=9</code> is where the later Vulkan failure becomes visible, several pass scopes were demoted as empty wrappers, and the first meaningful surviving pass-scope seam is now <code>Tonemap (L87) (Draw)</code>.
+        </p>
+        <p class="footer">
+          Source of truth used for this page: <code>doc/gdgs-compositor-staged-qa-2026-05-17.md</code> and <code>.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md</code> in this repo.
+        </p>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
