@@ -2476,6 +2476,84 @@ Keep the investigation source-built and projection-only, but stop expecting the 
 
 ---
 
+## 2026-05-18 — bead `oc-7io` QA validation (`opaque_pass_scope=` on the refreshed source-built binary)
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-opaque-pass-scope-qa-vulkan-sourcebuild-20260518-190101561855320/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-opaque-pass-scope-qa-vulkan-sourcebuild-20260518-190101561855320/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-opaque-pass-scope-qa-vulkan-sourcebuild-20260518-190101561855320/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-opaque-pass-scope-qa-vulkan-sourcebuild-20260518-190101561855320/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — exit `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### The new `opaque_pass_scope=` payload reproduces cleanly in QA on the refreshed source-built runtime
+
+On the failing `submit_serial=9` command summary, QA observed the same five-scope package introduced by the coder pass:
+
+- `opaque_pass_scope={scope_count=5,...}`
+- `target={index=1,owner_begin="Render Opaque Pass (L16) (Draw)",owner_end="Render Opaque Pass (L16) (Draw)",...}`
+- `target_class="render_pass_wrapper"`
+- `previous={index=0,owner_begin="Render Depth Pre-Pass (L15) (Draw)",...}`
+- `next={index=2,owner_begin="Render 3D Transparent Pass (L86) (Draw)",...}`
+- `wrapper_chain_from_target={start_index=1,end_index=2,scope_count=2,owner_begin_chain=["Render Opaque Pass (L16) (Draw)", "Render 3D Transparent Pass (L86) (Draw)"]}`
+- `first_meaningful_at_or_after_target={distance_scopes=2,class="draw_payload",scope={index=3,owner_begin="Tonemap (L87) (Draw)",commands={render_pass_begin=1,render_pass_end=1,pipeline_binds=1,uniform_binds=1,draw_calls=1,...}}}`
+
+That means the opaque pass is still wrapper-only in the failing command-buffer slice, the wrapper chain still continues through `Render 3D Transparent Pass (L86) (Draw)`, and `Tonemap (L87) (Draw)` still lands as the first meaningful surviving pass-scope workload two scopes later.
+
+#### This matches the earlier source-built pass-scope evidence instead of moving the seam
+
+Compared against the immediately earlier source-built evidence package:
+
+- the `depth_prepass_pass_scope=` slice still leaves `Render Depth Pre-Pass (L15) (Draw)` as a wrapper-shaped scope with `next={index=1,owner_begin="Render Opaque Pass (L16) (Draw)",...}`
+- the new `opaque_pass_scope=` slice sharpens that same seam rather than changing it: L16 remains wrapper-only, and the first payload-bearing surviving pass scope still does not appear until `Tonemap (L87) (Draw)`
+- no contradictory pass-scope ownership showed up in the QA rerun; this pass reproduced the coder-observed ownership map verbatim on a fresh Vulkan run
+
+#### The outer failure envelope still remains unchanged
+
+The same source-built projection-only repro preserved the established failure signature:
+
+- `submit_serial=8` remains the transfer-worker handoff submission
+- `submit_serial=9` remains the first failing frame-1 main submission waiting on that semaphore
+- the explicit failure still first appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This QA pass closes bead `oc-7io` with a complete evidence package.
+
+Supported by the runtime evidence:
+
+- `Render Opaque Pass (L16) (Draw)` remains an empty render-pass wrapper on the refreshed source-built binary
+- the wrapper-only chain continues through `Render 3D Transparent Pass (L86) (Draw)`
+- `Tonemap (L87) (Draw)` remains the first meaningful surviving pass-scope workload before the later `submit_serial=9` fence wait failure and `BLIT_PASS` collapse
+- the source-built QA rerun agrees with the coder-observed `opaque_pass_scope=` payload and with the earlier `depth_prepass_pass_scope=` interpretation rather than shifting the suspicious seam earlier or later
+
+---
+
 ## 2026-05-18 — bead `oc-023` coder validation (`nested_scope=` beneath the depth-prepass wrapper)
 
 ### Runtime used
@@ -2547,3 +2625,249 @@ Supported by the runtime evidence:
 - the wrapper still owns no direct draw/bind payload on the label itself
 - the new descendant summary also shows no nested labels, no nested draw labels, and no nested secondary-command payload beneath that exact label in the primary-command-buffer trace
 - the next useful slice therefore needs to move one rung wider than this exact label-local wrapper: render-pass ownership outside the label, or broader pass-level / command-buffer ownership that survives past the wrapper into the later `submit_serial=9` / `BLIT_PASS` failure envelope
+
+## 2026-05-18 — bead `oc-set` QA validation (`tonemap_pass_scope=` on refreshed source-built binary)
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-tonemap-pass-scope-qa-vulkan-sourcebuild-20260518-20002814547/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-tonemap-pass-scope-qa-vulkan-sourcebuild-20260518-20002814547/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-tonemap-pass-scope-qa-vulkan-sourcebuild-20260518-20002814547/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-tonemap-pass-scope-qa-vulkan-sourcebuild-20260518-20002814547/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Exact command shape from the saved artifact package:
+
+- runtime: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- script: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- display mode: `no_present`
+- compositor stage: `compositor`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Findings
+
+#### `Tonemap (L87) (Draw)` still stays the first meaningful surviving pass-scope seam
+
+On the failing `submit_serial=9` command summary, QA observed:
+
+- `tonemap_pass_scope={scope_count=5,...}`
+- `target={index=3,owner_begin="Tonemap (L87) (Draw)",owner_end="Tonemap (L87) (Draw)",...}`
+- `target_class="draw_payload"`
+- `first_meaningful_scope_is_target=true`
+- `previous_meaningful_before_target=none`
+- `previous_wrapper_chain_into_target={start_index=0,end_index=2,scope_count=3,owner_begin_chain=["Render Depth Pre-Pass (L15) (Draw)", "Render Opaque Pass (L16) (Draw)", "Render 3D Transparent Pass (L86) (Draw)"]}`
+
+So the refreshed source-built repro keeps the same pass-scope answer as the earlier source-built evidence: the surviving wrapper-only chain still runs through `L15 -> L16 -> L86`, and the first meaningful workload-bearing pass scope after that chain is still `Tonemap (L87) (Draw)` itself.
+
+#### Tonemap still carries a small real local draw payload, and `Command Graph (L88) (Draw)` remains the next heavier meaningful scope
+
+The same payload reports Tonemap’s direct local workload as:
+
+- `direct_draw_calls=1`
+- `direct_draw_indexed_calls=0`
+- `pipeline_binds=1`
+- `uniform_binds=1`
+- `vertex_buffer_binds=0`
+- `index_buffer_binds=0`
+- `secondary_command_buffers=0`
+- `begin_breadcrumb="NONE"`
+- `end_breadcrumb="NONE"`
+
+And the next meaningful surviving scope still lands immediately after Tonemap:
+
+- `next_meaningful_after_target={distance_scopes=1,class="draw_payload",scope={index=4,owner_begin="Command Graph (L88) (Draw)",...}}`
+- `Command Graph (L88) (Draw)` workload remains much heavier: `draw_calls=10`, `draw_indexed_calls=10`, `uniform_binds=11`, `vertex_buffer_binds=10`, `index_buffer_binds=1`, `begin_breadcrumb="UI_PASS"`, `end_breadcrumb="UI_PASS"`
+
+So this rerun did not move the seam earlier or later. Tonemap still marks the first meaningful surviving pass scope, and `Command Graph (L88) (Draw)` still stays the next heavier meaningful scope for contrast.
+
+#### The outer failure envelope remains unchanged
+
+The same source-built projection-only repro preserved the already-established downstream failure signature:
+
+- `submit_serial=8` remains the transfer-worker handoff submission
+- `submit_serial=9` remains the failing frame-1 main submission waiting on that semaphore
+- the explicit failure still first appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This QA pass closes bead `oc-set` with a complete refreshed evidence package.
+
+Supported by the runtime evidence:
+
+- `Tonemap (L87) (Draw)` still remains `target_class="draw_payload"`
+- `first_meaningful_scope_is_target=true` still holds on the refreshed source-built binary
+- the wrapper-only chain into Tonemap still covers `Render Depth Pre-Pass (L15) (Draw)` -> `Render Opaque Pass (L16) (Draw)` -> `Render 3D Transparent Pass (L86) (Draw)`
+- `Command Graph (L88) (Draw)` still remains the next meaningful surviving scope and is materially heavier than Tonemap
+- the seam did not move relative to the earlier `opaque_pass_scope=` / `tonemap_pass_scope=` source-built evidence; this rerun reproduced it cleanly on a fresh host-Vulkan pass
+
+## Follow-up QA pass for bead `oc-x14` — confirm Tonemap local attachment is the first real surviving poisoned-boundary candidate on failing `submit_serial=9`
+
+### Goal
+
+Run the same minimum valid host-Vulkan source-built repro one more time, keep the investigation at `projection_only + disabled`, and answer the refined seam question introduced by the deeper Tonemap instrumentation:
+
+- does `tonemap_local_attachment=` still show zero descendant payload?
+- does `scope_alignment=` still show zero residual scope mismatch and exact label-to-scope ownership?
+- does `next_meaningful_after_target=` keep `Command Graph (L88) (Draw)` in the downstream-amplification lane rather than displacing Tonemap as the first real poisoned-boundary candidate?
+
+### Artifacts
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-tonemap-local-attachment-qa-vulkan-sourcebuild-20260518-2104/`
+- runtime path: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project path: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- staged harness: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Run executed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Launch used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-tonemap-local-attachment-qa-vulkan-sourcebuild-20260518-2104 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### `tonemap_local_attachment=` still shows a fully self-owned local Tonemap packet
+
+On the failing `submit_serial=9` command summary, QA observed the same deeper Tonemap-local block introduced by the coder pass:
+
+- `tonemap_local_attachment={label_index=100,entry_index=100,level=87,consumer_class="draw_payload",...}`
+- `label_commands={render_pass_begin=1,next_subpass=0,render_pass_end=1,pipeline_binds=1,uniform_binds=1,vertex_buffer_binds=0,vertex_buffer_binding_total=0,index_buffer_binds=0,draw_calls=1,draw_indexed_calls=0,...}`
+- `nested_scope={descendant_labels=0,descendant_draw_labels=0,descendant_begin_inside_render_pass_labels=0,descendant_begin_inside_render_pass_draw_labels=0,... descendant_commands={render_pass_begin=0,next_subpass=0,render_pass_end=0,pipeline_binds=0,uniform_binds=0,vertex_buffer_binds=0,vertex_buffer_binding_total=0,index_buffer_binds=0,draw_calls=0,draw_indexed_calls=0,...}}`
+- `scope_alignment={scope_matches_label_commands=true,scope_matches_label_plus_descendants=true,scope_minus_label_plus_descendants={render_pass_begin=0,next_subpass=0,render_pass_end=0,pipeline_binds=0,uniform_binds=0,vertex_buffer_binds=0,vertex_buffer_binding_total=0,index_buffer_binds=0,draw_calls=0,draw_indexed_calls=0,...}}`
+
+That means the refreshed source-built repro still shows exactly what this bead was asked to verify:
+
+- zero descendant payload
+- zero residual scope mismatch
+- exact label-to-scope ownership match for the Tonemap-local packet
+
+So Tonemap still does **not** read like a hollow wrapper, inherited envelope, or mislabeled parent for hidden child work. On this failing submit it still owns the full local surviving packet itself.
+
+#### `Command Graph (L88) (Draw)` still reads as downstream amplification, not the first surviving poisoned boundary
+
+The same Tonemap block still carries:
+
+- `next_meaningful_after_target={distance_scopes=1,class="draw_payload",scope={index=4,owner_begin="Command Graph (L88) (Draw)",...}}`
+- `workload_delta_from_target={draw_calls=9,draw_indexed_calls=10,draw_indirect_calls=0,draw_indexed_indirect_calls=0,pipeline_binds=0,uniform_binds=10,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,...}`
+- `next_scope_is_heavier={draw_calls=true,pipeline_binds=false,uniform_binds=true,vertex_buffer_binds=true,index_buffer_binds=true,secondary_draw_labels=false}`
+
+So `Command Graph (L88) (Draw)` is still the immediately following heavier meaningful scope, but the evidence still reads as *expansion after Tonemap*, not as a tighter first-cause seam that displaces Tonemap. Tonemap remains the first surviving meaningful local packet; `L88` remains the next heavier downstream payload that could amplify or reveal the poisoned state after the fact.
+
+#### The outer failure envelope still did not move
+
+The same repro kept the established source-built failure signature intact:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the failing frame-1 main submission waiting on that exact semaphore lineage
+- the first explicit failure still appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This QA pass closes bead `oc-x14` with the requested confirmation package complete.
+
+Supported by the runtime evidence:
+
+- `Tonemap (L87) (Draw)` still remains the first real surviving local poisoned-boundary candidate on failing `submit_serial=9`
+- `tonemap_local_attachment=` still shows zero descendant payload and exact label-owned local work
+- `scope_alignment=` still shows zero residual scope mismatch
+- `Command Graph (L88) (Draw)` is still heavier one scope later, but it still reads as downstream amplification rather than a seam that displaces Tonemap as the first real surviving candidate
+- the broader downstream envelope (`fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`) remains unchanged
+## Follow-up QA pass for bead `oc-t58` — contrast Tonemap local ownership directly against `Command Graph (L88)` on failing `submit_serial=9`
+
+### Goal
+
+Run the refreshed source-built host-Vulkan staged repro again at `projection_only + disabled`, keep the repro envelope unchanged, and answer the new Tonemap-vs-L88 questions introduced by bead `oc-t58`:
+
+- does the failing `submit_serial=9` payload now prove that `Command Graph (L88) (Draw)` is the very next meaningful scope after Tonemap?
+- does the new same-pass contrast preserve Tonemap as the first self-owned poisoned-boundary candidate while making the heavier `L88` packet explicit?
+- does `L88` still align as a self-owned local draw packet rather than exposing hidden descendant/render-pass-owned work that would invalidate the Tonemap-first read?
+
+### Artifacts
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-t58-tonemap-l88-contrast/`
+- runtime path: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- project path: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- staged harness: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- case: `projection_only__disabled`
+- raster stage: `projection_only`
+- checkpoint: `disabled`
+
+### Run executed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Launch used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-t58-tonemap-l88-contrast no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### `tonemap_l88_contrast=` now proves the same-pass handoff from Tonemap into the heavier `L88` packet
+
+On the failing `submit_serial=9` command summary, QA observed the new contrast block introduced by bead `oc-t58`:
+
+- `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}`
+- `tonemap_begin_state={render_pass_active=false,render_pipeline_bound=false,vertex_binding_count=0,index_buffer_bound=false,begin_breadcrumb="NONE"}`
+- `l88_begin_state={render_pass_active=false,render_pipeline_bound=true,vertex_binding_count=0,index_buffer_bound=false,begin_breadcrumb="NONE"}`
+- `tonemap_to_l88_delta={draw_calls=9,draw_indexed_calls=10,pipeline_binds=0,uniform_binds=10,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,secondary_command_buffers=0,secondary_draw_labels=0}`
+- `l88_is_heavier_than_tonemap={draw_calls=true,draw_indexed_calls=true,pipeline_binds=false,uniform_binds=true,vertex_buffer_binds=true,index_buffer_binds=true,secondary_draw_labels=false}`
+
+So the new payload now nails down the intended contrast in one place:
+
+- Tonemap is still the first meaningful surviving scope
+- `Command Graph (L88) (Draw)` is exactly one meaningful scope later
+- the `L88` packet is materially heavier on draws, indexed draws, uniform binds, vertex-buffer binds, and index-buffer binds
+- the seam still reads as Tonemap first, then heavier downstream amplification at `L88`
+
+#### `L88` still reads like a fully self-owned local draw packet, not hidden render-pass-owned descendant work
+
+The same new block also observed:
+
+- `l88_scope_summary={index=4,owner_begin="Command Graph (L88) (Draw)",owner_end="Command Graph (L88) (Draw)",... commands={render_pass_begin=1,... pipeline_binds=1,uniform_binds=11,vertex_buffer_binds=10,index_buffer_binds=1,draw_calls=10,draw_indexed_calls=10,...},begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"}`
+- `l88_local_attachment={label_index=101,entry_index=101,level=88,consumer_class="draw_payload",...}`
+- `label_commands={render_pass_begin=1,next_subpass=0,render_pass_end=1,pipeline_binds=1,uniform_binds=11,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,draw_calls=10,draw_indexed_calls=10,...}`
+- `nested_scope={descendant_labels=0,descendant_draw_labels=0,... descendant_commands={render_pass_begin=0,next_subpass=0,render_pass_end=0,pipeline_binds=0,uniform_binds=0,vertex_buffer_binds=0,vertex_buffer_binding_total=0,index_buffer_binds=0,draw_calls=0,draw_indexed_calls=0,...}}`
+- `scope_alignment={scope_matches_label_plus_descendants=true,scope_minus_label_plus_descendants={render_pass_begin=0,next_subpass=0,render_pass_end=0,pipeline_binds=0,uniform_binds=0,vertex_buffer_binds=0,vertex_buffer_binding_total=0,index_buffer_binds=0,draw_calls=0,draw_indexed_calls=0,...}}`
+
+So `L88` does **not** reveal hidden descendant payload or a broader render-pass-owned wrapper undercutting the current read. It is itself a self-owned local draw packet — just a much heavier one than Tonemap.
+
+#### The surrounding failure envelope still did not move
+
+The staged repro stayed stable:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the first failing frame-1 main submission waiting on that semaphore lineage
+- the first explicit failure still appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This QA pass closes bead `oc-t58` with the requested Tonemap-vs-L88 contrast package complete.
+
+Supported by the runtime evidence:
+
+- `Tonemap (L87) (Draw)` still remains the first surviving self-owned poisoned-boundary candidate on failing `submit_serial=9`
+- `Command Graph (L88) (Draw)` is now explicitly proven to be the very next meaningful scope one slot later
+- `L88` is materially heavier than Tonemap, but it still reads as downstream amplification rather than a tighter first-cause seam
+- both Tonemap and `L88` currently align as self-owned local packets with zero descendant payload and zero scope-vs-label-plus-descendants residual mismatch
+- the broader downstream envelope (`fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`) remains unchanged

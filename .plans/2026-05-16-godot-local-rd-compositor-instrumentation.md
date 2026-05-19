@@ -1201,6 +1201,51 @@ The contrast block also sharpened the Tonemap-vs-`L88` distinction without movin
 
 ---
 
+### Task 52: QA confirm `Tonemap (L87) (Draw)` local attachment is the first real surviving poisoned-boundary candidate on failing `submit_serial=9`
+
+**Bead ID:** `oc-x14`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-x14` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new `tonemap_local_attachment=` block on failing `submit_serial=9`. Confirm whether Tonemap still has zero descendant payload, zero residual scope mismatch, and an exact label-to-scope ownership match; then compare that result against `next_meaningful_after_target=` to decide whether `Command Graph (L88) (Draw)` remains only downstream amplification rather than displacing Tonemap as the first real poisoned-boundary candidate. Save durable notes/artifact references into the repo-owned QA log, update this plan with actual findings, and close bead `oc-x14` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- QA notes/docs/log references as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same minimum valid host-Vulkan staged repro (`projection_only + disabled`) on 2026-05-18 using the refreshed source-built editor `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`, still via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` on the host GPU path (`DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`). Durable notes and artifact references were appended to `REF-07` under artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/official-tonemap-local-attachment-qa-vulkan-sourcebuild-20260518-2104/`. The failing `submit_serial=9` command summary reproduced the deeper Tonemap-local answer exactly enough to close the bead: `tonemap_local_attachment=` still shows a fully self-owned local Tonemap packet with zero descendant payload (`descendant_labels=0`, `descendant_draw_labels=0`, descendant command counts all zero), and `scope_alignment=` still shows an exact label-to-scope match with zero residual scope mismatch (`scope_matches_label_commands=true`, `scope_matches_label_plus_descendants=true`, `scope_minus_label_plus_descendants={... all zero ...}`). The same payload also preserved the earlier contrast against the next heavier scope: `next_meaningful_after_target=` still lands one scope later at `Command Graph (L88) (Draw)`, and the recorded `workload_delta_from_target=` / `next_scope_is_heavier=` values still read as downstream amplification (`draw_calls +9`, `draw_indexed_calls +10`, `uniform_binds +10`, `vertex_buffer_binds +10`, `index_buffer_binds +1`) rather than displacing Tonemap as the first real surviving poisoned-boundary candidate. The outer failure envelope stayed unchanged in the same run (`submit_serial=8` transfer-worker handoff -> `submit_serial=9` failing frame-1 main submission -> `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`). One incidental runtime nuisance also surfaced in this pass — repeated Godot `vformat` string-formatting errors from the compositor callback breadcrumb text — but they did not change the Tonemap-local ownership answer or the failing submit classification. This closes `oc-x14` because the requested evidence package is complete and remains internally consistent with the earlier Tonemap pass-scope findings.
+
+---
+
+### Task 53: Deepen `Tonemap (L87)` and explicitly contrast it against `Command Graph (L88)` on failing `submit_serial=9`
+
+**Bead ID:** `oc-t58`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-t58` and keep the investigation projection-only on the refreshed source-built Godot binary. The current best read is that `Tonemap (L87) (Draw)` is the first real surviving poisoned-boundary candidate, while `Command Graph (L88) (Draw)` is heavier downstream amplification. Add small, reversible, high-signal instrumentation that both deepens the Tonemap seam itself and explicitly contrasts it against `L88` in the same pass so we can better separate first-cause evidence from downstream amplification. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; run relevant validation; update this plan with actual results; commit/push the changes; and close bead `oc-t58` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- backend seam diagnostic files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a focused Tonemap/L88 contrast block to `drivers/vulkan/rendering_device_driver_vulkan.cpp` on the source-built branch so the failing `submit_serial=9` payload now emits `tonemap_l88_contrast=` beside the existing `tonemap_local_attachment=` / `next_meaningful_after_target=` evidence. The new block keeps the staged `projection_only + disabled` repro intact while explicitly recording whether `Command Graph (L88) (Draw)` is the very next meaningful scope, both labels' begin-state ownership, the full `L88` local attachment summary, exact `L88` scope-vs-label-plus-descendants alignment, and workload deltas from Tonemap into `L88`.
+
+Validated with an incremental source build (`scons -j8 platform=linuxbsd target=editor dev_build=yes`) and a fresh host Wayland/Vulkan staged repro using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `projection_only__disabled`. On the reproduced `submit_serial=9` failure, the new payload reports `next_meaningful_scope_is_l88=true`, `scope_distance=1`, Tonemap beginning with no active render pass/pipeline/index state, `L88` beginning with `render_pipeline_bound=true` but still no active render pass/index buffer, `l88_local_attachment.consumer_class="draw_payload"`, `scope_matches_label_plus_descendants=true`, and `tonemap_to_l88_delta={draw_calls=9,draw_indexed_calls=10,uniform_binds=10,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,...}`. That keeps Tonemap as the first surviving self-owned poisoned-boundary candidate while making the `L88` downstream amplification packet explicit in the same pass. Fresh artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-18/oc-t58-tonemap-l88-contrast/`.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

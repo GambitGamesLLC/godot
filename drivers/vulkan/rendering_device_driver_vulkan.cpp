@@ -8720,11 +8720,21 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 	}
 
 	int32_t target_label_entry_index = -1;
+	int32_t l88_scope_index = -1;
+	int32_t l88_label_entry_index = -1;
 	for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
 		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
-		if (entry.label == "Tonemap (L87) (Draw)") {
+		if (entry.label == "Tonemap (L87) (Draw)" && target_label_entry_index == -1) {
 			target_label_entry_index = (int32_t)i;
-			break;
+		}
+		if (entry.label == "Command Graph (L88) (Draw)" && l88_label_entry_index == -1) {
+			l88_label_entry_index = (int32_t)i;
+		}
+	}
+	for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+		if ((scope.begin_owner_label == "Command Graph (L88) (Draw)" || scope.end_owner_label == "Command Graph (L88) (Draw)") && l88_scope_index == -1) {
+			l88_scope_index = (int32_t)i;
 		}
 	}
 
@@ -8874,6 +8884,84 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",vertex_buffer_binds=" + String(next_scope.vertex_buffer_bind_count > target_scope.vertex_buffer_bind_count ? "true" : "false");
 		text += ",index_buffer_binds=" + String(next_scope.index_buffer_bind_count > target_scope.index_buffer_bind_count ? "true" : "false");
 		text += ",secondary_draw_labels=" + String(next_scope.secondary_draw_label_count > target_scope.secondary_draw_label_count ? "true" : "false") + "}}";
+	}
+	text += ",tonemap_l88_contrast=";
+	if (target_label_entry_index == -1 || l88_scope_index == -1 || l88_label_entry_index == -1) {
+		text += "{status=missing_attachment,tonemap_label_present=" + String(target_label_entry_index != -1 ? "true" : "false") + ",l88_scope_present=" + String(l88_scope_index != -1 ? "true" : "false") + ",l88_label_present=" + String(l88_label_entry_index != -1 ? "true" : "false") + "}";
+	} else {
+		const DebugLabelEntry &tonemap_label_entry = p_command_buffer->debug_label_entries[target_label_entry_index];
+		const DebugRenderPassScope &l88_scope = p_command_buffer->debug_render_pass_scopes[l88_scope_index];
+		const DebugLabelEntry &l88_label_entry = p_command_buffer->debug_label_entries[l88_label_entry_index];
+		const bool l88_scope_matches_label_plus_descendants =
+				l88_scope.render_pass_begin_count == l88_label_entry.render_pass_begin_count + l88_label_entry.descendant_render_pass_begin_count &&
+				l88_scope.next_subpass_count == l88_label_entry.next_subpass_count + l88_label_entry.descendant_next_subpass_count &&
+				l88_scope.render_pass_end_count == l88_label_entry.render_pass_end_count + l88_label_entry.descendant_render_pass_end_count &&
+				l88_scope.render_pipeline_bind_count == l88_label_entry.render_pipeline_bind_count + l88_label_entry.descendant_render_pipeline_bind_count &&
+				l88_scope.render_uniform_bind_count == l88_label_entry.render_uniform_bind_count + l88_label_entry.descendant_render_uniform_bind_count &&
+				l88_scope.vertex_buffer_bind_count == l88_label_entry.vertex_buffer_bind_count + l88_label_entry.descendant_vertex_buffer_bind_count &&
+				l88_scope.vertex_buffer_binding_total == l88_label_entry.vertex_buffer_binding_total + l88_label_entry.descendant_vertex_buffer_binding_total &&
+				l88_scope.index_buffer_bind_count == l88_label_entry.index_buffer_bind_count + l88_label_entry.descendant_index_buffer_bind_count &&
+				l88_scope.draw_count == l88_label_entry.draw_count + l88_label_entry.descendant_draw_count &&
+				l88_scope.draw_indexed_count == l88_label_entry.draw_indexed_count + l88_label_entry.descendant_draw_indexed_count &&
+				l88_scope.draw_indirect_count == l88_label_entry.draw_indirect_count + l88_label_entry.descendant_draw_indirect_count &&
+				l88_scope.draw_indexed_indirect_count == l88_label_entry.draw_indexed_indirect_count + l88_label_entry.descendant_draw_indexed_indirect_count &&
+				l88_scope.execute_secondary_count == l88_label_entry.execute_secondary_count + l88_label_entry.descendant_execute_secondary_count &&
+				l88_scope.secondary_command_buffer_count == l88_label_entry.secondary_command_buffer_count + l88_label_entry.descendant_secondary_command_buffer_count &&
+				l88_scope.secondary_label_count == l88_label_entry.secondary_label_count + l88_label_entry.descendant_secondary_label_count &&
+				l88_scope.secondary_draw_label_count == l88_label_entry.secondary_draw_label_count + l88_label_entry.descendant_secondary_draw_label_count;
+		text += "{status=ok";
+		text += ",scope_distance=" + itos(l88_scope_index - target_scope_index);
+		text += ",next_meaningful_scope_is_l88=" + String(next_meaningful_scope_index == l88_scope_index ? "true" : "false");
+		text += ",tonemap_begin_state={render_pass_active=" + String(tonemap_label_entry.begin_active_render_pass ? "true" : "false");
+		text += ",render_pipeline_bound=" + String(tonemap_label_entry.begin_render_pipeline_bound ? "true" : "false");
+		text += ",vertex_binding_count=" + itos(tonemap_label_entry.begin_vertex_binding_count);
+		text += ",index_buffer_bound=" + String(tonemap_label_entry.begin_index_buffer_bound ? "true" : "false");
+		text += ",begin_breadcrumb=\"" + _debug_breadcrumb_to_string(tonemap_label_entry.begin_breadcrumb) + "\"}";
+		text += ",l88_begin_state={render_pass_active=" + String(l88_label_entry.begin_active_render_pass ? "true" : "false");
+		text += ",render_pipeline_bound=" + String(l88_label_entry.begin_render_pipeline_bound ? "true" : "false");
+		text += ",vertex_binding_count=" + itos(l88_label_entry.begin_vertex_binding_count);
+		text += ",index_buffer_bound=" + String(l88_label_entry.begin_index_buffer_bound ? "true" : "false");
+		text += ",begin_breadcrumb=\"" + _debug_breadcrumb_to_string(l88_label_entry.begin_breadcrumb) + "\"}";
+		text += ",l88_scope_summary=" + scope_summary(l88_scope);
+		text += ",l88_local_attachment={label_index=" + itos(l88_label_entry.label_index);
+		text += ",entry_index=" + itos(l88_label_entry_index);
+		text += ",level=" + itos(l88_label_entry.level);
+		text += ",consumer_class=\"" + label_consumer_class(l88_label_entry) + "\"";
+		text += ",label_commands=" + label_command_summary(l88_label_entry);
+		text += ",nested_scope=" + label_descendant_summary(l88_label_entry);
+		text += ",scope_alignment={scope_matches_label_plus_descendants=" + String(l88_scope_matches_label_plus_descendants ? "true" : "false");
+		text += ",scope_minus_label_plus_descendants={render_pass_begin=" + itos(int64_t(l88_scope.render_pass_begin_count) - int64_t(l88_label_entry.render_pass_begin_count + l88_label_entry.descendant_render_pass_begin_count));
+		text += ",next_subpass=" + itos(int64_t(l88_scope.next_subpass_count) - int64_t(l88_label_entry.next_subpass_count + l88_label_entry.descendant_next_subpass_count));
+		text += ",render_pass_end=" + itos(int64_t(l88_scope.render_pass_end_count) - int64_t(l88_label_entry.render_pass_end_count + l88_label_entry.descendant_render_pass_end_count));
+		text += ",pipeline_binds=" + itos(int64_t(l88_scope.render_pipeline_bind_count) - int64_t(l88_label_entry.render_pipeline_bind_count + l88_label_entry.descendant_render_pipeline_bind_count));
+		text += ",uniform_binds=" + itos(int64_t(l88_scope.render_uniform_bind_count) - int64_t(l88_label_entry.render_uniform_bind_count + l88_label_entry.descendant_render_uniform_bind_count));
+		text += ",vertex_buffer_binds=" + itos(int64_t(l88_scope.vertex_buffer_bind_count) - int64_t(l88_label_entry.vertex_buffer_bind_count + l88_label_entry.descendant_vertex_buffer_bind_count));
+		text += ",vertex_buffer_binding_total=" + itos(int64_t(l88_scope.vertex_buffer_binding_total) - int64_t(l88_label_entry.vertex_buffer_binding_total + l88_label_entry.descendant_vertex_buffer_binding_total));
+		text += ",index_buffer_binds=" + itos(int64_t(l88_scope.index_buffer_bind_count) - int64_t(l88_label_entry.index_buffer_bind_count + l88_label_entry.descendant_index_buffer_bind_count));
+		text += ",draw_calls=" + itos(int64_t(l88_scope.draw_count) - int64_t(l88_label_entry.draw_count + l88_label_entry.descendant_draw_count));
+		text += ",draw_indexed_calls=" + itos(int64_t(l88_scope.draw_indexed_count) - int64_t(l88_label_entry.draw_indexed_count + l88_label_entry.descendant_draw_indexed_count));
+		text += ",draw_indirect_calls=" + itos(int64_t(l88_scope.draw_indirect_count) - int64_t(l88_label_entry.draw_indirect_count + l88_label_entry.descendant_draw_indirect_count));
+		text += ",draw_indexed_indirect_calls=" + itos(int64_t(l88_scope.draw_indexed_indirect_count) - int64_t(l88_label_entry.draw_indexed_indirect_count + l88_label_entry.descendant_draw_indexed_indirect_count));
+		text += ",execute_secondary_calls=" + itos(int64_t(l88_scope.execute_secondary_count) - int64_t(l88_label_entry.execute_secondary_count + l88_label_entry.descendant_execute_secondary_count));
+		text += ",secondary_command_buffers=" + itos(int64_t(l88_scope.secondary_command_buffer_count) - int64_t(l88_label_entry.secondary_command_buffer_count + l88_label_entry.descendant_secondary_command_buffer_count));
+		text += ",secondary_labels=" + itos(int64_t(l88_scope.secondary_label_count) - int64_t(l88_label_entry.secondary_label_count + l88_label_entry.descendant_secondary_label_count));
+		text += ",secondary_draw_labels=" + itos(int64_t(l88_scope.secondary_draw_label_count) - int64_t(l88_label_entry.secondary_draw_label_count + l88_label_entry.descendant_secondary_draw_label_count)) + "}}";
+		text += ",tonemap_to_l88_delta={draw_calls=" + itos(int64_t(l88_scope.draw_count) - int64_t(target_scope.draw_count));
+		text += ",draw_indexed_calls=" + itos(int64_t(l88_scope.draw_indexed_count) - int64_t(target_scope.draw_indexed_count));
+		text += ",pipeline_binds=" + itos(int64_t(l88_scope.render_pipeline_bind_count) - int64_t(target_scope.render_pipeline_bind_count));
+		text += ",uniform_binds=" + itos(int64_t(l88_scope.render_uniform_bind_count) - int64_t(target_scope.render_uniform_bind_count));
+		text += ",vertex_buffer_binds=" + itos(int64_t(l88_scope.vertex_buffer_bind_count) - int64_t(target_scope.vertex_buffer_bind_count));
+		text += ",vertex_buffer_binding_total=" + itos(int64_t(l88_scope.vertex_buffer_binding_total) - int64_t(target_scope.vertex_buffer_binding_total));
+		text += ",index_buffer_binds=" + itos(int64_t(l88_scope.index_buffer_bind_count) - int64_t(target_scope.index_buffer_bind_count));
+		text += ",secondary_command_buffers=" + itos(int64_t(l88_scope.secondary_command_buffer_count) - int64_t(target_scope.secondary_command_buffer_count));
+		text += ",secondary_draw_labels=" + itos(int64_t(l88_scope.secondary_draw_label_count) - int64_t(target_scope.secondary_draw_label_count)) + "}";
+		text += ",l88_is_heavier_than_tonemap={draw_calls=" + String(l88_scope.draw_count > target_scope.draw_count ? "true" : "false");
+		text += ",draw_indexed_calls=" + String(l88_scope.draw_indexed_count > target_scope.draw_indexed_count ? "true" : "false");
+		text += ",pipeline_binds=" + String(l88_scope.render_pipeline_bind_count > target_scope.render_pipeline_bind_count ? "true" : "false");
+		text += ",uniform_binds=" + String(l88_scope.render_uniform_bind_count > target_scope.render_uniform_bind_count ? "true" : "false");
+		text += ",vertex_buffer_binds=" + String(l88_scope.vertex_buffer_bind_count > target_scope.vertex_buffer_bind_count ? "true" : "false");
+		text += ",index_buffer_binds=" + String(l88_scope.index_buffer_bind_count > target_scope.index_buffer_bind_count ? "true" : "false");
+		text += ",secondary_draw_labels=" + String(l88_scope.secondary_draw_label_count > target_scope.secondary_draw_label_count ? "true" : "false") + "}}";
 	}
 	text += ",previous=";
 	if (target_scope_index > 0) {
