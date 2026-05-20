@@ -2172,6 +2172,395 @@ That means the remaining Tonemap -> `L88` seam stays broad even after the layout
 
 ---
 
+### Task 92: QA classify the Tonemap pipeline-layout seam at serial `8` on failing `submit_serial=9`
+
+**Bead ID:** `oc-bgd`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-bgd` and keep the investigation projection-only on the refreshed source-built Godot binary. Run the same minimum valid host-Vulkan repro (`projection_only + disabled`) and inspect the new Tonemap pipeline-layout instrumentation on failing `submit_serial=9`. Determine whether the remaining Tonemap -> `Command Graph (L88) (Draw)` seam collapses to a pipeline-layout-owned sub-boundary or remains broad alongside the other surviving recipe buckets, while confirming whether Tonemap still remains the first poisoned-boundary candidate. Save durable notes/artifact references, update this plan with actual findings, and close bead `oc-bgd` with a clear reason if the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same source-built host-Vulkan `projection_only__disabled` staged repro with `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/` via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`. Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-layout-qa-vulkan-sourcebuild-20260519-195448/` (`stdout.log` plus `exact_command.txt` under that root). The rerun reproduced the expected failure envelope (exit `134`, first failing frame-1 main submission still `submit_serial=9`, later collapse still reaches `BLIT_PASS`).
+
+The new Tonemap -> `Command Graph (L88) (Draw)` `pipeline_layout_delta={...}` payload proved pipeline layout is a real surviving changed recipe bucket at the Tonemap-vs-`L88` seam, but it did **not** collapse the poisoned boundary to pipeline layout alone. The exact observed relation stayed `different_pipeline_layout_recipe`: both pipelines keep `descriptor_set_layout_count=4`, but Tonemap/base carries `descriptor_set_layout_hash="0xb45ace77"`, `push_constant_hash="0x8f2faf58"`, `push_constant_stage_mask="0x10"`, `push_constant_total_size=112`, while the immediate `L88` neighbor changes to `descriptor_set_layout_hash="0x23ba2460"`, `push_constant_hash="0x9b5fef81"`, `push_constant_stage_mask="0x11"`, `push_constant_total_size=32`. That structurally explains the layout bucket down to descriptor-set-layout lineage plus push-constant recipe drift.
+
+Important classification boundary: the seam still remains broad. The same packet compare still reports `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`, and the already-reduced ownership lanes stayed reduced (`bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` plus `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}`). So the exact QA read is: **the remaining seam does not collapse to pipeline layout; it remains a broad multi-bucket pipeline-owned seam that includes pipeline layout alongside vertex input, blend recipe, and specialization-constant differences.** `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+---
+
+### Task 93: Audit whether Tonemap-vs-`L88` now requires a combined multi-bucket slice or a new compare target
+
+**Bead ID:** `oc-cho`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-cho` and audit the current Tonemap-vs-`L88` seam state after the completed pipeline-layout QA on failing `submit_serial=9`. Use the current evidence package — especially `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-layout-qa-vulkan-sourcebuild-20260519-195448/` plus the living staged notes — to answer one narrow planning question: is the next honest cut (a) a deeper combined multi-bucket Tonemap-vs-`L88` interaction slice across the surviving recipe buckets, or (b) a new comparison target because `L88` is no longer the most informative neighbor? Do not widen back to already-demoted lanes unless the evidence forces it. Write the conclusion, the exact rationale, and the recommended next bead shape back into the plan, then close bead `oc-cho` when the audit package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the current evidence package, centered on `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-layout-qa-vulkan-sourcebuild-20260519-195448/stdout.log`, against the living staged notes in `doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+**Conclusion:** choose **(a)** — the next honest cut is a **deeper combined multi-bucket Tonemap-vs-`L88` interaction slice across the surviving recipe buckets**, not a new compare target.
+
+Why this is the honest next move:
+- `L88` still remains the **nearest meaningful downstream compare**. The live artifact still reports `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}` and `next_meaningful_after_target.scope.owner_begin="Command Graph (L88) (Draw)"`, so there is no new evidence that another neighbor displaced it as the tightest downstream contrast.
+- The Tonemap-owned local setup/bind lanes still stay **reduced rather than reopened**. In the same `submit_serial=9` payload, `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` and `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}` still demote the serial-`8 -> 9` local handshake as the surviving seam. That means a pivot back into those already-demoted lanes would be dishonest scope widening.
+- The freshly added pipeline-layout lane made real progress, but it **did not** produce a better compare target. It only strengthened the already-stable read that the surviving Tonemap-vs-`L88` boundary stays broad: `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]` still spans four recipe buckets at the same exact neighbor boundary.
+- `L88` is still informative because it cleanly answers two planning questions at once: (1) Tonemap is still the first poisoned-boundary candidate (`Tonemap (L87) (Draw)` remains the first self-owned meaningful local packet), and (2) the first downstream ownership expansion still begins immediately and gap-free at `L88` (`backend_gap_commands=0`, `gap_has_backend_commands=false`, `first_meaningful_expansion="l88_label"`). No competing compare target in the current evidence gives a tighter or earlier downstream contract.
+
+Planning truth from this audit:
+- the investigation should **not** pivot to a new neighbor yet
+- the investigation should **not** keep peeling single buckets in isolation as if one remaining field has already won
+- the next bead should instead ask how the surviving `vertex_input_recipe` + `blend_recipe` + `specialization_constants` + `pipeline_layout` combination interacts at the Tonemap-vs-`L88` seam while keeping the compare anchored on the same failing `submit_serial=9` path
+
+**Recommended next bead title:** `Audit Tonemap-vs-L88 combined surviving-recipe interaction seam at submit_serial=9`
+
+Recommended bead shape: stay on the same minimum valid source-built host-Vulkan repro (`projection_only + disabled`), keep Tonemap as the first poisoned-boundary candidate and `L88` as the immediate downstream compare, and add one layer of interaction-focused classification over the surviving buckets instead of opening a new neighbor hunt.
+
+---
+
+### Task 94: Audit the combined Tonemap-vs-`L88` surviving-recipe interaction seam at failing `submit_serial=9`
+
+**Bead ID:** `oc-91u`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-91u` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The planning truth is now locked: `L88` remains the best compare target, and no single bucket has isolated alone. Implement the next honest diagnostic cut to classify the **combined interaction** of the surviving Tonemap -> `L88` recipe buckets together — `vertex_input_recipe`, `blend_recipe`, `specialization_constants`, and `pipeline_layout` — at the same poisoned-boundary seam. Prefer the smallest instrumentation or comparison expansion that tells us whether the hazard is really attached to the interaction of those surviving buckets together at Tonemap -> `L88`, rather than to one bucket in isolation. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-91u` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Implemented a small interaction-focused expansion directly inside the existing Tonemap -> neighboring-pass recipe compare lane in `drivers/vulkan/rendering_device_driver_vulkan.cpp`, without reopening already-demoted local Tonemap bind/setup lanes or pivoting to a new neighbor. The new `surviving_bucket_interaction={...}` block reuses the locked surviving bucket set — `vertex_input_recipe`, `blend_recipe`, `specialization_constants`, and `pipeline_layout` — and classifies the compare structurally by checking whether any proper subset of those tracked buckets still matches across the Tonemap -> `Command Graph (L88) (Draw)` seam. The new payload reports the tracked changed-bucket count, whether the full combined bucket hash changes, match counts for 1-bucket / 2-bucket / 3-bucket proper subsets, the largest matching proper-subset size, the minimal distinguishing changed-bucket count, and a compact classification label. Validation/build on the source-built branch: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.cpp`; targeted object build `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.x86_64.o`; full incremental editor rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and binary string check `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "surviving_bucket_interaction={tracked_buckets"`.
+
+Ran the refreshed source-built host-Vulkan staged repro on the same `projection_only + disabled` lane with `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` via `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`, saving the durable artifact package under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-combined-interaction-vulkan-sourcebuild-20260520-121325/` (`stdout.log`, `exact_command.txt`, `exit_status.txt`; process abort / exit `134`). The rerun preserved the expected failure envelope (`submit_serial=9` -> `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`) and the previously locked seam facts (`Tonemap (L87) (Draw)` still first self-owned poisoned-boundary candidate, `L88` still the immediate downstream meaningful compare, and the Tonemap -> `L88` transition still gap-free with `first_meaningful_expansion="l88_label"`).
+
+The new classifier answered the Task 94 planning question directly on the failing `submit_serial=9` packet compare. Inside `recipe_delta=`, the surviving changed set still remains `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`, and the new `surviving_bucket_interaction=` block reports `tracked_changed_bucket_count=4`, `full_combo_hash_changed=true`, `proper_subset_match_counts={size1=0,size2=0,size3=0}`, `largest_matching_proper_subset_size=0`, `minimal_distinguishing_changed_bucket_count=4`, `classification="full_four_bucket_interaction"`, and `minimal_changed_bucket_candidates=[["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]]`. That means **no proper subset of the surviving buckets matches across the locked Tonemap -> `L88` seam** — not any single bucket, not any pair, and not any 3-of-4 subset. The smallest still-distinguishing structural delta at this seam is therefore the full four-bucket set together. Exact conclusion: the current poisoned-boundary contrast is most honestly classified as a **combined Tonemap-vs-`L88` four-bucket interaction**, not a single surviving recipe bucket in isolation. Durable notes were appended to `REF-07` (`/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`). No commit was made in this coder pass.
+
+---
+
+### Task 95: Audit whether the next seam split should classify ownership side of the Tonemap-vs-`L88` full four-bucket interaction
+
+**Bead ID:** `oc-2wq`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-2wq` on start and audit the current Tonemap-vs-`L88` seam state after the completed full-four-bucket interaction classification on failing `submit_serial=9`. Use the current evidence package — especially the updated plan, `REF-07`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-combined-interaction-vulkan-sourcebuild-20260520-121325/` — to answer one narrow planning question: do we now have enough truth to stop trying to isolate recipe buckets and instead split **which side of the Tonemap -> `L88` boundary owns the full four-bucket interaction hazard**, or is there still a more honest intermediate cut before ownership-side classification? Do not widen back to demoted lanes unless the evidence forces it. Write the conclusion, rationale, and the recommended exact next bead title/shape back into the plan, then close bead `oc-2wq` when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the active plan, the living staged QA log in `REF-07`, and the fresh source-built artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-combined-interaction-vulkan-sourcebuild-20260520-121325/` (`stdout.log`, `exact_command.txt`, `exit_status.txt`). Conclusion: **yes, ownership-side classification is now the honest next move**. There is not a tighter intermediate recipe-isolation cut left on the current Tonemap -> `L88` seam evidence.
+
+Grounded reasons from the current evidence:
+- The new interaction classifier structurally locks the surviving Tonemap -> `L88` seam as `classification="full_four_bucket_interaction"` with `tracked_changed_bucket_count=4`, `proper_subset_match_counts={size1=0,size2=0,size3=0}`, and `minimal_distinguishing_changed_bucket_count=4`. So no single bucket, pair, or 3-of-4 subset survives as a more honest next recipe cut.
+- The already-demoted Tonemap-local lanes stay demoted in the same failing artifact: `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` keeps the old bind-owned attachment lane exhausted, and `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}` keeps the serial-`8 -> 9` handshake clean. Reopening those lanes would be dishonest scope widening.
+- The Tonemap -> `L88` transition itself is still gap-free and already sharply located: `tonemap_to_l88_transition={backend_gap_commands=0,gap_has_backend_commands=false,post_gap_backend_command_count=0,first_meaningful_expansion="l88_label"}`. That means there is no newly-exposed smaller backend-owned transition sitting between Tonemap and `L88` that should be split before ownership-side classification.
+- Both sides of the seam are already proven to be self-owned local packets rather than wrappers or hidden descendant scopes. Tonemap remains `target_class="draw_payload"` with `tonemap_local_attachment.scope_alignment={scope_matches_label_commands=true,scope_matches_label_plus_descendants=true,...}` and zero descendant payload; `L88` likewise remains a self-owned local packet with `l88_local_attachment.scope_alignment={scope_matches_label_plus_descendants=true,...}` and zero descendant payload. So the unresolved planning axis is no longer “is there hidden work under one side?” but rather **which side of this now-locked two-packet boundary owns the hazardous four-bucket interaction state**.
+- The broader downstream envelope is stable rather than ambiguous: the same run still goes through `submit_serial=9` -> `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`, while `Tonemap (L87) (Draw)` stays the first self-owned poisoned-boundary candidate and `Command Graph (L88) (Draw)` stays the immediately following heavier downstream packet.
+
+Audit verdict: the more honest next split is no longer another bucket-isolation pass. It is an **ownership-side audit of the full four-bucket interaction seam**: determine whether the hazardous packet ownership reads as primarily Tonemap/source-side, primarily `L88`/downstream-side, or only as a boundary-crossing interaction contract between those two already-self-owned local packets. That is a side-classification question, not a return to per-bucket isolation.
+
+**Recommended next bead title:** `Classify ownership side of the Tonemap-vs-L88 full four-bucket interaction hazard at submit_serial=9`
+
+Recommended bead shape: stay on the same minimum valid source-built host-Vulkan repro (`projection_only + disabled`), keep Tonemap as the first poisoned-boundary candidate and `L88` as the immediate downstream compare, and add the smallest ownership-focused diagnostic needed to classify whether the four-bucket hazard is owned by the Tonemap packet that first makes the state live, by the heavier `L88` packet that first amplifies/consumes it, or only by the exact boundary-crossing interaction between the two. Do not reopen already-demoted bind/setup or render-pass-alias lanes unless new evidence directly contradicts the current artifact.
+
+---
+
+### Task 96: Classify ownership side of the Tonemap-vs-`L88` full four-bucket interaction hazard at failing `submit_serial=9`
+
+**Bead ID:** `oc-o9j`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-o9j` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The planning truth is now locked: the Tonemap -> `L88` seam is structurally a full four-bucket interaction, and no honest intermediate recipe-isolation cut remains. Implement the smallest ownership-focused diagnostic needed to classify whether the hazardous four-bucket interaction reads as owned by (1) the Tonemap packet that first makes the state live, (2) the heavier `L88` packet that first amplifies/consumes it, or (3) only the exact boundary-crossing interaction between the two already-self-owned local packets. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-o9j` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a smallest-possible ownership classifier inside the existing `tonemap_l88_contrast` instrumentation in `drivers/vulkan/rendering_device_driver_vulkan.cpp`. The new `ownership_side_classifier` reuses the already-locked Tonemap-vs-`L88` recipe comparison and local packet/transition evidence to report: whether the four tracked buckets are still structurally locked as `full_four_bucket_interaction`, whether both packets are still self-owned local packets, whether the Tonemap -> `L88` transition remains gap-free, which packet first makes the state live, and which packet is the first immediate heavier consumer/amplifier.
+
+Validation stayed on the same source-built host-Vulkan `projection_only + disabled` repro lane and produced `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-ownership-side-vulkan-sourcebuild-20260520-123925/` (`submit_serial=9`, `fence_wait_error submit_serial=9 wait_result=-4`, later `BLIT_PASS`). In that artifact, `tonemap_l88_contrast.ownership_side_classifier` resolves to `classification="boundary_crossing_interaction"` with `basis="tonemap_makes_state_live_then_l88_first_amplifies_without_gap"`, plus `full_four_bucket_interaction_locked=true`, `tonemap_self_owned_local_packet=true`, `l88_self_owned_local_packet=true`, `transition_gap_free=true`, `first_live_owner="tonemap_local_packet"`, `first_amplifier_owner="l88_local_packet"`, `tonemap_makes_state_live_before_l88=true`, `l88_is_immediate_heavier_consumer=true`, `surviving_changed_bucket_count=4`, and `largest_matching_proper_subset_size=0`.
+
+That makes the current honest read: this hazard is **not** Tonemap-only and **not** `L88`-only. Tonemap still owns the first live-state activation, `L88` still owns the first heavy amplification/consumption, and the hazardous seam reads as the exact boundary-crossing interaction contract between those two already-self-owned local packets.
+
+---
+
+### Task 97: Audit whether the next split should classify the smallest Tonemap-vs-`L88` boundary state-handoff contract at failing `submit_serial=9`
+
+**Bead ID:** `oc-fzh`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-fzh` on start and audit the current Tonemap-vs-`L88` seam state after the completed ownership-side classification on failing `submit_serial=9`. Use the current evidence package — especially the updated plan, `REF-07`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-ownership-side-vulkan-sourcebuild-20260520-123925/` — to answer one narrow planning question: is the next honest split now the **smallest state-handoff contract across the Tonemap -> `L88` boundary**, or is there still a more truthful intermediate cut before contract-level classification? Do not widen back to demoted lanes unless the evidence forces it. Write the conclusion, rationale, and the recommended exact next bead title/shape back into the plan, then close bead `oc-fzh` when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the active plan, the living staged QA log in `REF-07`, and the fresh ownership-side artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-ownership-side-vulkan-sourcebuild-20260520-123925/` (`stdout.log`, `exact_command.txt`, `exit_status.txt`). Conclusion: **yes, the next honest split is now the smallest state-handoff contract across the Tonemap -> `L88` boundary.** There is no more truthful intermediate cut left before contract-level classification on the current `submit_serial=9` seam.
+
+Grounded reasons from the current evidence:
+- The ownership-side classifier already resolves the surviving seam as `classification="boundary_crossing_interaction"` with basis `tonemap_makes_state_live_then_l88_first_amplifies_without_gap`, plus `full_four_bucket_interaction_locked=true`, `first_live_owner="tonemap_local_packet"`, `first_amplifier_owner="l88_local_packet"`, `tonemap_makes_state_live_before_l88=true`, and `l88_is_immediate_heavier_consumer=true`. That means the honest unresolved object is now the **handoff**, not one side in isolation.
+- The bucket-isolation lane is structurally exhausted on this seam. The same evidence package still locks `surviving_bucket_interaction.classification="full_four_bucket_interaction"` with `tracked_changed_bucket_count=4`, `largest_matching_proper_subset_size=0`, and no matching 1-bucket / 2-bucket / 3-bucket proper subset. Reopening per-bucket classification would be dishonest backtracking.
+- Both sides are already proven to be self-owned local packets rather than wrappers hiding a smaller ownership pivot. Tonemap still shows `tonemap_local_attachment.consumer_class="draw_payload"` with zero descendant payload and exact scope alignment; `L88` still shows `l88_local_attachment.consumer_class="draw_payload"` with zero descendant payload and exact scope alignment. So there is no newly-exposed hidden-owner cut between “ownership side” and “contract”.
+- The Tonemap -> `L88` boundary itself is already as tight as the current instrumentation can honestly make it without becoming a contract classifier. The transition stays gap-free: `tonemap_end_state.backend_command_serial=11`, `l88_begin_state.backend_command_serial=11`, and `tonemap_to_l88_transition={backend_gap_commands=0,gap_has_backend_commands=false,post_gap_backend_command_count=0,first_meaningful_expansion="l88_label"}`. There is no smaller backend-owned transition sitting in the gap that should be split first.
+- Tonemap-local sub-splits are now demoted relative to the boundary question. The artifact still carries `setup_sub_boundary="pipeline_then_uniform"` and `first_internal_expansion="bind_render_pipeline"`, but the ownership classifier has already shown the hazard does **not** read as Tonemap-only. Those Tonemap-internal details remain useful context for the eventual contract, but they are no longer the next planning axis.
+- The broader failure envelope remains stable rather than ambiguous: the same run still goes through `submit_serial=9` -> `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`, with no new evidence forcing a return to demoted projection, wrapper-only, aliasing, or semaphore-ownership lanes.
+
+Audit verdict: the next bead should classify the **smallest boundary state-handoff contract** between the two already-self-owned local packets — i.e. which exact live state Tonemap leaves behind at the boundary and which exact state `L88` first consumes/amplifies immediately across that zero-gap transition. That is the honest next cut; there is no tighter intermediate planning split left before it.
+
+**Recommended next bead title:** `Classify the smallest Tonemap-vs-L88 boundary state-handoff contract at submit_serial=9`
+
+Recommended bead shape: stay on the same minimum valid source-built host-Vulkan repro (`projection_only + disabled`), keep Tonemap as the first self-owned live-state packet and `L88` as the first immediate heavier consumer, and add the smallest contract-focused instrumentation that records the exact carry-forward boundary state across `tonemap_end_state` -> `l88_begin_state` / `l88_local_attachment`. Prefer state-handoff facts over new ownership or recipe buckets: pipeline/layout provenance that remains live, descriptor/uniform-set binding carryover, render-pass/framebuffer compatibility state, vertex/index binding assumptions, breadcrumb/state deltas, and whether `L88` reuses versus re-establishes each carried field. Do not reopen already-demoted per-bucket, Tonemap-only, `L88`-only, wrapper-only, or transfer/semaphore lanes unless new evidence directly contradicts the current artifact.
+
+---
+
+### Task 98: Classify the smallest Tonemap-vs-`L88` boundary state-handoff contract at failing `submit_serial=9`
+
+**Bead ID:** `oc-a9b`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-a9b` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The planning truth is now locked: the Tonemap -> `L88` seam is a boundary-crossing interaction with no honest intermediate bucket or owner split left. Implement the smallest contract-focused diagnostic needed to classify the exact carried state across the zero-gap Tonemap -> `L88` boundary — especially what remains live from `tonemap_end_state` into `l88_begin_state` / `l88_local_attachment`, what `L88` immediately reuses vs re-establishes, and which state-handoff contract looks like the minimum still-distinguishing boundary hazard. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-a9b` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-a9b`, extended the Vulkan command-label debug capture to persist full `DebugCommandStateSnapshot` records at label begin/end, and added a new `boundary_state_handoff_classifier` block under `tonemap_l88_contrast` so the zero-gap Tonemap -> `L88` seam can be classified from exact carried snapshots instead of only coarse booleans. Rebuilt the source editor and reran the same host-Vulkan `projection_only + disabled` source-built repro. Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-contract-side-vulkan-sourcebuild-20260520-145520/` (`stderr.log` still ends in the expected `fence_wait_error submit_serial=9 wait_result=-4`, `stdout.log` now carries the classifier block).
+
+The new evidence says the minimum still-distinguishing boundary hazard is a **carried pipeline packet**, not a broader pass/framebuffer/vertex/index ownership blob. At `tonemap_end_snapshot` and `l88_begin_snapshot`, the same Tonemap pipeline packet (`TonemapShaderRD:0`, same pipeline/layout/render-pass recipe provenance) remains live across a zero backend-command gap while render-pass scope is absent, vertex/index bindings are absent, and breadcrumb stays `NONE`. `L88` then immediately re-establishes its own active render-pass/framebuffer scope before its first pipeline bind, keeps the carried Tonemap packet live up to that bind, rebinds to its own `CanvasShaderRD:0` pipeline on the first pipeline bind, and only then adds vertex/index state before the first uniform bind. The classifier emits `classification="carried_pipeline_packet_then_l88_reestablishes_scope_rebinds_and_adds_vertex_index"` with `minimum_distinguishing_hazard="carried_pipeline_packet"`, which is the smallest honest contract that still separates the failing seam.
+
+---
+
+### Task 99: Audit whether the next split should classify the smallest carried Tonemap pipeline-packet contract before `L88` first rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-752`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-752` on start and audit the current Tonemap-vs-`L88` seam state after the completed boundary state-handoff classification on failing `submit_serial=9`. Use the current evidence package — especially the updated plan, `REF-07`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-contract-side-vulkan-sourcebuild-20260520-145520/` — to answer one narrow planning question: is the next honest split now the **smallest carried Tonemap pipeline-packet contract before `L88` first pipeline rebind**, or is there still a more truthful intermediate cut before that contract-level slice? Do not widen back to demoted lanes unless the evidence forces it. Write the conclusion, rationale, and the recommended exact next bead title/shape back into the plan, then close bead `oc-752` when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the active plan, `REF-07`, and the fresh contract-side artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-contract-side-vulkan-sourcebuild-20260520-145520/` (`stdout.log`, `stderr.log`, `exact_command.txt`, `exit_status.txt`). Conclusion: **yes, the next honest split is now the smallest carried Tonemap pipeline-packet contract before `L88` first pipeline rebind.** There is not a more truthful intermediate cut left before that contract-level slice on the current failing `submit_serial=9` seam.
+
+Grounding from the current evidence:
+- The boundary-state classifier already collapsed the surviving Tonemap -> `L88` seam to `classification="carried_pipeline_packet_then_l88_reestablishes_scope_rebinds_and_adds_vertex_index"` with `minimum_distinguishing_hazard="carried_pipeline_packet"`. That directly demotes the broader pass/framebuffer/vertex/index handoff story and leaves the carried pipeline packet as the minimum still-distinguishing boundary hazard.
+- The zero-gap boundary is exact and stable. `tonemap_end_state.backend_command_serial=11` and `l88_begin_state.backend_command_serial=11`, with `tonemap_to_l88_transition={backend_gap_commands=0,gap_has_backend_commands=false,post_gap_backend_command_count=0,...}`. There is no hidden backend work between Tonemap and `L88` that would justify an intermediate split.
+- The carried state is already proven narrower than a general render scope blob. `boundary_state_handoff_classifier.carried_state={pipeline_relation="same_pipeline",pipeline_packet_exact=true,packet_fields_match=true,scope_absent=true,vertex_index_absent=true,breadcrumb_absent=true,...}` shows the exact Tonemap pipeline packet survives across the boundary while render-pass/framebuffer scope, vertex/index bindings, and breadcrumb do **not**. So the honest next question is not “what else survives?” but “which fields inside that carried packet contract matter before rebind?”
+- `L88`’s first meaningful divergence is already localized to its own pre-rebind reconstruction path. The same classifier reports `l88_pipeline_before_keeps_carried_packet=true`, `l88_reestablishes_scope_before_own_pipeline=true`, `l88_has_pipeline_bind=true`, and `carried_to_l88_pipeline_relation="different_pipeline_different_compatibility_context"`. That means the remaining seam is precisely the contract that stays live **up to** `L88`’s first pipeline bind, not an earlier hidden ownership or wrapper split.
+- The already-demoted Tonemap-local sublanes remain demoted. The same artifact still carries `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` and `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}`. Reopening those lanes would be dishonest widening, not a truer intermediate cut.
+
+Audit verdict: the next bead should classify the **smallest carried Tonemap pipeline-packet contract before `L88` first pipeline rebind** — i.e. which exact carried packet fields remain live from `tonemap_end_snapshot` through `l88_first_pipeline_bind_before_state`, which of those are merely compatible context versus exact carried identity, and which field set is the minimum still-distinguishing pre-rebind hazard. No tighter truthful planning split remains before that contract slice.
+
+**Recommended next bead title:** `Classify the smallest carried Tonemap pipeline-packet contract before L88 first pipeline rebind at submit_serial=9`
+
+Recommended bead shape: stay on the same minimum valid source-built host-Vulkan repro (`projection_only + disabled`), keep Tonemap as the packet that first makes the carried state live and `L88` as the first immediate downstream packet that re-establishes scope before rebinding, and add the smallest packet-contract-focused classification over the pre-rebind carried fields only. Prefer exact carried packet facts — pipeline identity vs compatibility, pipeline-layout / descriptor-set-layout provenance, push-constant-range contract, render-pass compatibility lineage attached to the carried pipeline, and any pre-rebind packet field that remains identical versus merely compatible up to `l88_first_pipeline_bind_before_state`. Do not reopen already-demoted Tonemap-local bind/setup, broader pass/framebuffer ownership, wrapper-chain, or downstream-post-rebind lanes unless new evidence directly contradicts the current artifact.
+
+---
+
+### Task 100: Classify the smallest carried Tonemap pipeline-packet contract before `L88` first pipeline rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-f9d`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-f9d` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The planning truth is now locked: the smallest honest remaining seam is the carried Tonemap pipeline-packet contract that survives until `L88`’s first pipeline rebind. Implement the smallest contract-focused diagnostic needed to classify only the **pre-rebind carried packet contract fields** — exact vs merely compatible pipeline identity, pipeline-layout / descriptor-set-layout provenance, push-constant-range contract, and render-pass compatibility lineage attached to the carried packet — and determine which of those fields is the minimum still-distinguishing contract hazard. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-f9d` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Implemented a new `pre_rebind_carried_packet_contract={...}` classifier inside `drivers/vulkan/rendering_device_driver_vulkan.cpp`, then rebuilt the source `godot.linuxbsd.editor.dev.x86_64` binary and reran the same minimum valid host-Vulkan repro (`projection_only + disabled`) on the failing `submit_serial=9` lane. Fresh artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-pre-rebind-contract-vulkan-sourcebuild-20260520-151506/`.
+
+Actual evidence from `tonemap_pass_scope.target.tonemap_l88_contrast.pre_rebind_carried_packet_contract=` now classifies the carried packet as `classification="exact_pipeline_packet_with_compatible_only_render_pass_lineage"` with `minimum_distinguishing_hazard="render_pass_compatibility_lineage_attached_to_carried_packet"`.
+
+What the classifier proved on the live failing path:
+- the Tonemap -> `L88` boundary is still zero-gap and still carries the exact same Tonemap pipeline packet up to `l88_first_pipeline_bind_before_state`
+- `pipeline_identity={relation="same_pipeline",exact=true,...}`: the carried pipeline identity stays exact before rebind
+- `pipeline_layout_descriptor_contract={exact=true,...}`: pipeline-layout handle plus descriptor-set-layout provenance stay exact before rebind
+- `push_constant_range_contract={exact=true,...}`: the push-constant-range contract also stays exact before rebind
+- `render_pass_lineage={relation="different_handle_same_render_pass_compatibility",exact=false,compatible_only=true,...}`: the only non-exact carried contract family is the packet’s attached render-pass lineage, which matches the re-established `L88` scope only by compatibility hash / subpass compatibility, not by exact render-pass handle or exact render-pass recipe
+
+That is the smallest honest remaining pre-rebind cut. The minimum still-distinguishing hazard before `L88` performs its own pipeline rebind is **render-pass compatibility lineage attached to the carried Tonemap packet**, not pipeline identity, not pipeline-layout / descriptor-set-layout provenance, and not push-constant-range drift. Durable notes were added to `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the same artifact reference and conclusion.
+
+---
+
+### Task 101: Audit whether the next split should classify the smallest carried render-pass compatibility-lineage contract before `L88` first rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-hy8`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-hy8` on start and audit the current Tonemap-vs-`L88` seam state after the completed pre-rebind carried packet contract classification on failing `submit_serial=9`. Use the current evidence package — especially the updated plan, `REF-07`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-pre-rebind-contract-vulkan-sourcebuild-20260520-151506/` — to answer one narrow planning question: is the next honest split now the **smallest carried render-pass compatibility-lineage contract** attached to the Tonemap packet before `L88` first rebind, or is there still a more truthful intermediate cut before that slice? Do not widen back to demoted lanes unless the evidence forces it. Write the conclusion, rationale, and the recommended exact next bead title/shape back into the plan, then close bead `oc-hy8` when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the active plan, the living staged QA log in `REF-07`, and the fresh pre-rebind contract artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-pre-rebind-contract-vulkan-sourcebuild-20260520-151506/` (`stdout.log`, `stderr.log`, `exact_command.txt`, `exit_status.txt`). Conclusion: **yes, the next honest split is now the smallest carried render-pass compatibility-lineage contract attached to the Tonemap packet before `L88` first rebind.** There is not a more truthful intermediate cut left before that slice on the current failing `submit_serial=9` seam.
+
+- The completed `oc-f9d` classifier already reduced the pre-rebind carried packet to `classification="exact_pipeline_packet_with_compatible_only_render_pass_lineage"` with `minimum_distinguishing_hazard="render_pass_compatibility_lineage_attached_to_carried_packet"`. That directly demotes pipeline identity, pipeline-layout / descriptor-set-layout provenance, and push-constant-range drift as the next planning axis because those contracts are already exact before `L88` rebinds.
+- The zero-gap boundary is still exact and stable. `tonemap_end_state.backend_command_serial=11` and `l88_begin_state.backend_command_serial=11`, while `tonemap_to_l88_transition={backend_gap_commands=0,gap_has_backend_commands=false,post_gap_backend_command_count=0,...}` shows there is no hidden backend work between Tonemap and `L88` that would justify an intermediate pre-rebind split.
+- The carried packet facts are already as small as they can honestly get without splitting the render-pass lineage itself. `pipeline_identity={relation="same_pipeline",exact=true,...}`, `pipeline_layout_descriptor_contract={exact=true,...}`, and `push_constant_range_contract={exact=true,...}` all stay exact up to `l88_first_pipeline_bind_before_state`, while `render_pass_lineage={relation="different_handle_same_render_pass_compatibility",exact=false,compatible_only=true,...}` is the only surviving non-exact carried contract family.
+- `L88`’s first pre-rebind state reconstruction is already localized enough to support that cut directly. Before its own pipeline bind, `L88` re-establishes active scope with `scope_pipeline_relation="different_handle_same_render_pass_compatibility"` while still keeping the carried Tonemap packet live (`l88_pipeline_before_keeps_carried_packet=true`, `l88_reestablishes_scope_before_own_pipeline=true`). That means the unresolved seam is no longer “which packet field survives?” but specifically **what the compatible-only render-pass lineage contract is across that carried-packet / rebuilt-scope relation**.
+- The already-demoted local lanes remain demoted in the same artifact. `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` and `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}` still keep Tonemap-local bind/setup reopening off the honest path.
+
+Audit verdict: the next bead should classify the **smallest carried render-pass compatibility-lineage contract** attached to the Tonemap packet before `L88` first rebinds — i.e. which exact lineage fields are merely compatible rather than exact across the carried packet vs re-established active scope, and what the minimum still-distinguishing compatibility-only contract is inside that render-pass family.
+
+**Recommended next bead title:** `Classify the smallest carried render-pass compatibility-lineage contract before L88 first pipeline rebind at submit_serial=9`
+
+Recommended bead shape: stay on the same minimum valid source-built host-Vulkan repro (`projection_only + disabled`), keep Tonemap as the packet that makes the carried state live and `L88` as the immediate downstream scope-rebuilder before rebind, and add the smallest render-pass-lineage-focused classification over the pre-rebind carried contract only. Prefer exact compatibility-lineage facts — active render-pass recipe vs pipeline-attached render-pass recipe, exact-handle vs exact-recipe vs compatibility-hash agreement, subpass/attachment/dependency/view-count lineage, and any lineage field that remains merely compatible rather than exact before `L88` binds its own pipeline. Do not reopen already-demoted packet-identity, layout/descriptor, push-constant, Tonemap-local bind/setup, or post-rebind lanes unless new evidence directly contradicts the current artifact.
+
+---
+
+### Task 102: Classify the smallest carried render-pass compatibility-lineage contract before `L88` first pipeline rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-s5m`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-s5m` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The planning truth is now locked: the smallest honest remaining seam is the carried render-pass compatibility-lineage contract attached to the Tonemap packet before `L88` first pipeline rebind. Implement the smallest lineage-focused diagnostic needed to classify which render-pass lineage fields are exact vs merely compatible across the carried Tonemap packet and the rebuilt active `L88` scope before that first rebind, and determine which render-pass lineage field is the minimum still-distinguishing contract hazard. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-s5m` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Coder pass `oc-s5m` implemented the smallest honest extension of the existing pre-rebind carried-packet classifier directly in `drivers/vulkan/rendering_device_driver_vulkan.{h,cpp}` and reran the same source-built host-Vulkan `projection_only + disabled` repro on the failing `submit_serial=9` lane. The new diagnostic persists three exact-only render-pass lineage family hashes onto both the carried Tonemap pipeline provenance and the active pre-rebind command-state snapshot — `render_pass_attachment_exact_hash`, `render_pass_dependency_hash`, and `render_pass_view_density_hash` — then reports a narrow `render_pass_lineage={field_classifier,minimum_distinguishing_field,...}` verdict inside `pre_rebind_carried_packet_contract=` before `L88` first rebinds.
+
+Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-pre-rebind-lineage-vulkan-sourcebuild-20260520-180122/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `exit_status.txt`). The run reproduced the same expected failure envelope: abort / exit `134`, `fence_wait_begin submit_serial=9`, `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapsing to `BLIT_PASS`.
+
+The new result answers the planning question directly. On the failing `submit_serial=9` handoff, `pre_rebind_carried_packet_contract={classification="exact_pipeline_packet_with_compatible_only_render_pass_lineage",minimum_distinguishing_hazard="attachment_exact_recipe",...}` now refines the earlier coarse render-pass conclusion. The carried Tonemap packet still keeps exact pipeline identity, exact pipeline-layout / descriptor-set-layout provenance, and exact push-constant-range contract before `L88` rebinds. Inside the remaining render-pass lineage family, the new classifier reports `render_pass_lineage={relation="different_handle_same_render_pass_compatibility",exact=false,compatible_only=true,field_classifier="attachment_exact_recipe_is_minimum_hazard",minimum_distinguishing_field="attachment_exact_recipe",handle_match=false,exact_hash_match=false,compatibility_hash_match=true,subpass_compatibility_hash_match=true,attachment_exact_hash_match=false,dependency_hash_match=true,view_density_hash_match=true,subpass_match=true,subpass_count_match=true,attachment_count_match=true,dependency_count_match=true,view_count_match=true,fragment_density_usage_match=true,...}`.
+
+That means the remaining pre-rebind carried-packet hazard is now classified one level deeper than the prior `oc-f9d` result: the carried Tonemap packet and rebuilt active `L88` scope differ by render-pass handle and exact render-pass recipe, but once the compatibility spine is held constant the only still-distinguishing exact-only lineage family is the **attachment exact recipe**. Dependency lineage is exact, view-density lineage is exact, subpass compatibility is exact, counts stay exact, and the minimum still-distinguishing contract hazard before `L88` first pipeline rebind is therefore the carried packet’s `attachment_exact_recipe` lineage rather than a broader render-pass compatibility bucket.
+
+---
+
+### Task 103: Audit whether the next split should classify the smallest carried render-pass attachment exact-recipe contract before `L88` first rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-ni1`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-ni1` on start and audit the current Tonemap-vs-`L88` seam state after the completed pre-rebind render-pass-lineage classification on failing `submit_serial=9`. Use the current evidence package — especially the updated plan, `REF-07`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-pre-rebind-lineage-vulkan-sourcebuild-20260520-180122/` — to answer one narrow planning question: is the next honest split now the **smallest carried render-pass attachment exact-recipe contract** attached to the Tonemap packet before `L88` first rebind, or is there still a more truthful intermediate cut before that slice? Do not widen back to demoted lanes unless the evidence forces it. Write the conclusion, rationale, and the recommended exact next bead title/shape back into the plan, then close bead `oc-ni1` when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor reviewed the updated plan, the staged QA notes, and the fresh artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-pre-rebind-lineage-vulkan-sourcebuild-20260520-180122/` and the answer is now clean: **yes, the next honest split is the smallest carried render-pass attachment exact-recipe contract attached to the Tonemap packet before `L88` first rebind; there is no more truthful intermediate cut left on this lane.** The new `pre_rebind_carried_packet_contract=` block shows the carried packet still preserves exact pipeline identity, exact pipeline-layout / descriptor-set-layout provenance, and exact push-constant-range contract up to the zero-gap Tonemap -> `L88` boundary, while `render_pass_lineage={relation="different_handle_same_render_pass_compatibility",exact=false,compatible_only=true,field_classifier="attachment_exact_recipe_is_minimum_hazard",minimum_distinguishing_field="attachment_exact_recipe",compatibility_hash_match=true,subpass_compatibility_hash_match=true,attachment_exact_hash_match=false,dependency_hash_match=true,view_density_hash_match=true,...}` proves that the broader render-pass lineage family has already been reduced as far as the current evidence can honestly take it. Dependency lineage is exact, view-density lineage is exact, subpass compatibility is exact, counts remain exact, and the Tonemap -> `L88` handoff still stays gap-free with `l88_pipeline_before_keeps_carried_packet=true`, so there is no remaining pre-rebind lineage or handoff bucket to split before the attachment-exact-recipe slice itself. Auditor conclusion: the carried attachment exact-recipe contract is now the smallest truthful next move. Recommended exact next bead title/shape: **Classify the smallest carried render-pass attachment exact-recipe contract before `L88` first pipeline rebind at failing `submit_serial=9`** — specifically, keep the same source-built `projection_only + disabled` repro and instrument only the exact attachment-recipe subfields still attached to the carried Tonemap packet versus the rebuilt active pre-rebind `L88` scope, without reopening already-demoted dependency/view-density/compatibility lanes.
+
+---
+
+### Task 104: Classify the smallest carried render-pass attachment exact-recipe contract before `L88` first pipeline rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-sld`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-sld` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The planning truth is now locked: the smallest honest remaining seam is the carried render-pass attachment exact-recipe contract attached to the Tonemap packet before `L88` first pipeline rebind. Implement the smallest attachment-focused diagnostic needed to classify which render-pass attachment exact-recipe fields are exact vs non-exact across the carried Tonemap packet and the rebuilt active `L88` scope before that first rebind, and determine which attachment exact-recipe field is the minimum still-distinguishing contract hazard. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-sld` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Implemented the smallest attachment-focused diagnostic directly in `rendering_device_driver_vulkan.*` by threading per-field attachment exact-recipe hashes for `format`, `samples`, `load_op`, `store_op`, `stencil_load_op`, `stencil_store_op`, `initial_layout`, and `final_layout` through render-pass creation, carried pipeline provenance, and active pre-rebind scope snapshots. The pre-rebind `render_pass_lineage` report now emits `attachment_exact_recipe={...}` with per-field exact/non-exact classification and a minimum-hazard classifier.
+
+Validation stayed on the same source-built host-Vulkan `projection_only__disabled` lane using artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-attachment-exact-vulkan-sourcebuild-20260520-182834/` (`stdout.log`, `stderr.log`, `exact_command.txt`, `context.txt`, `env.txt`, `exit_status.txt`). The repro still aborts at failing `submit_serial=9`, but the new evidence cleanly classifies the carried Tonemap packet’s remaining render-pass attachment contract hazard: `attachment_exact_recipe={exact=false, field_classifier="load_op_is_minimum_attachment_exact_hazard", minimum_distinguishing_field="load_op", mismatch_count=1, mismatch_fields=["load_op"], attachment_count_match=true, format_match=true, samples_match=true, load_op_match=false, store_op_match=true, stencil_load_op_match=true, stencil_store_op_match=true, initial_layout_match=true, final_layout_match=true, ...}`. That means the broader pre-rebind seam remains exactly where planning locked it, and within that seam the **only** still-distinguishing attachment exact-recipe field between the carried Tonemap packet (`render_pass_create_serial=9`) and the rebuilt active `L88` scope (`render_pass_create_serial=13`) is the attachment `load_op`.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
@@ -2213,29 +2602,49 @@ The key current read is: the projection dispatch still appears to be the first b
 
 Start the next session from this plan plus `REF-07`, then execute in this order:
 
-1. **Stay on the source-built Godot binary and keep the repro at `projection_only + disabled`**
-   - do not reopen the earlier scratch/projection-first questions unless new evidence forces it
-   - keep the staging narrow so the backend handoff logs remain comparable
+1. **Stay on the same source-built Godot binary and keep the repro at `projection_only + disabled`**
+   - do not reopen scratch-only, projection-first, semaphore identity, Tonemap-local bind/setup, wrapper-chain, or post-rebind lanes unless new evidence forces it
+   - keep the staging narrow so every artifact remains directly comparable on the same failing lane: `submit_serial=9` -> `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`
 
-2. **Run QA once on the refreshed source-built binary and inspect the expanded `depth_prepass_consumer_seam=` payload on failing `submit_serial=9`**
-   - the seam currently stays pinned exactly on `Render Depth Pre-Pass (L15) (Draw)`
-   - but the new backend classification says that exact label is a `render_pass_wrapper`, not a direct draw packet
-   - artifact expectation: the most recent coder pass now emits `draw_boundary_backend_attachment={consumer_class,begin_state,label_commands}` alongside the older `post_draw_non_draw_attachment` / followup fields
+2. **Start from the latest stopping-point artifact, not the older depth-prepass seam**
+   - freshest high-signal artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-attachment-exact-vulkan-sourcebuild-20260520-182834/`
+   - current locked seam summary:
+     - Tonemap -> `L88` remains the first honest poisoned-boundary compare
+     - the boundary is still zero-gap
+     - the carried Tonemap packet remains exact on pipeline identity, layout/descriptor provenance, and push-constant-range contract before `L88` first pipeline rebind
+     - the remaining carried render-pass attachment exact-recipe contract has narrowed to a single differing field: `load_op`
 
-3. **Split the backend-owned work immediately under that render-pass wrapper instead of re-widening to the full ancestry**
-   - prefer render-pass ownership / nested work evidence around the depth-prepass consumer boundary itself
-   - only widen the scope if new QA evidence proves the true surviving seam lives somewhere other than the wrapper currently exposed by `Render Depth Pre-Pass (L15) (Draw)`
+3. **Execute the exact next bead implied by Task 103 / Task 104**
+   - next bead title: `Classify the smallest carried render-pass attachment exact-recipe contract before L88 first pipeline rebind at failing submit_serial=9`
+   - focus only on the attachment exact-recipe subfields still attached to the carried Tonemap packet versus the rebuilt active pre-rebind `L88` scope
+   - the current evidence already says:
+     - `field_classifier="load_op_is_minimum_attachment_exact_hazard"`
+     - `minimum_distinguishing_field="load_op"`
+     - `mismatch_count=1`
+   - so the next honest question is whether the carried `load_op` contract can itself be structurally explained or narrowed further without reopening broader demoted families
 
-4. **If the seam shifts downstream, split only that immediate attached backend work — not the whole ancestry again**
-   - the broad copy-chain ancestry is already well classified and should stay demoted unless new evidence contradicts it
+4. **Do not backslide into already-exhausted families unless the new artifact directly contradicts the current read**
+   - already exact/exhausted on this lane:
+     - pipeline identity
+     - pipeline-layout / descriptor-set-layout provenance
+     - push-constant-range contract
+     - dependency lineage
+     - view-density lineage
+     - broader render-pass compatibility lineage
+   - already demoted:
+     - Tonemap-local bind/setup lanes
+     - hidden wrapper/descendant ownership
+     - broader pass/framebuffer ownership
+     - post-rebind and downstream-only lanes
 
-Avoid reopening already-closed branches unless the new backend evidence directly points back to them:
-- the radix push-constant contract bug is fixed and no longer leads the suspect list
-- scratch-only already proved a safe compositor-path compute dispatch exists
-- projection-owned tracked resources stayed stable across the critical post-dispatch window
-- the 8 → 9 semaphore identity/reuse question is answered and no stale consumer was seen
-- the broad `L8..L14` copy prefix and the late `L86..L88` tail have both been demoted below the current depth-prepass seam
+### Landing-the-plane handoff
+
+**Stopping point:** The live failing seam is now reduced to the carried Tonemap packet’s **render-pass attachment exact-recipe `load_op`** before `L88` first pipeline rebind.
+
+**Best current one-line read:** same carried pipeline packet, same compatibility-level render-pass family, but a different exact attachment recipe narrowed all the way down to `load_op`.
+
+**Best next move:** continue from Task 104’s result and classify the smallest carried attachment `load_op` contract on the same locked repro lane.
 
 ---
 
-*Completed on 2026-05-17 (partial; projection-first locked, backend handoff narrowed to failing frame-1 submit `submit_serial=9`)*
+*Updated on 2026-05-20 (partial; stopping point narrowed from broad Tonemap-vs-L88 interaction to carried attachment exact-recipe `load_op` before `L88` first pipeline rebind at failing `submit_serial=9`)*

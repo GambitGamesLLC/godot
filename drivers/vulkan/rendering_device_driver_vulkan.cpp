@@ -5511,7 +5511,52 @@ static uint64_t _debug_hash_attachment_reference_compatibility(const RDD::Attach
 	return hash;
 }
 
-static uint64_t _debug_hash_render_pass_exact(const VectorView<RDD::Attachment> &p_attachments, const VectorView<RDD::Subpass> &p_subpasses, const VectorView<RDD::SubpassDependency> &p_subpass_dependencies, uint32_t p_view_count, const RDD::AttachmentReference &p_fragment_density_map_attachment) {
+enum DebugRenderPassAttachmentField {
+	DEBUG_RENDER_PASS_ATTACHMENT_FIELD_FORMAT,
+	DEBUG_RENDER_PASS_ATTACHMENT_FIELD_SAMPLES,
+	DEBUG_RENDER_PASS_ATTACHMENT_FIELD_LOAD_OP,
+	DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STORE_OP,
+	DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STENCIL_LOAD_OP,
+	DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STENCIL_STORE_OP,
+	DEBUG_RENDER_PASS_ATTACHMENT_FIELD_INITIAL_LAYOUT,
+	DEBUG_RENDER_PASS_ATTACHMENT_FIELD_FINAL_LAYOUT,
+};
+
+static uint64_t _debug_hash_render_pass_attachment_field(const VectorView<RDD::Attachment> &p_attachments, DebugRenderPassAttachmentField p_field) {
+	uint64_t hash = hash_murmur3_one_64(p_attachments.size());
+	for (uint32_t i = 0; i < p_attachments.size(); i++) {
+		const RDD::Attachment &attachment = p_attachments[i];
+		switch (p_field) {
+			case DEBUG_RENDER_PASS_ATTACHMENT_FIELD_FORMAT:
+				hash = hash_murmur3_one_64(attachment.format, hash);
+				break;
+			case DEBUG_RENDER_PASS_ATTACHMENT_FIELD_SAMPLES:
+				hash = hash_murmur3_one_64(attachment.samples, hash);
+				break;
+			case DEBUG_RENDER_PASS_ATTACHMENT_FIELD_LOAD_OP:
+				hash = hash_murmur3_one_64(attachment.load_op, hash);
+				break;
+			case DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STORE_OP:
+				hash = hash_murmur3_one_64(attachment.store_op, hash);
+				break;
+			case DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STENCIL_LOAD_OP:
+				hash = hash_murmur3_one_64(attachment.stencil_load_op, hash);
+				break;
+			case DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STENCIL_STORE_OP:
+				hash = hash_murmur3_one_64(attachment.stencil_store_op, hash);
+				break;
+			case DEBUG_RENDER_PASS_ATTACHMENT_FIELD_INITIAL_LAYOUT:
+				hash = hash_murmur3_one_64(attachment.initial_layout, hash);
+				break;
+			case DEBUG_RENDER_PASS_ATTACHMENT_FIELD_FINAL_LAYOUT:
+				hash = hash_murmur3_one_64(attachment.final_layout, hash);
+				break;
+		}
+	}
+	return hash;
+}
+
+static uint64_t _debug_hash_render_pass_attachment_exact(const VectorView<RDD::Attachment> &p_attachments) {
 	uint64_t hash = hash_murmur3_one_64(p_attachments.size());
 	for (uint32_t i = 0; i < p_attachments.size(); i++) {
 		const RDD::Attachment &attachment = p_attachments[i];
@@ -5524,6 +5569,31 @@ static uint64_t _debug_hash_render_pass_exact(const VectorView<RDD::Attachment> 
 		hash = hash_murmur3_one_64(attachment.initial_layout, hash);
 		hash = hash_murmur3_one_64(attachment.final_layout, hash);
 	}
+	return hash;
+}
+
+static uint64_t _debug_hash_render_pass_dependency_lineage(const VectorView<RDD::SubpassDependency> &p_subpass_dependencies) {
+	uint64_t hash = hash_murmur3_one_64(p_subpass_dependencies.size());
+	for (uint32_t i = 0; i < p_subpass_dependencies.size(); i++) {
+		const RDD::SubpassDependency &dependency = p_subpass_dependencies[i];
+		hash = hash_murmur3_one_64(dependency.src_subpass, hash);
+		hash = hash_murmur3_one_64(dependency.dst_subpass, hash);
+		hash = hash_murmur3_one_64((uint64_t)dependency.src_stages, hash);
+		hash = hash_murmur3_one_64((uint64_t)dependency.dst_stages, hash);
+		hash = hash_murmur3_one_64((uint64_t)dependency.src_access, hash);
+		hash = hash_murmur3_one_64((uint64_t)dependency.dst_access, hash);
+	}
+	return hash;
+}
+
+static uint64_t _debug_hash_render_pass_view_density_lineage(uint32_t p_view_count, const RDD::AttachmentReference &p_fragment_density_map_attachment) {
+	uint64_t hash = hash_murmur3_one_64(p_view_count);
+	hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(p_fragment_density_map_attachment), hash);
+	return hash;
+}
+
+static uint64_t _debug_hash_render_pass_exact(const VectorView<RDD::Attachment> &p_attachments, const VectorView<RDD::Subpass> &p_subpasses, const VectorView<RDD::SubpassDependency> &p_subpass_dependencies, uint32_t p_view_count, const RDD::AttachmentReference &p_fragment_density_map_attachment) {
+	uint64_t hash = _debug_hash_render_pass_attachment_exact(p_attachments);
 	hash = hash_murmur3_one_64(p_subpasses.size(), hash);
 	for (uint32_t i = 0; i < p_subpasses.size(); i++) {
 		const RDD::Subpass &subpass = p_subpasses[i];
@@ -5549,18 +5619,8 @@ static uint64_t _debug_hash_render_pass_exact(const VectorView<RDD::Attachment> 
 		hash = hash_murmur3_one_64(subpass.fragment_shading_rate_texel_size.x, hash);
 		hash = hash_murmur3_one_64(subpass.fragment_shading_rate_texel_size.y, hash);
 	}
-	hash = hash_murmur3_one_64(p_subpass_dependencies.size(), hash);
-	for (uint32_t i = 0; i < p_subpass_dependencies.size(); i++) {
-		const RDD::SubpassDependency &dependency = p_subpass_dependencies[i];
-		hash = hash_murmur3_one_64(dependency.src_subpass, hash);
-		hash = hash_murmur3_one_64(dependency.dst_subpass, hash);
-		hash = hash_murmur3_one_64((uint64_t)dependency.src_stages, hash);
-		hash = hash_murmur3_one_64((uint64_t)dependency.dst_stages, hash);
-		hash = hash_murmur3_one_64((uint64_t)dependency.src_access, hash);
-		hash = hash_murmur3_one_64((uint64_t)dependency.dst_access, hash);
-	}
-	hash = hash_murmur3_one_64(p_view_count, hash);
-	hash = hash_murmur3_one_64(_debug_hash_attachment_reference_compatibility(p_fragment_density_map_attachment), hash);
+	hash = hash_murmur3_one_64(_debug_hash_render_pass_dependency_lineage(p_subpass_dependencies), hash);
+	hash = hash_murmur3_one_64(_debug_hash_render_pass_view_density_lineage(p_view_count, p_fragment_density_map_attachment), hash);
 	return hash;
 }
 
@@ -5773,6 +5833,17 @@ RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Att
 	render_pass->debug_create_serial = ++debug_render_pass_create_serial_counter;
 	render_pass->debug_exact_hash = _debug_hash_render_pass_exact(p_attachments, p_subpasses, p_subpass_dependencies, p_view_count, p_fragment_density_map_attachment);
 	render_pass->debug_compatibility_hash = _debug_hash_render_pass_compatibility(p_attachments, p_subpasses, p_view_count, uses_fragment_density_map);
+	render_pass->debug_attachment_exact_hash = _debug_hash_render_pass_attachment_exact(p_attachments);
+	render_pass->debug_attachment_format_hash = _debug_hash_render_pass_attachment_field(p_attachments, DEBUG_RENDER_PASS_ATTACHMENT_FIELD_FORMAT);
+	render_pass->debug_attachment_samples_hash = _debug_hash_render_pass_attachment_field(p_attachments, DEBUG_RENDER_PASS_ATTACHMENT_FIELD_SAMPLES);
+	render_pass->debug_attachment_load_op_hash = _debug_hash_render_pass_attachment_field(p_attachments, DEBUG_RENDER_PASS_ATTACHMENT_FIELD_LOAD_OP);
+	render_pass->debug_attachment_store_op_hash = _debug_hash_render_pass_attachment_field(p_attachments, DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STORE_OP);
+	render_pass->debug_attachment_stencil_load_op_hash = _debug_hash_render_pass_attachment_field(p_attachments, DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STENCIL_LOAD_OP);
+	render_pass->debug_attachment_stencil_store_op_hash = _debug_hash_render_pass_attachment_field(p_attachments, DEBUG_RENDER_PASS_ATTACHMENT_FIELD_STENCIL_STORE_OP);
+	render_pass->debug_attachment_initial_layout_hash = _debug_hash_render_pass_attachment_field(p_attachments, DEBUG_RENDER_PASS_ATTACHMENT_FIELD_INITIAL_LAYOUT);
+	render_pass->debug_attachment_final_layout_hash = _debug_hash_render_pass_attachment_field(p_attachments, DEBUG_RENDER_PASS_ATTACHMENT_FIELD_FINAL_LAYOUT);
+	render_pass->debug_dependency_hash = _debug_hash_render_pass_dependency_lineage(p_subpass_dependencies);
+	render_pass->debug_view_density_hash = _debug_hash_render_pass_view_density_lineage(p_view_count, p_fragment_density_map_attachment);
 	render_pass->debug_subpass_count = p_subpasses.size();
 	render_pass->debug_attachment_count = p_attachments.size();
 	render_pass->debug_dependency_count = p_subpass_dependencies.size();
@@ -6866,6 +6937,17 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.render_pass_exact_hash = render_pass->debug_exact_hash;
 	pipeline_provenance.render_pass_compatibility_hash = render_pass->debug_compatibility_hash;
 	pipeline_provenance.render_subpass_compatibility_hash = p_render_subpass < render_pass->debug_subpass_compatibility_hashes.size() ? render_pass->debug_subpass_compatibility_hashes[p_render_subpass] : 0;
+	pipeline_provenance.render_pass_attachment_exact_hash = render_pass->debug_attachment_exact_hash;
+	pipeline_provenance.render_pass_attachment_format_hash = render_pass->debug_attachment_format_hash;
+	pipeline_provenance.render_pass_attachment_samples_hash = render_pass->debug_attachment_samples_hash;
+	pipeline_provenance.render_pass_attachment_load_op_hash = render_pass->debug_attachment_load_op_hash;
+	pipeline_provenance.render_pass_attachment_store_op_hash = render_pass->debug_attachment_store_op_hash;
+	pipeline_provenance.render_pass_attachment_stencil_load_op_hash = render_pass->debug_attachment_stencil_load_op_hash;
+	pipeline_provenance.render_pass_attachment_stencil_store_op_hash = render_pass->debug_attachment_stencil_store_op_hash;
+	pipeline_provenance.render_pass_attachment_initial_layout_hash = render_pass->debug_attachment_initial_layout_hash;
+	pipeline_provenance.render_pass_attachment_final_layout_hash = render_pass->debug_attachment_final_layout_hash;
+	pipeline_provenance.render_pass_dependency_hash = render_pass->debug_dependency_hash;
+	pipeline_provenance.render_pass_view_density_hash = render_pass->debug_view_density_hash;
 	pipeline_provenance.render_pass_create_serial = render_pass->debug_create_serial;
 	pipeline_provenance.render_subpass = p_render_subpass;
 	pipeline_provenance.render_pass_subpass_count = render_pass->debug_subpass_count;
@@ -7622,6 +7704,7 @@ void RenderingDeviceDriverVulkan::command_end_label(CommandBufferID p_cmd_buffer
 			entry.end_index_format = command_buffer->debug_index_format;
 			entry.end_breadcrumb = command_buffer->debug_last_breadcrumb;
 			entry.end_backend_command_serial = command_buffer->debug_backend_command_serial;
+			entry.end_state_snapshot = _debug_capture_command_state_snapshot(command_buffer);
 		}
 		command_buffer->debug_active_label_stack_size--;
 		if (command_buffer->debug_active_label_stack_size == 0) {
@@ -9373,6 +9456,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",render_pass_exact_hash=" + debug_uint64_or_none(provenance.render_pass_exact_hash);
 		text += ",render_pass_compatibility_hash=" + debug_uint64_or_none(provenance.render_pass_compatibility_hash);
 		text += ",render_subpass_compatibility_hash=" + debug_uint64_or_none(provenance.render_subpass_compatibility_hash);
+		text += ",render_pass_attachment_exact_hash=" + debug_uint64_or_none(provenance.render_pass_attachment_exact_hash);
+		text += ",render_pass_dependency_hash=" + debug_uint64_or_none(provenance.render_pass_dependency_hash);
+		text += ",render_pass_view_density_hash=" + debug_uint64_or_none(provenance.render_pass_view_density_hash);
 		text += ",render_subpass=" + itos(provenance.render_subpass);
 		text += ",render_pass_subpass_count=" + itos(provenance.render_pass_subpass_count);
 		text += ",render_pass_attachment_count=" + itos(provenance.render_pass_attachment_count);
@@ -9487,6 +9573,58 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		if ((!base.valid && base.pipeline_handle == 0) || (!other.valid && other.pipeline_handle == 0)) {
 			return String("missing");
 		}
+		const auto pipeline_layout_recipe_bucket_hash = [](const DebugPipelineBindingProvenance &provenance) {
+			uint64_t hash = hash_murmur3_one_64(provenance.pipeline_layout_descriptor_set_layout_hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_hash, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_descriptor_set_layout_count, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_range_count, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_stage_mask, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_total_offset, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_total_size, hash);
+			return hash;
+		};
+		const uint64_t base_pipeline_layout_recipe_bucket_hash = pipeline_layout_recipe_bucket_hash(base);
+		const uint64_t other_pipeline_layout_recipe_bucket_hash = pipeline_layout_recipe_bucket_hash(other);
+		const auto surviving_bucket_subset_hash = [&](const DebugPipelineBindingProvenance &provenance, uint32_t mask) {
+			uint64_t hash = 0x9e3779b97f4a7c15ULL;
+			if ((mask & 1U) != 0) {
+				hash = hash_murmur3_one_64(provenance.vertex_input_recipe_hash, hash);
+			}
+			if ((mask & 2U) != 0) {
+				hash = hash_murmur3_one_64(provenance.blend_recipe_hash, hash);
+			}
+			if ((mask & 4U) != 0) {
+				hash = hash_murmur3_one_64(provenance.specialization_constant_hash, hash);
+			}
+			if ((mask & 8U) != 0) {
+				hash = hash_murmur3_one_64(pipeline_layout_recipe_bucket_hash(provenance), hash);
+			}
+			return hash;
+		};
+		const auto surviving_bucket_subset_name = [](uint32_t mask) {
+			PackedStringArray names;
+			if ((mask & 1U) != 0) {
+				names.push_back("vertex_input_recipe");
+			}
+			if ((mask & 2U) != 0) {
+				names.push_back("blend_recipe");
+			}
+			if ((mask & 4U) != 0) {
+				names.push_back("specialization_constants");
+			}
+			if ((mask & 8U) != 0) {
+				names.push_back("pipeline_layout");
+			}
+			String text = "[";
+			for (int i = 0; i < names.size(); i++) {
+				if (i > 0) {
+					text += ", ";
+				}
+				text += "\"" + names[i] + "\"";
+			}
+			text += "]";
+			return text;
+		};
 		PackedStringArray changed_components;
 		if (base.shader_stage_recipe_hash != other.shader_stage_recipe_hash) {
 			changed_components.push_back("shader_stage_recipe");
@@ -9677,6 +9815,82 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",push_constant_total_offset=" + itos(other.pipeline_layout_push_constant_total_offset);
 		text += ",push_constant_total_size=" + itos(other.pipeline_layout_push_constant_total_size);
 		text += ",push_constant_preview=" + other.pipeline_layout_push_constant_preview + "}}";
+		uint32_t largest_matching_proper_subset_size = 0;
+		uint32_t matching_size1 = 0;
+		uint32_t matching_size2 = 0;
+		uint32_t matching_size3 = 0;
+		PackedStringArray largest_matching_subsets;
+		for (uint32_t mask = 1; mask < 15; mask++) {
+			uint32_t bit_count = 0;
+			for (uint32_t bit = 0; bit < 4; bit++) {
+				if ((mask & (1U << bit)) != 0) {
+					bit_count++;
+				}
+			}
+			if (surviving_bucket_subset_hash(base, mask) == surviving_bucket_subset_hash(other, mask)) {
+				if (bit_count == 1) {
+					matching_size1++;
+				} else if (bit_count == 2) {
+					matching_size2++;
+				} else if (bit_count == 3) {
+					matching_size3++;
+				}
+				if (bit_count > largest_matching_proper_subset_size) {
+					largest_matching_proper_subset_size = bit_count;
+					largest_matching_subsets.clear();
+				}
+				if (bit_count == largest_matching_proper_subset_size) {
+					largest_matching_subsets.push_back(surviving_bucket_subset_name(mask));
+				}
+			}
+		}
+		const uint32_t minimal_distinguishing_changed_bucket_count = 4U - largest_matching_proper_subset_size;
+		const uint32_t surviving_changed_bucket_count = (base.vertex_input_recipe_hash != other.vertex_input_recipe_hash ? 1U : 0U) + (base.blend_recipe_hash != other.blend_recipe_hash ? 1U : 0U) + (base.specialization_constant_hash != other.specialization_constant_hash ? 1U : 0U) + (base_pipeline_layout_recipe_bucket_hash != other_pipeline_layout_recipe_bucket_hash ? 1U : 0U);
+		String combined_interaction_class = "full_four_bucket_interaction";
+		if (minimal_distinguishing_changed_bucket_count <= 1U) {
+			combined_interaction_class = "single_bucket_candidate_survives";
+		} else if (minimal_distinguishing_changed_bucket_count == 2U) {
+			combined_interaction_class = "two_bucket_interaction_candidate_survives";
+		} else if (minimal_distinguishing_changed_bucket_count == 3U) {
+			combined_interaction_class = "three_bucket_interaction_candidate_survives";
+		}
+		PackedStringArray minimal_changed_bucket_candidates;
+		if (largest_matching_proper_subset_size == 0) {
+			minimal_changed_bucket_candidates.push_back(surviving_bucket_subset_name(15));
+		} else {
+			for (int i = 0; i < largest_matching_subsets.size(); i++) {
+				for (uint32_t mask = 1; mask < 15; mask++) {
+					if (surviving_bucket_subset_name(mask) == largest_matching_subsets[i]) {
+						minimal_changed_bucket_candidates.push_back(surviving_bucket_subset_name(15U & (~mask)));
+					}
+				}
+			}
+		}
+		text += ",surviving_bucket_interaction={tracked_buckets=[\"vertex_input_recipe\", \"blend_recipe\", \"specialization_constants\", \"pipeline_layout\"]";
+		text += ",tracked_changed_bucket_count=" + itos(surviving_changed_bucket_count);
+		text += ",full_combo_hash_changed=" + String(surviving_bucket_subset_hash(base, 15) != surviving_bucket_subset_hash(other, 15) ? "true" : "false");
+		text += ",proper_subset_match_counts={size1=" + itos(matching_size1);
+		text += ",size2=" + itos(matching_size2);
+		text += ",size3=" + itos(matching_size3) + "}";
+		text += ",largest_matching_proper_subset_size=" + itos(largest_matching_proper_subset_size);
+		text += ",minimal_distinguishing_changed_bucket_count=" + itos(minimal_distinguishing_changed_bucket_count);
+		text += ",classification=\"" + combined_interaction_class + "\"";
+		text += ",matching_largest_proper_subsets=[";
+		for (int i = 0; i < largest_matching_subsets.size(); i++) {
+			if (i > 0) {
+				text += ", ";
+			}
+			text += largest_matching_subsets[i];
+		}
+		text += "]";
+		text += ",minimal_changed_bucket_candidates=[";
+		for (int i = 0; i < minimal_changed_bucket_candidates.size(); i++) {
+			if (i > 0) {
+				text += ", ";
+			}
+			text += minimal_changed_bucket_candidates[i];
+		}
+		text += "]}";
 		text += ",shape_delta={shader_stage_count=" + String(base.shader_stage_count == other.shader_stage_count ? "same" : "changed");
 		text += ",vertex_binding_description_count=" + String(base.vertex_binding_description_count == other.vertex_binding_description_count ? "same" : "changed");
 		text += ",vertex_attribute_count=" + String(base.vertex_attribute_count == other.vertex_attribute_count ? "same" : "changed");
@@ -9728,6 +9942,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",render_pass_exact_hash=" + debug_uint64_or_none(state.active_render_pass_exact_hash);
 		text += ",render_pass_compatibility_hash=" + debug_uint64_or_none(state.active_render_pass_compatibility_hash);
 		text += ",render_subpass_compatibility_hash=" + debug_uint64_or_none(state.active_render_subpass_compatibility_hash);
+		text += ",render_pass_attachment_exact_hash=" + debug_uint64_or_none(state.active_render_pass_attachment_exact_hash);
+		text += ",render_pass_dependency_hash=" + debug_uint64_or_none(state.active_render_pass_dependency_hash);
+		text += ",render_pass_view_density_hash=" + debug_uint64_or_none(state.active_render_pass_view_density_hash);
 		text += ",render_pass_subpass_count=" + itos(state.active_render_pass_subpass_count);
 		text += ",render_pass_attachment_count=" + itos(state.active_render_pass_attachment_count);
 		text += ",render_pass_dependency_count=" + itos(state.active_render_pass_dependency_count);
@@ -10342,6 +10559,23 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		const DebugLabelEntry &tonemap_label_entry = p_command_buffer->debug_label_entries[target_label_entry_index];
 		const DebugRenderPassScope &l88_scope = p_command_buffer->debug_render_pass_scopes[l88_scope_index];
 		const DebugLabelEntry &l88_label_entry = p_command_buffer->debug_label_entries[l88_label_entry_index];
+		const bool tonemap_scope_matches_label_commands =
+				target_scope.render_pass_begin_count == tonemap_label_entry.render_pass_begin_count &&
+				target_scope.next_subpass_count == tonemap_label_entry.next_subpass_count &&
+				target_scope.render_pass_end_count == tonemap_label_entry.render_pass_end_count &&
+				target_scope.render_pipeline_bind_count == tonemap_label_entry.render_pipeline_bind_count &&
+				target_scope.render_uniform_bind_count == tonemap_label_entry.render_uniform_bind_count &&
+				target_scope.vertex_buffer_bind_count == tonemap_label_entry.vertex_buffer_bind_count &&
+				target_scope.vertex_buffer_binding_total == tonemap_label_entry.vertex_buffer_binding_total &&
+				target_scope.index_buffer_bind_count == tonemap_label_entry.index_buffer_bind_count &&
+				target_scope.draw_count == tonemap_label_entry.draw_count &&
+				target_scope.draw_indexed_count == tonemap_label_entry.draw_indexed_count &&
+				target_scope.draw_indirect_count == tonemap_label_entry.draw_indirect_count &&
+				target_scope.draw_indexed_indirect_count == tonemap_label_entry.draw_indexed_indirect_count &&
+				target_scope.execute_secondary_count == tonemap_label_entry.execute_secondary_count &&
+				target_scope.secondary_command_buffer_count == tonemap_label_entry.secondary_command_buffer_count &&
+				target_scope.secondary_label_count == tonemap_label_entry.secondary_label_count &&
+				target_scope.secondary_draw_label_count == tonemap_label_entry.secondary_draw_label_count;
 		const bool l88_scope_matches_label_plus_descendants =
 				l88_scope.render_pass_begin_count == l88_label_entry.render_pass_begin_count + l88_label_entry.descendant_render_pass_begin_count &&
 				l88_scope.next_subpass_count == l88_label_entry.next_subpass_count + l88_label_entry.descendant_next_subpass_count &&
@@ -10359,6 +10593,24 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 				l88_scope.secondary_command_buffer_count == l88_label_entry.secondary_command_buffer_count + l88_label_entry.descendant_secondary_command_buffer_count &&
 				l88_scope.secondary_label_count == l88_label_entry.secondary_label_count + l88_label_entry.descendant_secondary_label_count &&
 				l88_scope.secondary_draw_label_count == l88_label_entry.secondary_draw_label_count + l88_label_entry.descendant_secondary_draw_label_count;
+		const auto label_has_no_descendant_payload = [](const DebugLabelEntry &entry) {
+			return entry.descendant_render_pass_begin_count == 0 &&
+					entry.descendant_next_subpass_count == 0 &&
+					entry.descendant_render_pass_end_count == 0 &&
+					entry.descendant_render_pipeline_bind_count == 0 &&
+					entry.descendant_render_uniform_bind_count == 0 &&
+					entry.descendant_vertex_buffer_bind_count == 0 &&
+					entry.descendant_vertex_buffer_binding_total == 0 &&
+					entry.descendant_index_buffer_bind_count == 0 &&
+					entry.descendant_draw_count == 0 &&
+					entry.descendant_draw_indexed_count == 0 &&
+					entry.descendant_draw_indirect_count == 0 &&
+					entry.descendant_draw_indexed_indirect_count == 0 &&
+					entry.descendant_execute_secondary_count == 0 &&
+					entry.descendant_secondary_command_buffer_count == 0 &&
+					entry.descendant_secondary_label_count == 0 &&
+					entry.descendant_secondary_draw_label_count == 0;
+		};
 		text += "{status=ok";
 		text += ",scope_distance=" + itos(l88_scope_index - target_scope_index);
 		text += ",next_meaningful_scope_is_l88=" + String(next_meaningful_scope_index == l88_scope_index ? "true" : "false");
@@ -10420,6 +10672,486 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",secondary_command_buffers=" + itos(int64_t(l88_scope.secondary_command_buffer_count) - int64_t(l88_label_entry.secondary_command_buffer_count + l88_label_entry.descendant_secondary_command_buffer_count));
 		text += ",secondary_labels=" + itos(int64_t(l88_scope.secondary_label_count) - int64_t(l88_label_entry.secondary_label_count + l88_label_entry.descendant_secondary_label_count));
 		text += ",secondary_draw_labels=" + itos(int64_t(l88_scope.secondary_draw_label_count) - int64_t(l88_label_entry.secondary_draw_label_count + l88_label_entry.descendant_secondary_draw_label_count)) + "}}";
+		const DebugCommandStateSnapshot &tonemap_end_snapshot = tonemap_label_entry.end_state_snapshot;
+		const DebugCommandStateSnapshot &l88_begin_snapshot = l88_label_entry.begin_state_snapshot;
+		const bool l88_has_pipeline_bind = l88_label_entry.first_pipeline_bind_serial > 0;
+		const bool l88_has_uniform_bind = l88_label_entry.first_uniform_bind_serial > 0;
+		const String carried_pipeline_relation = pipeline_provenance_relation(tonemap_end_snapshot.render_pipeline_provenance, l88_begin_snapshot.render_pipeline_provenance);
+		const String carried_to_l88_pipeline_relation = l88_has_pipeline_bind ? pipeline_provenance_relation(tonemap_end_snapshot.render_pipeline_provenance, l88_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance) : String("missing");
+		const auto same_packet_state = [&](const DebugCommandStateSnapshot &a, const DebugCommandStateSnapshot &b) {
+			return a.render_pipeline_bound == b.render_pipeline_bound &&
+					a.vertex_binding_count == b.vertex_binding_count &&
+					a.index_buffer_bound == b.index_buffer_bound &&
+					a.index_format == b.index_format &&
+					a.blend_constants_set == b.blend_constants_set &&
+					a.blend_constants_hash == b.blend_constants_hash &&
+					a.blend_constants_last_set_serial == b.blend_constants_last_set_serial &&
+					pipeline_provenance_relation(a.render_pipeline_provenance, b.render_pipeline_provenance) == "same_pipeline";
+		};
+		const bool carried_pipeline_packet_exact = tonemap_end_snapshot.render_pipeline_bound && l88_begin_snapshot.render_pipeline_bound && carried_pipeline_relation == "same_pipeline";
+		const bool carried_packet_fields_match = same_packet_state(tonemap_end_snapshot, l88_begin_snapshot);
+		const bool carried_vertex_index_state_absent = l88_begin_snapshot.vertex_binding_count == 0 && !l88_begin_snapshot.index_buffer_bound;
+		const bool carried_scope_absent = !tonemap_end_snapshot.active_render_pass && !tonemap_end_snapshot.active_framebuffer && !l88_begin_snapshot.active_render_pass && !l88_begin_snapshot.active_framebuffer;
+		const bool carried_breadcrumb_absent = tonemap_end_snapshot.breadcrumb == 0 && l88_begin_snapshot.breadcrumb == 0;
+		const bool l88_pipeline_before_keeps_carried_packet = l88_has_pipeline_bind && same_packet_state(tonemap_end_snapshot, l88_label_entry.first_pipeline_bind_before_state);
+		const bool l88_reestablishes_scope_before_own_pipeline = l88_has_pipeline_bind &&
+				l88_label_entry.first_pipeline_bind_before_state.active_render_pass &&
+				l88_label_entry.first_pipeline_bind_before_state.active_framebuffer &&
+				!tonemap_end_snapshot.active_render_pass &&
+				!tonemap_end_snapshot.active_framebuffer;
+		const bool l88_rebinds_pipeline_after_boundary = l88_has_pipeline_bind && carried_to_l88_pipeline_relation != "same_pipeline";
+		const bool l88_reestablishes_vertex_index_before_first_uniform = l88_has_uniform_bind && l88_label_entry.first_uniform_bind_before_state.vertex_binding_count > 0 && l88_label_entry.first_uniform_bind_before_state.index_buffer_bound;
+		const bool l88_pipeline_after_matches_uniform_packet = l88_has_pipeline_bind && l88_has_uniform_bind &&
+				l88_label_entry.first_pipeline_bind_after_state.render_pipeline_bound == l88_label_entry.first_uniform_bind_before_state.render_pipeline_bound &&
+				pipeline_provenance_relation(l88_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance, l88_label_entry.first_uniform_bind_before_state.render_pipeline_provenance) == "same_pipeline";
+		const bool l88_pipeline_after_matches_uniform_scope = l88_has_pipeline_bind && l88_has_uniform_bind &&
+				l88_label_entry.first_pipeline_bind_after_state.active_render_pass == l88_label_entry.first_uniform_bind_before_state.active_render_pass &&
+				l88_label_entry.first_pipeline_bind_after_state.active_framebuffer == l88_label_entry.first_uniform_bind_before_state.active_framebuffer &&
+				l88_label_entry.first_pipeline_bind_after_state.active_render_pass_handle == l88_label_entry.first_uniform_bind_before_state.active_render_pass_handle &&
+				l88_label_entry.first_pipeline_bind_after_state.active_framebuffer_handle == l88_label_entry.first_uniform_bind_before_state.active_framebuffer_handle &&
+				l88_label_entry.first_pipeline_bind_after_state.subpass_index == l88_label_entry.first_uniform_bind_before_state.subpass_index;
+		const bool l88_pipeline_after_matches_uniform_non_pipeline_state = l88_has_pipeline_bind && l88_has_uniform_bind &&
+				l88_label_entry.first_pipeline_bind_after_state.blend_constants_set == l88_label_entry.first_uniform_bind_before_state.blend_constants_set &&
+				l88_label_entry.first_pipeline_bind_after_state.blend_constants_hash == l88_label_entry.first_uniform_bind_before_state.blend_constants_hash &&
+				l88_label_entry.first_pipeline_bind_after_state.blend_constants_last_set_serial == l88_label_entry.first_uniform_bind_before_state.blend_constants_last_set_serial;
+		const bool l88_pipeline_to_uniform_keeps_own_packet = l88_pipeline_after_matches_uniform_packet && l88_pipeline_after_matches_uniform_scope && l88_pipeline_after_matches_uniform_non_pipeline_state;
+		const bool l88_uniform_changes_only_vertex_index = l88_has_pipeline_bind && l88_has_uniform_bind &&
+				l88_label_entry.first_pipeline_bind_after_state.vertex_binding_count != l88_label_entry.first_uniform_bind_before_state.vertex_binding_count &&
+				l88_label_entry.first_pipeline_bind_after_state.index_buffer_bound != l88_label_entry.first_uniform_bind_before_state.index_buffer_bound &&
+				l88_label_entry.first_pipeline_bind_after_state.index_format == l88_label_entry.first_uniform_bind_before_state.index_format;
+		const bool l88_uniform_stage_keeps_rebound_pipeline = l88_pipeline_to_uniform_keeps_own_packet && l88_uniform_changes_only_vertex_index;
+		String boundary_contract_class = "inconclusive";
+		String boundary_contract_basis = "missing_l88_setup";
+		String minimum_distinguishing_hazard = "unknown";
+		if (carried_pipeline_packet_exact && carried_packet_fields_match && carried_scope_absent && carried_vertex_index_state_absent && carried_breadcrumb_absent && l88_has_pipeline_bind && l88_has_uniform_bind) {
+			if (l88_pipeline_before_keeps_carried_packet && l88_reestablishes_scope_before_own_pipeline && l88_rebinds_pipeline_after_boundary && l88_uniform_stage_keeps_rebound_pipeline && l88_reestablishes_vertex_index_before_first_uniform) {
+				boundary_contract_class = "carried_pipeline_packet_then_l88_reestablishes_scope_rebinds_and_adds_vertex_index";
+				boundary_contract_basis = "only_the_tonemap_pipeline_packet_survives_the_zero_gap_boundary_before_l88_rebuilds_scope_rebinds_pipeline_and_then_adds_vertex_index_state";
+				minimum_distinguishing_hazard = "carried_pipeline_packet";
+			} else if (l88_pipeline_before_keeps_carried_packet && l88_reestablishes_scope_before_own_pipeline && l88_rebinds_pipeline_after_boundary) {
+				boundary_contract_class = "carried_pipeline_packet_then_partial_l88_reestablish";
+				boundary_contract_basis = "pipeline_packet_survives_boundary_but_l88_setup_contract_is_not_fully_clean";
+				minimum_distinguishing_hazard = "carried_pipeline_packet";
+			} else {
+				boundary_contract_class = "boundary_state_survives_but_reuse_pattern_differs";
+				boundary_contract_basis = "carried_pipeline_packet_detected_but_l88_reuse_vs_reestablish_pattern_did_not_match_expected_scope_rebuild";
+				minimum_distinguishing_hazard = "boundary_state_packet";
+			}
+		} else if (carried_pipeline_packet_exact) {
+			boundary_contract_class = "carried_pipeline_packet_without_full_l88_setup_trace";
+			boundary_contract_basis = "tonemap_pipeline_packet_survives_boundary_but_l88_setup_trace_is_incomplete";
+			minimum_distinguishing_hazard = "carried_pipeline_packet";
+		}
+		text += ",boundary_state_handoff_classifier={classification=\"" + boundary_contract_class + "\"";
+		text += ",basis=\"" + boundary_contract_basis + "\"";
+		text += ",minimum_distinguishing_hazard=\"" + minimum_distinguishing_hazard + "\"";
+		text += ",tonemap_end_snapshot=" + command_state_snapshot_summary(tonemap_end_snapshot);
+		text += ",l88_begin_snapshot=" + command_state_snapshot_summary(l88_begin_snapshot);
+		text += ",boundary_delta=" + command_state_delta_summary(tonemap_end_snapshot, l88_begin_snapshot);
+		text += ",carried_state={pipeline_relation=\"" + carried_pipeline_relation + "\"";
+		text += ",pipeline_packet_exact=" + String(carried_pipeline_packet_exact ? "true" : "false");
+		text += ",packet_fields_match=" + String(carried_packet_fields_match ? "true" : "false");
+		text += ",scope_absent=" + String(carried_scope_absent ? "true" : "false");
+		text += ",vertex_index_absent=" + String(carried_vertex_index_state_absent ? "true" : "false");
+		text += ",breadcrumb_absent=" + String(carried_breadcrumb_absent ? "true" : "false");
+		text += ",render_pipeline_bound=" + String(tonemap_end_snapshot.render_pipeline_bound && l88_begin_snapshot.render_pipeline_bound ? "true" : "false");
+		text += ",render_pass_active=" + String(tonemap_end_snapshot.active_render_pass || l88_begin_snapshot.active_render_pass ? "true" : "false");
+		text += ",framebuffer_active=" + String(tonemap_end_snapshot.active_framebuffer || l88_begin_snapshot.active_framebuffer ? "true" : "false");
+		text += ",vertex_binding_count=" + itos(l88_begin_snapshot.vertex_binding_count);
+		text += ",index_buffer_bound=" + String(l88_begin_snapshot.index_buffer_bound ? "true" : "false");
+		text += ",breadcrumb=\"" + _debug_breadcrumb_to_string(l88_begin_snapshot.breadcrumb) + "\"}";
+		text += ",reuse_vs_reestablish={l88_has_pipeline_bind=" + String(l88_has_pipeline_bind ? "true" : "false");
+		text += ",l88_has_uniform_bind=" + String(l88_has_uniform_bind ? "true" : "false");
+		text += ",l88_first_pipeline_bind_before_boundary_delta=";
+		if (!l88_has_pipeline_bind) {
+			text += "none";
+		} else {
+			text += command_state_delta_summary(tonemap_end_snapshot, l88_label_entry.first_pipeline_bind_before_state);
+		}
+		text += ",l88_pipeline_before_keeps_carried_packet=" + String(l88_pipeline_before_keeps_carried_packet ? "true" : "false");
+		text += ",l88_reestablishes_scope_before_own_pipeline=";
+		if (!l88_has_pipeline_bind) {
+			text += "unknown";
+		} else {
+			text += String(l88_label_entry.first_pipeline_bind_before_state.active_render_pass && l88_label_entry.first_pipeline_bind_before_state.active_framebuffer ? "true" : "false");
+		}
+		text += ",l88_first_pipeline_bind_before_state=";
+		if (!l88_has_pipeline_bind) {
+			text += "none";
+		} else {
+			text += command_state_snapshot_summary(l88_label_entry.first_pipeline_bind_before_state);
+		}
+		text += ",l88_first_pipeline_bind_after_state=";
+		if (!l88_has_pipeline_bind) {
+			text += "none";
+		} else {
+			text += command_state_snapshot_summary(l88_label_entry.first_pipeline_bind_after_state);
+		}
+		text += ",carried_to_l88_pipeline_relation=\"" + carried_to_l88_pipeline_relation + "\"";
+		text += ",l88_reestablishes_vertex_index_before_first_uniform=" + String(l88_reestablishes_vertex_index_before_first_uniform ? "true" : "false");
+		text += ",l88_pipeline_to_uniform_keeps_own_packet=" + String(l88_pipeline_to_uniform_keeps_own_packet ? "true" : "false");
+		text += ",l88_uniform_changes_only_vertex_index=" + String(l88_uniform_changes_only_vertex_index ? "true" : "false");
+		text += ",l88_first_uniform_bind_before_state=";
+		if (!l88_has_uniform_bind) {
+			text += "none";
+		} else {
+			text += command_state_snapshot_summary(l88_label_entry.first_uniform_bind_before_state);
+		}
+		text += ",l88_pipeline_to_uniform_delta=";
+		if (!l88_has_pipeline_bind || !l88_has_uniform_bind) {
+			text += "none";
+		} else {
+			text += command_state_delta_summary(l88_label_entry.first_pipeline_bind_after_state, l88_label_entry.first_uniform_bind_before_state);
+		}
+		const int64_t l88_uniform_binds_after_first = l88_label_entry.render_uniform_bind_count > 0 ? int64_t(l88_label_entry.render_uniform_bind_count) - 1 : 0;
+		text += ",l88_non_pipeline_setup_counts={uniform_binds_after_first=" + itos(l88_uniform_binds_after_first);
+		text += ",vertex_buffer_binds=" + itos(l88_label_entry.vertex_buffer_bind_count);
+		text += ",vertex_buffer_binding_total=" + itos(l88_label_entry.vertex_buffer_binding_total);
+		text += ",index_buffer_binds=" + itos(l88_label_entry.index_buffer_bind_count);
+		text += ",draw_calls=" + itos(l88_label_entry.draw_count) + "}}";
+		const DebugPipelineBindingProvenance &carried_pipeline_packet = tonemap_end_snapshot.render_pipeline_provenance;
+		const DebugPipelineBindingProvenance &l88_pre_rebind_packet = l88_has_pipeline_bind ? l88_label_entry.first_pipeline_bind_before_state.render_pipeline_provenance : l88_begin_snapshot.render_pipeline_provenance;
+		const auto carried_packet_scope_relation = [](const DebugCommandStateSnapshot &snapshot) {
+			if (!snapshot.active_render_pass || !snapshot.render_pipeline_bound || (!snapshot.render_pipeline_provenance.valid && snapshot.render_pipeline_provenance.pipeline_handle == 0)) {
+				return String("missing");
+			}
+			if (snapshot.active_render_pass_handle == snapshot.render_pipeline_provenance.render_pass_handle && snapshot.active_render_pass_handle != 0) {
+				return String("same_render_pass_handle");
+			}
+			if (snapshot.active_render_pass_exact_hash != 0 && snapshot.active_render_pass_exact_hash == snapshot.render_pipeline_provenance.render_pass_exact_hash && snapshot.subpass_index == snapshot.render_pipeline_provenance.render_subpass) {
+				return String("different_handle_same_exact_render_pass_recipe");
+			}
+			if (snapshot.active_render_pass_compatibility_hash != 0 && snapshot.active_render_pass_compatibility_hash == snapshot.render_pipeline_provenance.render_pass_compatibility_hash && snapshot.active_render_subpass_compatibility_hash != 0 && snapshot.active_render_subpass_compatibility_hash == snapshot.render_pipeline_provenance.render_subpass_compatibility_hash && snapshot.subpass_index == snapshot.render_pipeline_provenance.render_subpass) {
+				return String("different_handle_same_render_pass_compatibility");
+			}
+			return String("different_render_pass_context");
+		};
+		const String carried_pre_rebind_pipeline_relation = pipeline_provenance_relation(carried_pipeline_packet, l88_pre_rebind_packet);
+		const bool carried_pipeline_identity_exact = carried_pre_rebind_pipeline_relation == "same_pipeline";
+		const bool carried_pipeline_layout_exact = carried_pipeline_packet.pipeline_layout_handle == l88_pre_rebind_packet.pipeline_layout_handle &&
+				carried_pipeline_packet.pipeline_layout_handle != 0 &&
+				carried_pipeline_packet.pipeline_layout_descriptor_set_layout_hash == l88_pre_rebind_packet.pipeline_layout_descriptor_set_layout_hash &&
+				carried_pipeline_packet.pipeline_layout_descriptor_set_layout_count == l88_pre_rebind_packet.pipeline_layout_descriptor_set_layout_count &&
+				carried_pipeline_packet.pipeline_layout_first_descriptor_set_layout_handle == l88_pre_rebind_packet.pipeline_layout_first_descriptor_set_layout_handle &&
+				carried_pipeline_packet.pipeline_layout_last_descriptor_set_layout_handle == l88_pre_rebind_packet.pipeline_layout_last_descriptor_set_layout_handle;
+		const bool carried_push_constant_contract_exact = carried_pipeline_packet.pipeline_layout_push_constant_hash == l88_pre_rebind_packet.pipeline_layout_push_constant_hash &&
+				carried_pipeline_packet.pipeline_layout_push_constant_range_count == l88_pre_rebind_packet.pipeline_layout_push_constant_range_count &&
+				carried_pipeline_packet.pipeline_layout_push_constant_stage_mask == l88_pre_rebind_packet.pipeline_layout_push_constant_stage_mask &&
+				carried_pipeline_packet.pipeline_layout_push_constant_total_offset == l88_pre_rebind_packet.pipeline_layout_push_constant_total_offset &&
+				carried_pipeline_packet.pipeline_layout_push_constant_total_size == l88_pre_rebind_packet.pipeline_layout_push_constant_total_size;
+		const DebugCommandStateSnapshot &l88_pre_rebind_scope = l88_has_pipeline_bind ? l88_label_entry.first_pipeline_bind_before_state : l88_begin_snapshot;
+		const String l88_pre_rebind_scope_relation = l88_has_pipeline_bind ? carried_packet_scope_relation(l88_label_entry.first_pipeline_bind_before_state) : String("missing");
+		const bool carried_render_pass_lineage_exact = l88_pre_rebind_scope_relation == "same_render_pass_handle" || l88_pre_rebind_scope_relation == "different_handle_same_exact_render_pass_recipe";
+		const bool carried_render_pass_lineage_compatible_only = l88_pre_rebind_scope_relation == "different_handle_same_render_pass_compatibility";
+		const bool carried_render_pass_handle_match = l88_pre_rebind_scope.active_render_pass_handle == carried_pipeline_packet.render_pass_handle && carried_pipeline_packet.render_pass_handle != 0;
+		const bool carried_render_pass_exact_hash_match = l88_pre_rebind_scope.active_render_pass_exact_hash == carried_pipeline_packet.render_pass_exact_hash && carried_pipeline_packet.render_pass_exact_hash != 0;
+		const bool carried_render_pass_compatibility_hash_match = l88_pre_rebind_scope.active_render_pass_compatibility_hash == carried_pipeline_packet.render_pass_compatibility_hash && carried_pipeline_packet.render_pass_compatibility_hash != 0;
+		const bool carried_render_subpass_compatibility_hash_match = l88_pre_rebind_scope.active_render_subpass_compatibility_hash == carried_pipeline_packet.render_subpass_compatibility_hash && carried_pipeline_packet.render_subpass_compatibility_hash != 0;
+		const bool carried_render_pass_attachment_exact_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_exact_hash == carried_pipeline_packet.render_pass_attachment_exact_hash && carried_pipeline_packet.render_pass_attachment_exact_hash != 0;
+		const bool carried_render_pass_attachment_format_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_format_hash == carried_pipeline_packet.render_pass_attachment_format_hash && (carried_pipeline_packet.render_pass_attachment_format_hash != 0 || (l88_pre_rebind_scope.active_render_pass_attachment_count == 0 && carried_pipeline_packet.render_pass_attachment_count == 0));
+		const bool carried_render_pass_attachment_samples_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_samples_hash == carried_pipeline_packet.render_pass_attachment_samples_hash && (carried_pipeline_packet.render_pass_attachment_samples_hash != 0 || (l88_pre_rebind_scope.active_render_pass_attachment_count == 0 && carried_pipeline_packet.render_pass_attachment_count == 0));
+		const bool carried_render_pass_attachment_load_op_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_load_op_hash == carried_pipeline_packet.render_pass_attachment_load_op_hash && (carried_pipeline_packet.render_pass_attachment_load_op_hash != 0 || (l88_pre_rebind_scope.active_render_pass_attachment_count == 0 && carried_pipeline_packet.render_pass_attachment_count == 0));
+		const bool carried_render_pass_attachment_store_op_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_store_op_hash == carried_pipeline_packet.render_pass_attachment_store_op_hash && (carried_pipeline_packet.render_pass_attachment_store_op_hash != 0 || (l88_pre_rebind_scope.active_render_pass_attachment_count == 0 && carried_pipeline_packet.render_pass_attachment_count == 0));
+		const bool carried_render_pass_attachment_stencil_load_op_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_stencil_load_op_hash == carried_pipeline_packet.render_pass_attachment_stencil_load_op_hash && (carried_pipeline_packet.render_pass_attachment_stencil_load_op_hash != 0 || (l88_pre_rebind_scope.active_render_pass_attachment_count == 0 && carried_pipeline_packet.render_pass_attachment_count == 0));
+		const bool carried_render_pass_attachment_stencil_store_op_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_stencil_store_op_hash == carried_pipeline_packet.render_pass_attachment_stencil_store_op_hash && (carried_pipeline_packet.render_pass_attachment_stencil_store_op_hash != 0 || (l88_pre_rebind_scope.active_render_pass_attachment_count == 0 && carried_pipeline_packet.render_pass_attachment_count == 0));
+		const bool carried_render_pass_attachment_initial_layout_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_initial_layout_hash == carried_pipeline_packet.render_pass_attachment_initial_layout_hash && (carried_pipeline_packet.render_pass_attachment_initial_layout_hash != 0 || (l88_pre_rebind_scope.active_render_pass_attachment_count == 0 && carried_pipeline_packet.render_pass_attachment_count == 0));
+		const bool carried_render_pass_attachment_final_layout_hash_match = l88_pre_rebind_scope.active_render_pass_attachment_final_layout_hash == carried_pipeline_packet.render_pass_attachment_final_layout_hash && (carried_pipeline_packet.render_pass_attachment_final_layout_hash != 0 || (l88_pre_rebind_scope.active_render_pass_attachment_count == 0 && carried_pipeline_packet.render_pass_attachment_count == 0));
+		const bool carried_render_pass_dependency_hash_match = l88_pre_rebind_scope.active_render_pass_dependency_hash == carried_pipeline_packet.render_pass_dependency_hash && (carried_pipeline_packet.render_pass_dependency_hash != 0 || (l88_pre_rebind_scope.active_render_pass_dependency_count == 0 && carried_pipeline_packet.render_pass_dependency_count == 0));
+		const bool carried_render_pass_view_density_hash_match = l88_pre_rebind_scope.active_render_pass_view_density_hash == carried_pipeline_packet.render_pass_view_density_hash && carried_pipeline_packet.render_pass_view_density_hash != 0;
+		const bool carried_render_subpass_match = l88_pre_rebind_scope.subpass_index == carried_pipeline_packet.render_subpass;
+		const bool carried_render_pass_subpass_count_match = l88_pre_rebind_scope.active_render_pass_subpass_count == carried_pipeline_packet.render_pass_subpass_count;
+		const bool carried_render_pass_attachment_count_match = l88_pre_rebind_scope.active_render_pass_attachment_count == carried_pipeline_packet.render_pass_attachment_count;
+		const bool carried_render_pass_dependency_count_match = l88_pre_rebind_scope.active_render_pass_dependency_count == carried_pipeline_packet.render_pass_dependency_count;
+		const bool carried_render_pass_view_count_match = l88_pre_rebind_scope.active_render_pass_view_count == carried_pipeline_packet.render_pass_view_count;
+		const bool carried_render_pass_fragment_density_usage_match = l88_pre_rebind_scope.active_render_pass_uses_fragment_density_map == carried_pipeline_packet.render_pass_uses_fragment_density_map;
+		String carried_attachment_exact_field_classifier = "inconclusive";
+		String carried_attachment_exact_minimum_field = "unknown";
+		PackedStringArray carried_attachment_exact_mismatch_fields;
+		if (!carried_render_pass_attachment_count_match) {
+			carried_attachment_exact_mismatch_fields.push_back("attachment_count");
+		}
+		if (!carried_render_pass_attachment_format_hash_match) {
+			carried_attachment_exact_mismatch_fields.push_back("format");
+		}
+		if (!carried_render_pass_attachment_samples_hash_match) {
+			carried_attachment_exact_mismatch_fields.push_back("samples");
+		}
+		if (!carried_render_pass_attachment_load_op_hash_match) {
+			carried_attachment_exact_mismatch_fields.push_back("load_op");
+		}
+		if (!carried_render_pass_attachment_store_op_hash_match) {
+			carried_attachment_exact_mismatch_fields.push_back("store_op");
+		}
+		if (!carried_render_pass_attachment_stencil_load_op_hash_match) {
+			carried_attachment_exact_mismatch_fields.push_back("stencil_load_op");
+		}
+		if (!carried_render_pass_attachment_stencil_store_op_hash_match) {
+			carried_attachment_exact_mismatch_fields.push_back("stencil_store_op");
+		}
+		if (!carried_render_pass_attachment_initial_layout_hash_match) {
+			carried_attachment_exact_mismatch_fields.push_back("initial_layout");
+		}
+		if (!carried_render_pass_attachment_final_layout_hash_match) {
+			carried_attachment_exact_mismatch_fields.push_back("final_layout");
+		}
+		if (carried_attachment_exact_mismatch_fields.is_empty()) {
+			carried_attachment_exact_field_classifier = "all_attachment_exact_fields_match";
+			carried_attachment_exact_minimum_field = "none";
+		} else if (carried_attachment_exact_mismatch_fields.size() == 1) {
+			carried_attachment_exact_minimum_field = carried_attachment_exact_mismatch_fields[0];
+			carried_attachment_exact_field_classifier = carried_attachment_exact_minimum_field + "_is_minimum_attachment_exact_hazard";
+		} else {
+			carried_attachment_exact_minimum_field = String(",").join(carried_attachment_exact_mismatch_fields);
+			carried_attachment_exact_field_classifier = "multiple_attachment_exact_fields_remain_joint_hazard";
+		}
+		String carried_render_pass_lineage_field_class = "inconclusive";
+		String carried_render_pass_lineage_minimum_field = "unknown";
+		if (carried_render_pass_lineage_exact) {
+			carried_render_pass_lineage_field_class = "all_tracked_lineage_fields_exact";
+			carried_render_pass_lineage_minimum_field = "none";
+		} else if (carried_render_pass_compatibility_hash_match && carried_render_subpass_compatibility_hash_match && carried_render_subpass_match) {
+			const bool attachment_exact_only_hazard = !carried_render_pass_attachment_exact_hash_match && carried_render_pass_dependency_hash_match && carried_render_pass_view_density_hash_match;
+			const bool dependency_only_hazard = carried_render_pass_attachment_exact_hash_match && !carried_render_pass_dependency_hash_match && carried_render_pass_view_density_hash_match;
+			const bool view_density_only_hazard = carried_render_pass_attachment_exact_hash_match && carried_render_pass_dependency_hash_match && !carried_render_pass_view_density_hash_match;
+			if (attachment_exact_only_hazard) {
+				carried_render_pass_lineage_field_class = "attachment_exact_recipe_is_minimum_hazard";
+				carried_render_pass_lineage_minimum_field = "attachment_exact_recipe";
+			} else if (dependency_only_hazard) {
+				carried_render_pass_lineage_field_class = "dependency_lineage_is_minimum_hazard";
+				carried_render_pass_lineage_minimum_field = "dependency_lineage";
+			} else if (view_density_only_hazard) {
+				carried_render_pass_lineage_field_class = "view_density_lineage_is_minimum_hazard";
+				carried_render_pass_lineage_minimum_field = "view_density_lineage";
+			} else if (!carried_render_pass_attachment_exact_hash_match && !carried_render_pass_dependency_hash_match && carried_render_pass_view_density_hash_match) {
+				carried_render_pass_lineage_field_class = "attachment_exact_and_dependency_lineage_remain_joint_hazard";
+				carried_render_pass_lineage_minimum_field = "attachment_exact_recipe_plus_dependency_lineage";
+			} else if (!carried_render_pass_attachment_exact_hash_match && !carried_render_pass_dependency_hash_match && !carried_render_pass_view_density_hash_match) {
+				carried_render_pass_lineage_field_class = "attachment_dependency_and_view_density_lineage_remain_joint_hazard";
+				carried_render_pass_lineage_minimum_field = "attachment_exact_recipe_plus_dependency_lineage_plus_view_density_lineage";
+			} else if (!carried_render_pass_attachment_exact_hash_match && !carried_render_pass_view_density_hash_match) {
+				carried_render_pass_lineage_field_class = "attachment_exact_and_view_density_lineage_remain_joint_hazard";
+				carried_render_pass_lineage_minimum_field = "attachment_exact_recipe_plus_view_density_lineage";
+			} else if (!carried_render_pass_dependency_hash_match && !carried_render_pass_view_density_hash_match) {
+				carried_render_pass_lineage_field_class = "dependency_and_view_density_lineage_remain_joint_hazard";
+				carried_render_pass_lineage_minimum_field = "dependency_lineage_plus_view_density_lineage";
+			} else {
+				carried_render_pass_lineage_field_class = "compatibility_spine_matches_but_exact_only_family_still_differs";
+				carried_render_pass_lineage_minimum_field = !carried_render_pass_exact_hash_match ? String("render_pass_exact_recipe_family") : String("unknown_exact_only_family");
+			}
+		}
+		String carried_contract_class = "inconclusive";
+		String carried_contract_basis = "missing_pre_rebind_scope";
+		String carried_contract_minimum_hazard = "unknown";
+		if (carried_pipeline_identity_exact && carried_pipeline_layout_exact && carried_push_constant_contract_exact && carried_render_pass_lineage_compatible_only) {
+			carried_contract_class = "exact_pipeline_packet_with_compatible_only_render_pass_lineage";
+			carried_contract_basis = "before_l88_rebind_the_carried_packet_keeps_exact_pipeline_layout_descriptor_and_push_constant_contracts_while_its_attached_render_pass_lineage_matches_only_by_compatibility";
+			carried_contract_minimum_hazard = carried_render_pass_lineage_minimum_field;
+		} else if (carried_pipeline_identity_exact && carried_pipeline_layout_exact && carried_push_constant_contract_exact && carried_render_pass_lineage_exact) {
+			carried_contract_class = "fully_exact_carried_pipeline_packet";
+			carried_contract_basis = "all_tracked_pre_rebind_packet_contract_fields_remain_exact";
+			carried_contract_minimum_hazard = "none";
+		} else if (carried_pipeline_identity_exact && carried_pipeline_layout_exact && carried_push_constant_contract_exact) {
+			carried_contract_class = "exact_pipeline_layout_and_push_constants_with_non_exact_render_pass_lineage";
+			carried_contract_basis = "pre_rebind_packet_identity_layout_and_push_constant_contracts_remain_exact_but_scope_lineage_is_not_exact";
+			carried_contract_minimum_hazard = "render_pass_lineage_attached_to_carried_packet";
+		} else if (carried_pipeline_identity_exact && carried_pipeline_layout_exact) {
+			carried_contract_class = "push_constant_or_scope_contract_remains_distinguishing";
+			carried_contract_basis = "pipeline_identity_and_layout_stay_exact_but_push_constant_or_render_pass_lineage_contract_does_not";
+			carried_contract_minimum_hazard = carried_push_constant_contract_exact ? String("render_pass_lineage_attached_to_carried_packet") : String("push_constant_range_contract");
+		} else if (carried_pipeline_identity_exact) {
+			carried_contract_class = "pipeline_layout_or_scope_contract_remains_distinguishing";
+			carried_contract_basis = "exact_pipeline_identity_survives_pre_rebind_but_narrower_layout_or_scope_contract_fields_do_not";
+			carried_contract_minimum_hazard = carried_pipeline_layout_exact ? String("render_pass_lineage_attached_to_carried_packet") : String("pipeline_layout_descriptor_set_layout_contract");
+		}
+		text += ",pre_rebind_carried_packet_contract={classification=\"" + carried_contract_class + "\"";
+		text += ",basis=\"" + carried_contract_basis + "\"";
+		text += ",minimum_distinguishing_hazard=\"" + carried_contract_minimum_hazard + "\"";
+		text += ",pipeline_identity={relation=\"" + carried_pre_rebind_pipeline_relation + "\"";
+		text += ",exact=" + String(carried_pipeline_identity_exact ? "true" : "false");
+		text += ",carried_pipeline_handle=" + debug_uint64_or_none(carried_pipeline_packet.pipeline_handle);
+		text += ",pre_rebind_pipeline_handle=" + debug_uint64_or_none(l88_pre_rebind_packet.pipeline_handle) + "}";
+		text += ",pipeline_layout_descriptor_contract={exact=" + String(carried_pipeline_layout_exact ? "true" : "false");
+		text += ",layout_handle_match=" + String(carried_pipeline_packet.pipeline_layout_handle == l88_pre_rebind_packet.pipeline_layout_handle ? "true" : "false");
+		text += ",descriptor_set_layout_hash_match=" + String(carried_pipeline_packet.pipeline_layout_descriptor_set_layout_hash == l88_pre_rebind_packet.pipeline_layout_descriptor_set_layout_hash ? "true" : "false");
+		text += ",descriptor_set_layout_count_match=" + String(carried_pipeline_packet.pipeline_layout_descriptor_set_layout_count == l88_pre_rebind_packet.pipeline_layout_descriptor_set_layout_count ? "true" : "false");
+		text += ",first_descriptor_set_layout_handle_match=" + String(carried_pipeline_packet.pipeline_layout_first_descriptor_set_layout_handle == l88_pre_rebind_packet.pipeline_layout_first_descriptor_set_layout_handle ? "true" : "false");
+		text += ",last_descriptor_set_layout_handle_match=" + String(carried_pipeline_packet.pipeline_layout_last_descriptor_set_layout_handle == l88_pre_rebind_packet.pipeline_layout_last_descriptor_set_layout_handle ? "true" : "false");
+		text += ",layout_handle=" + debug_uint64_or_none(carried_pipeline_packet.pipeline_layout_handle);
+		text += ",descriptor_set_layout_hash=" + debug_uint64_or_none(carried_pipeline_packet.pipeline_layout_descriptor_set_layout_hash);
+		text += ",descriptor_set_layout_count=" + itos(carried_pipeline_packet.pipeline_layout_descriptor_set_layout_count) + "}";
+		text += ",push_constant_range_contract={exact=" + String(carried_push_constant_contract_exact ? "true" : "false");
+		text += ",hash_match=" + String(carried_pipeline_packet.pipeline_layout_push_constant_hash == l88_pre_rebind_packet.pipeline_layout_push_constant_hash ? "true" : "false");
+		text += ",range_count_match=" + String(carried_pipeline_packet.pipeline_layout_push_constant_range_count == l88_pre_rebind_packet.pipeline_layout_push_constant_range_count ? "true" : "false");
+		text += ",stage_mask_match=" + String(carried_pipeline_packet.pipeline_layout_push_constant_stage_mask == l88_pre_rebind_packet.pipeline_layout_push_constant_stage_mask ? "true" : "false");
+		text += ",total_offset_match=" + String(carried_pipeline_packet.pipeline_layout_push_constant_total_offset == l88_pre_rebind_packet.pipeline_layout_push_constant_total_offset ? "true" : "false");
+		text += ",total_size_match=" + String(carried_pipeline_packet.pipeline_layout_push_constant_total_size == l88_pre_rebind_packet.pipeline_layout_push_constant_total_size ? "true" : "false");
+		text += ",push_constant_hash=" + debug_uint64_or_none(carried_pipeline_packet.pipeline_layout_push_constant_hash);
+		text += ",push_constant_range_count=" + itos(carried_pipeline_packet.pipeline_layout_push_constant_range_count);
+		text += ",push_constant_stage_mask=\"0x" + String::num_uint64(carried_pipeline_packet.pipeline_layout_push_constant_stage_mask, 16) + "\"";
+		text += ",push_constant_total_offset=" + itos(carried_pipeline_packet.pipeline_layout_push_constant_total_offset);
+		text += ",push_constant_total_size=" + itos(carried_pipeline_packet.pipeline_layout_push_constant_total_size) + "}";
+		text += ",render_pass_lineage={relation=\"" + l88_pre_rebind_scope_relation + "\"";
+		text += ",exact=" + String(carried_render_pass_lineage_exact ? "true" : "false");
+		text += ",compatible_only=" + String(carried_render_pass_lineage_compatible_only ? "true" : "false");
+		text += ",field_classifier=\"" + carried_render_pass_lineage_field_class + "\"";
+		text += ",minimum_distinguishing_field=\"" + carried_render_pass_lineage_minimum_field + "\"";
+		text += ",attachment_exact_recipe={exact=" + String(carried_attachment_exact_mismatch_fields.is_empty() ? "true" : "false");
+		text += ",field_classifier=\"" + carried_attachment_exact_field_classifier + "\"";
+		text += ",minimum_distinguishing_field=\"" + carried_attachment_exact_minimum_field + "\"";
+		text += ",mismatch_count=" + itos(carried_attachment_exact_mismatch_fields.size());
+		text += ",mismatch_fields=";
+		if (carried_attachment_exact_mismatch_fields.is_empty()) {
+			text += "none";
+		} else {
+			text += "[\"" + String("\",\"").join(carried_attachment_exact_mismatch_fields) + "\"]";
+		}
+		text += ",attachment_count_match=" + String(carried_render_pass_attachment_count_match ? "true" : "false");
+		text += ",format_match=" + String(carried_render_pass_attachment_format_hash_match ? "true" : "false");
+		text += ",samples_match=" + String(carried_render_pass_attachment_samples_hash_match ? "true" : "false");
+		text += ",load_op_match=" + String(carried_render_pass_attachment_load_op_hash_match ? "true" : "false");
+		text += ",store_op_match=" + String(carried_render_pass_attachment_store_op_hash_match ? "true" : "false");
+		text += ",stencil_load_op_match=" + String(carried_render_pass_attachment_stencil_load_op_hash_match ? "true" : "false");
+		text += ",stencil_store_op_match=" + String(carried_render_pass_attachment_stencil_store_op_hash_match ? "true" : "false");
+		text += ",initial_layout_match=" + String(carried_render_pass_attachment_initial_layout_hash_match ? "true" : "false");
+		text += ",final_layout_match=" + String(carried_render_pass_attachment_final_layout_hash_match ? "true" : "false");
+		text += ",active_format_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_format_hash);
+		text += ",active_samples_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_samples_hash);
+		text += ",active_load_op_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_load_op_hash);
+		text += ",active_store_op_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_store_op_hash);
+		text += ",active_stencil_load_op_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_stencil_load_op_hash);
+		text += ",active_stencil_store_op_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_stencil_store_op_hash);
+		text += ",active_initial_layout_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_initial_layout_hash);
+		text += ",active_final_layout_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_final_layout_hash);
+		text += ",pipeline_format_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_format_hash);
+		text += ",pipeline_samples_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_samples_hash);
+		text += ",pipeline_load_op_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_load_op_hash);
+		text += ",pipeline_store_op_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_store_op_hash);
+		text += ",pipeline_stencil_load_op_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_stencil_load_op_hash);
+		text += ",pipeline_stencil_store_op_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_stencil_store_op_hash);
+		text += ",pipeline_initial_layout_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_initial_layout_hash);
+		text += ",pipeline_final_layout_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_final_layout_hash) + "}";
+		text += ",handle_match=" + String(carried_render_pass_handle_match ? "true" : "false");
+		text += ",exact_hash_match=" + String(carried_render_pass_exact_hash_match ? "true" : "false");
+		text += ",compatibility_hash_match=" + String(carried_render_pass_compatibility_hash_match ? "true" : "false");
+		text += ",subpass_compatibility_hash_match=" + String(carried_render_subpass_compatibility_hash_match ? "true" : "false");
+		text += ",attachment_exact_hash_match=" + String(carried_render_pass_attachment_exact_hash_match ? "true" : "false");
+		text += ",dependency_hash_match=" + String(carried_render_pass_dependency_hash_match ? "true" : "false");
+		text += ",view_density_hash_match=" + String(carried_render_pass_view_density_hash_match ? "true" : "false");
+		text += ",subpass_match=" + String(carried_render_subpass_match ? "true" : "false");
+		text += ",subpass_count_match=" + String(carried_render_pass_subpass_count_match ? "true" : "false");
+		text += ",attachment_count_match=" + String(carried_render_pass_attachment_count_match ? "true" : "false");
+		text += ",dependency_count_match=" + String(carried_render_pass_dependency_count_match ? "true" : "false");
+		text += ",view_count_match=" + String(carried_render_pass_view_count_match ? "true" : "false");
+		text += ",fragment_density_usage_match=" + String(carried_render_pass_fragment_density_usage_match ? "true" : "false");
+		text += ",active_render_pass_handle=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_handle);
+		text += ",active_render_pass_exact_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_exact_hash);
+		text += ",active_render_pass_compatibility_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_compatibility_hash);
+		text += ",active_render_subpass_compatibility_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_subpass_compatibility_hash);
+		text += ",active_render_pass_attachment_exact_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_exact_hash);
+		text += ",active_render_pass_dependency_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_dependency_hash);
+		text += ",active_render_pass_view_density_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_view_density_hash);
+		text += ",pipeline_render_pass_handle=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_handle);
+		text += ",pipeline_render_pass_exact_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_exact_hash);
+		text += ",pipeline_render_pass_compatibility_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_compatibility_hash);
+		text += ",pipeline_render_subpass_compatibility_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_subpass_compatibility_hash);
+		text += ",pipeline_render_pass_attachment_exact_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_attachment_exact_hash);
+		text += ",pipeline_render_pass_dependency_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_dependency_hash);
+		text += ",pipeline_render_pass_view_density_hash=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_view_density_hash);
+		text += ",pipeline_render_pass_create_serial=" + itos(carried_pipeline_packet.render_pass_create_serial);
+		text += ",active_render_pass_create_serial=" + itos(l88_pre_rebind_scope.active_render_pass_create_serial) + "}}";
+		const auto tonemap_l88_pipeline_layout_bucket_hash = [](const DebugPipelineBindingProvenance &provenance) {
+			uint64_t hash = hash_murmur3_one_64(provenance.pipeline_layout_descriptor_set_layout_hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_hash, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_descriptor_set_layout_count, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_range_count, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_stage_mask, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_total_offset, hash);
+			hash = hash_murmur3_one_64(provenance.pipeline_layout_push_constant_total_size, hash);
+			return hash;
+		};
+		const auto tonemap_l88_surviving_bucket_subset_hash = [&](const DebugPipelineBindingProvenance &provenance, uint32_t mask) {
+			uint64_t hash = 0x9e3779b97f4a7c15ULL;
+			if ((mask & 1U) != 0) {
+				hash = hash_murmur3_one_64(provenance.vertex_input_recipe_hash, hash);
+			}
+			if ((mask & 2U) != 0) {
+				hash = hash_murmur3_one_64(provenance.blend_recipe_hash, hash);
+			}
+			if ((mask & 4U) != 0) {
+				hash = hash_murmur3_one_64(provenance.specialization_constant_hash, hash);
+			}
+			if ((mask & 8U) != 0) {
+				hash = hash_murmur3_one_64(tonemap_l88_pipeline_layout_bucket_hash(provenance), hash);
+			}
+			return hash;
+		};
+		const DebugPipelineBindingProvenance &tonemap_pipeline = tonemap_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance;
+		const DebugPipelineBindingProvenance &l88_pipeline = l88_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance;
+		uint32_t largest_matching_proper_subset_size = 0;
+		for (uint32_t mask = 1; mask < 15; mask++) {
+			uint32_t bit_count = 0;
+			for (uint32_t bit = 0; bit < 4; bit++) {
+				if ((mask & (1U << bit)) != 0) {
+					bit_count++;
+				}
+			}
+			if (tonemap_l88_surviving_bucket_subset_hash(tonemap_pipeline, mask) == tonemap_l88_surviving_bucket_subset_hash(l88_pipeline, mask) && bit_count > largest_matching_proper_subset_size) {
+				largest_matching_proper_subset_size = bit_count;
+			}
+		}
+		const uint64_t tonemap_layout_bucket_hash = tonemap_l88_pipeline_layout_bucket_hash(tonemap_pipeline);
+		const uint64_t l88_layout_bucket_hash = tonemap_l88_pipeline_layout_bucket_hash(l88_pipeline);
+		const uint32_t surviving_changed_bucket_count =
+				(tonemap_pipeline.vertex_input_recipe_hash != l88_pipeline.vertex_input_recipe_hash ? 1U : 0U) +
+				(tonemap_pipeline.blend_recipe_hash != l88_pipeline.blend_recipe_hash ? 1U : 0U) +
+				(tonemap_pipeline.specialization_constant_hash != l88_pipeline.specialization_constant_hash ? 1U : 0U) +
+				(tonemap_layout_bucket_hash != l88_layout_bucket_hash ? 1U : 0U);
+		const bool full_four_bucket_interaction_locked = surviving_changed_bucket_count == 4U && largest_matching_proper_subset_size == 0U;
+		const bool tonemap_self_owned_local_packet = tonemap_scope_matches_label_commands && label_has_no_descendant_payload(tonemap_label_entry);
+		const bool l88_self_owned_local_packet = l88_scope_matches_label_plus_descendants && label_has_no_descendant_payload(l88_label_entry);
+		const bool tonemap_makes_state_live_before_l88 = tonemap_label_entry.first_pipeline_bind_serial > 0;
+		const bool transition_gap_free = backend_gap_commands <= 0 && tonemap_label_entry.post_gap_backend_command_count == 0;
+		const bool l88_is_heavier_than_tonemap =
+				l88_scope.draw_count > target_scope.draw_count ||
+				l88_scope.draw_indexed_count > target_scope.draw_indexed_count ||
+				l88_scope.render_pipeline_bind_count > target_scope.render_pipeline_bind_count ||
+				l88_scope.render_uniform_bind_count > target_scope.render_uniform_bind_count ||
+				l88_scope.vertex_buffer_bind_count > target_scope.vertex_buffer_bind_count ||
+				l88_scope.index_buffer_bind_count > target_scope.index_buffer_bind_count ||
+				l88_scope.secondary_draw_label_count > target_scope.secondary_draw_label_count;
+		String ownership_class = "inconclusive";
+		String ownership_basis = "missing_locked_interaction";
+		String first_live_owner = tonemap_makes_state_live_before_l88 ? "tonemap_local_packet" : "unknown";
+		String first_amplifier_owner = l88_is_heavier_than_tonemap ? "l88_local_packet" : "tonemap_local_packet";
+		if (!full_four_bucket_interaction_locked) {
+			ownership_basis = "interaction_not_structurally_locked";
+		} else if (!tonemap_self_owned_local_packet || !l88_self_owned_local_packet) {
+			ownership_basis = "packet_ownership_not_local";
+		} else if (!transition_gap_free || first_expansion_site != "l88_label") {
+			ownership_basis = "transition_not_gap_free";
+		} else if (tonemap_makes_state_live_before_l88 && l88_is_heavier_than_tonemap) {
+			ownership_class = "boundary_crossing_interaction";
+			ownership_basis = "tonemap_makes_state_live_then_l88_first_amplifies_without_gap";
+		} else if (tonemap_makes_state_live_before_l88) {
+			ownership_class = "tonemap_packet_owned";
+			ownership_basis = "tonemap_makes_state_live_without_immediate_heavier_l88_consumption";
+		} else if (l88_is_heavier_than_tonemap) {
+			ownership_class = "l88_packet_owned";
+			ownership_basis = "l88_is_first_meaningful_owner_of_live_state";
+		}
+		text += ",ownership_side_classifier={classification=\"" + ownership_class + "\"";
+		text += ",basis=\"" + ownership_basis + "\"";
+		text += ",full_four_bucket_interaction_locked=" + String(full_four_bucket_interaction_locked ? "true" : "false");
+		text += ",tonemap_self_owned_local_packet=" + String(tonemap_self_owned_local_packet ? "true" : "false");
+		text += ",l88_self_owned_local_packet=" + String(l88_self_owned_local_packet ? "true" : "false");
+		text += ",transition_gap_free=" + String(transition_gap_free ? "true" : "false");
+		text += ",first_live_owner=\"" + first_live_owner + "\"";
+		text += ",first_amplifier_owner=\"" + first_amplifier_owner + "\"";
+		text += ",tonemap_makes_state_live_before_l88=" + String(tonemap_makes_state_live_before_l88 ? "true" : "false");
+		text += ",l88_is_immediate_heavier_consumer=" + String(l88_is_heavier_than_tonemap ? "true" : "false");
+		text += ",first_meaningful_expansion=\"" + first_expansion_site + "\"";
+		text += ",surviving_changed_bucket_count=" + itos(surviving_changed_bucket_count);
+		text += ",largest_matching_proper_subset_size=" + itos(largest_matching_proper_subset_size) + "}";
 		text += ",tonemap_to_l88_delta={draw_calls=" + itos(int64_t(l88_scope.draw_count) - int64_t(target_scope.draw_count));
 		text += ",draw_indexed_calls=" + itos(int64_t(l88_scope.draw_indexed_count) - int64_t(target_scope.draw_indexed_count));
 		text += ",pipeline_binds=" + itos(int64_t(l88_scope.render_pipeline_bind_count) - int64_t(target_scope.render_pipeline_bind_count));
@@ -10464,6 +11196,17 @@ RenderingDeviceDriverVulkan::DebugCommandStateSnapshot RenderingDeviceDriverVulk
 	if (p_command_buffer->active_render_pass != nullptr) {
 		snapshot.active_render_pass_exact_hash = p_command_buffer->active_render_pass->debug_exact_hash;
 		snapshot.active_render_pass_compatibility_hash = p_command_buffer->active_render_pass->debug_compatibility_hash;
+		snapshot.active_render_pass_attachment_exact_hash = p_command_buffer->active_render_pass->debug_attachment_exact_hash;
+		snapshot.active_render_pass_attachment_format_hash = p_command_buffer->active_render_pass->debug_attachment_format_hash;
+		snapshot.active_render_pass_attachment_samples_hash = p_command_buffer->active_render_pass->debug_attachment_samples_hash;
+		snapshot.active_render_pass_attachment_load_op_hash = p_command_buffer->active_render_pass->debug_attachment_load_op_hash;
+		snapshot.active_render_pass_attachment_store_op_hash = p_command_buffer->active_render_pass->debug_attachment_store_op_hash;
+		snapshot.active_render_pass_attachment_stencil_load_op_hash = p_command_buffer->active_render_pass->debug_attachment_stencil_load_op_hash;
+		snapshot.active_render_pass_attachment_stencil_store_op_hash = p_command_buffer->active_render_pass->debug_attachment_stencil_store_op_hash;
+		snapshot.active_render_pass_attachment_initial_layout_hash = p_command_buffer->active_render_pass->debug_attachment_initial_layout_hash;
+		snapshot.active_render_pass_attachment_final_layout_hash = p_command_buffer->active_render_pass->debug_attachment_final_layout_hash;
+		snapshot.active_render_pass_dependency_hash = p_command_buffer->active_render_pass->debug_dependency_hash;
+		snapshot.active_render_pass_view_density_hash = p_command_buffer->active_render_pass->debug_view_density_hash;
 		snapshot.active_render_pass_create_serial = p_command_buffer->active_render_pass->debug_create_serial;
 		snapshot.active_render_pass_subpass_count = p_command_buffer->active_render_pass->debug_subpass_count;
 		snapshot.active_render_pass_attachment_count = p_command_buffer->active_render_pass->debug_attachment_count;
@@ -10538,6 +11281,7 @@ uint32_t RenderingDeviceDriverVulkan::_debug_record_command_label(CommandBufferI
 		entry.begin_index_format = p_command_buffer->debug_index_format;
 		entry.begin_breadcrumb = p_command_buffer->debug_last_breadcrumb;
 		entry.begin_backend_command_serial = p_command_buffer->debug_backend_command_serial;
+		entry.begin_state_snapshot = _debug_capture_command_state_snapshot(p_command_buffer);
 	} else {
 		p_command_buffer->debug_label_entries_overflow = true;
 	}

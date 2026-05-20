@@ -2958,3 +2958,1398 @@ Supported by the runtime evidence:
 - `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate on failing `submit_serial=9`
 - `Command Graph (L88) (Draw)` still remains the next heavier self-owned local packet and still reads as downstream amplification rather than a seam that displaces Tonemap
 - the broader downstream failure envelope (`fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`) remains unchanged
+
+## 2026-05-19 — auditor addendum for bead `oc-kqh` (Tonemap local packet split)
+
+Auditor re-checked the fresh Tonemap-local evidence against both the branch source and the saved artifact package:
+
+- source change under audit: Godot commit `d9d83920` (`debug: split tonemap local packet`)
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-local-packet-split-vulkan-sourcebuild-20260519-070538-rerun/`
+
+Audit verdict:
+
+- the new evidence **does** advance the seam inside the current first poisoned-boundary candidate
+- it does **not** displace `Tonemap (L87) (Draw)` as the first poisoned-boundary candidate
+- it narrows the first surviving internal Tonemap seam to the combined **bind/setup** phase
+
+Why that verdict holds:
+
+- the artifact reports `local_packet_split.first_internal_expansion="bind_setup"`
+- the recorded phase serials are contiguous: `begin_render_pass=7`, `setup_first=8`, `setup_last=9`, `draw_first=10`, `draw_last=10`, `end_render_pass=11`
+- all inter-phase backend gaps stay zero: `begin_to_setup_backend_gap_commands=0`, `setup_to_draw_backend_gap_commands=0`, `draw_to_end_backend_gap_commands=0`
+- the phase-command names align with the source instrumentation: `setup_first="bind_render_pipeline"`, `setup_last="bind_render_uniform_sets"`
+
+Important caveat:
+
+- this is still a **phase-bucket** classification, not a final one-command culprit
+- the surviving setup bucket still contains two distinct backend commands at adjacent serials (`bind_render_pipeline` then `bind_render_uniform_sets`)
+- so the evidence supports the current claim as written, but it does **not** yet prove which of those two setup commands is the tightest surviving sub-boundary
+
+Recommended next seam:
+
+1. split the Tonemap setup bucket itself
+2. inspect `bind_render_pipeline` vs `bind_render_uniform_sets` as the next tightest backend-owned seam
+3. only after that, revisit whether the later Tonemap draw at serial `10` still needs to be considered as the first visible amplifier rather than the first internal trigger
+
+## Follow-up QA pass for bead `oc-bjx` — classify the exact Tonemap-to-L88 ownership transition on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-j8x` added `tonemap_end_state=` plus `tonemap_to_l88_transition=` inside `tonemap_l88_contrast=`. The question for this pass was whether the first meaningful ownership expansion after the self-owned Tonemap packet happens:
+
+- exactly at `Command Graph (L88) (Draw)`
+- at `UI_PASS`
+- or at some smaller backend-owned transition in between
+
+### Branch / worktree state used
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+- Godot repo HEAD during the run: `6fa5aed4ce598bc378783b70ffa4851bc6669dda`
+- GDGS repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs`
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-l88-transition-vulkan-sourcebuild-20260519-055328/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-l88-transition-vulkan-sourcebuild-20260519-055328/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-l88-transition-vulkan-sourcebuild-20260519-055328/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-l88-transition-vulkan-sourcebuild-20260519-055328/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Exact command used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-l88-transition-vulkan-sourcebuild-20260519-055328 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### The first meaningful ownership expansion after Tonemap happens exactly at the `L88` label
+
+On the failing `submit_serial=9` command summary, QA observed the new transition payload:
+
+- `tonemap_end_state={render_pass_active=false,framebuffer_active=false,subpass=0,render_pipeline_bound=true,vertex_binding_count=0,index_buffer_bound=false,index_format=none,end_breadcrumb="NONE",backend_command_serial=11}`
+- `l88_begin_state={render_pass_active=false,framebuffer_active=false,subpass=0,render_pipeline_bound=true,vertex_binding_count=0,index_buffer_bound=false,index_format=none,begin_breadcrumb="NONE",backend_command_serial=11}`
+- `tonemap_to_l88_transition={backend_gap_commands=0,gap_has_backend_commands=false,post_gap_backend_command_count=0,post_gap_first_backend_command=none,post_gap_last_backend_command=none,post_gap_last_breadcrumb="NONE",state_delta={render_pass_active=same,framebuffer_active=same,subpass=same,render_pipeline_bound=same,vertex_binding_count=same,index_buffer_bound=same,breadcrumb=same},first_meaningful_expansion="l88_label"}`
+
+That answers the bead question directly:
+
+- there is **no** smaller backend-owned transition between Tonemap and `Command Graph (L88) (Draw)`
+- the breadcrumb does **not** jump to `UI_PASS` in the gap
+- the first meaningful ownership expansion after Tonemap lands exactly at the `L88` local packet itself
+
+#### This preserves the earlier Tonemap-first interpretation instead of displacing it
+
+The same rerun still shows:
+
+- `tonemap_local_attachment=` as a self-owned local Tonemap packet with zero descendant payload and exact scope alignment
+- `l88_local_attachment=` as a heavier self-owned local draw packet
+- `tonemap_to_l88_delta={draw_calls=9,draw_indexed_calls=10,pipeline_binds=0,uniform_binds=10,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,...}`
+- `l88_is_heavier_than_tonemap={draw_calls=true,draw_indexed_calls=true,pipeline_binds=false,uniform_binds=true,vertex_buffer_binds=true,index_buffer_binds=true,secondary_draw_labels=false}`
+
+So the new transition evidence sharpens the seam without moving it: Tonemap still remains the first self-owned poisoned-boundary candidate, and `L88` still reads as the first downstream ownership expansion / amplification packet rather than a tighter seam that displaces Tonemap.
+
+#### The outer failure envelope remains unchanged
+
+The same valid repro keeps the established failure chain intact:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the first failing frame-1 main submission waiting on that semaphore lineage
+- the explicit failure still first appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+#### Incidental runtime drift / nuisance observed
+
+This rerun still emitted repeated Godot `vformat` formatting errors from the compositor callback breadcrumb text after `callback_return`, but they did not change the Tonemap-to-L88 transition answer or the failing submit classification.
+
+### Updated interpretation
+
+This pass closes bead `oc-bjx` with the requested transition answer.
+
+Supported by the runtime evidence:
+
+- the first meaningful ownership expansion after Tonemap happens exactly at `Command Graph (L88) (Draw)`
+- there is no smaller backend-owned transition in the gap and no `UI_PASS` breadcrumb jump before `L88` begins
+- Tonemap still remains the first self-owned poisoned-boundary candidate
+- `L88` remains the next heavier self-owned local packet and still reads as downstream amplification / expansion rather than the earlier first-cause seam
+- the broader downstream failure envelope (`fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`) remains unchanged
+
+## Follow-up QA pass for bead `oc-19h` — classify the Tonemap local packet on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-5f9` added `local_packet_split=` inside `tonemap_local_attachment=`. The question for this pass was which internal Tonemap-owned boundary is the tightest surviving seam on failing `submit_serial=9`: render-pass begin, bind/setup, the single Tonemap draw, or render-pass end.
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-local-packet-split-vulkan-sourcebuild-20260519-070538-rerun/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-local-packet-split-vulkan-sourcebuild-20260519-070538-rerun/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-local-packet-split-vulkan-sourcebuild-20260519-070538-rerun/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-local-packet-split-vulkan-sourcebuild-20260519-070538-rerun/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Exact command used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-local-packet-split-vulkan-sourcebuild-20260519-070538-rerun no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### `local_packet_split=` resolves the tightest internal Tonemap seam to bind/setup
+
+On the failing `submit_serial=9` command summary, QA observed:
+
+- `local_packet_split={phase_counts={render_pass_begin=1,pipeline_binds=1,uniform_binds=1,draw_calls=1,render_pass_end=1}, ...}`
+- `phase_serials={begin_render_pass=7,setup_first=8,setup_last=9,draw_first=10,draw_last=10,end_render_pass=11}`
+- `phase_commands={setup_first="bind_render_pipeline",setup_last="bind_render_uniform_sets"}`
+- `phase_gaps={begin_to_setup_backend_gap_commands=0,setup_to_draw_backend_gap_commands=0,draw_to_end_backend_gap_commands=0}`
+- `first_internal_expansion="bind_setup"`
+- `packet_shape={has_begin_render_pass=true,has_bind_setup=true,has_draw=true,has_end_render_pass=true}`
+
+That is the direct classification result for this bead. The Tonemap-local packet is present end-to-end, but the first internal expansion away from the empty pre-pass begin state happens at the bind/setup phase, not at the single draw and not at render-pass end. The packet is also tightly packed: begin -> setup -> draw -> end are all contiguous backend serial steps with zero gap commands between each phase.
+
+#### Tonemap still remains the first poisoned-boundary candidate
+
+The refreshed source-built repro also preserved the earlier Tonemap-first ownership story:
+
+- `tonemap_local_attachment=` still shows zero descendant payload and exact scope alignment
+- `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}` still holds
+- `tonemap_to_l88_transition={backend_gap_commands=0,...,first_meaningful_expansion="l88_label"}` still places the first downstream ownership expansion exactly at `Command Graph (L88) (Draw)`
+
+So the new Tonemap-local split sharpens the internal seam without displacing Tonemap as the first real poisoned-boundary candidate. `Command Graph (L88) (Draw)` remains the next heavier downstream amplification packet, not a tighter first-cause seam.
+
+#### Outer failure envelope and runtime nuisance remain unchanged
+
+The same valid repro keeps the established downstream failure signature intact:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the failing frame-1 main submission waiting on that semaphore lineage
+- the first explicit failure still appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+Incidental runtime drift / noise observed again on this pass:
+
+- repeated Godot `vformat` formatting errors from the compositor callback breadcrumb text appeared in the log before the failing submit chain
+
+Those formatting errors were noisy but did not change the Tonemap-local classification or the failing-submit interpretation.
+
+### Updated interpretation
+
+This pass closes bead `oc-19h` with the requested Tonemap-local classification.
+
+Supported by the runtime evidence:
+
+- `local_packet_split.first_internal_expansion="bind_setup"`
+- the tightest surviving internal Tonemap-owned seam is the bind/setup phase (`bind_render_pipeline` -> `bind_render_uniform_sets`), not render-pass begin, the single Tonemap draw, or render-pass end
+- all three internal phase gaps (`begin->setup`, `setup->draw`, `draw->end`) stayed at zero backend commands on this repro
+- `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate on failing `submit_serial=9`
+- `Command Graph (L88) (Draw)` still remains the next heavier downstream local packet and still reads as amplification after Tonemap rather than a tighter first seam
+
+## Follow-up QA pass for bead `oc-0nj` — classify the Tonemap bind/setup sub-boundary on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-apv` split the Tonemap bind/setup bucket itself. The question for this pass was whether the tightest surviving Tonemap setup sub-boundary lands exactly at `bind_render_pipeline`, at `bind_render_uniform_sets`, or only after both setup commands complete, while confirming whether Tonemap still remains the first poisoned-boundary candidate.
+
+### Runtime used
+
+QA used the refreshed source-built editor already present in the Godot worktree:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-sub-boundary-vulkan-sourcebuild-20260519-073647/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-sub-boundary-vulkan-sourcebuild-20260519-073647/context.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-sub-boundary-vulkan-sourcebuild-20260519-073647/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-sub-boundary-vulkan-sourcebuild-20260519-073647/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Exact command used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-sub-boundary-vulkan-sourcebuild-20260519-073647 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### `setup_sub_boundary=` resolves the surviving Tonemap setup seam to pipeline bind first, then uniform bind
+
+On the failing `submit_serial=9` command summary, QA observed the new split inside `tonemap_local_attachment.local_packet_split=`:
+
+- `phase_serials={begin_render_pass=7,setup_first=8,setup_last=9,pipeline_first=8,pipeline_last=8,uniform_first=9,uniform_last=9,draw_first=10,draw_last=10,end_render_pass=11}`
+- `phase_commands={setup_first="bind_render_pipeline",setup_last="bind_render_uniform_sets",pipeline_first="bind_render_pipeline",pipeline_last="bind_render_pipeline",uniform_first="bind_render_uniform_sets",uniform_last="bind_render_uniform_sets"}`
+- `phase_gaps={begin_to_setup_backend_gap_commands=0,pipeline_to_uniform_backend_gap_commands=0,setup_to_draw_backend_gap_commands=0,draw_to_end_backend_gap_commands=0}`
+- `first_internal_expansion="bind_render_pipeline"`
+- `setup_sub_boundary="pipeline_then_uniform"`
+- `setup_sequence={pipeline_before_uniform=true,uniform_before_draw=true,setup_complete_before_draw=true}`
+
+That is the direct classification answer for bead `oc-0nj`. The surviving setup seam no longer collapses to an undifferentiated bind bucket: the first internal Tonemap expansion now lands **exactly at `bind_render_pipeline`**, then advances contiguously to `bind_render_uniform_sets`, and only after both setup commands does the single Tonemap draw execute. So the tightest surviving setup sub-boundary is **pipeline bind first**, not “uniform bind first” and not “only after both setup commands complete.”
+
+#### Tonemap still remains the first poisoned-boundary candidate
+
+The same rerun preserved the earlier Tonemap-first ownership story:
+
+- `tonemap_local_attachment=` still shows zero descendant payload and exact scope alignment
+- `tonemap_to_l88_transition.first_meaningful_expansion="l88_label"` still places the first downstream ownership expansion exactly at `Command Graph (L88) (Draw)`
+- `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}` still keeps `L88` in the downstream-amplification lane rather than displacing Tonemap
+
+So this new split advances the seam *inside* Tonemap, but it does not move the first poisoned-boundary candidate away from `Tonemap (L87) (Draw)`.
+
+#### Outer failure envelope and runtime noise remain unchanged
+
+The same valid repro keeps the established downstream failure signature intact:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the failing frame-1 main submission waiting on that semaphore lineage
+- the first explicit failure still appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+Incidental runtime noise persisted in this pass as well:
+
+- repeated Godot `vformat` formatting errors still appeared from the compositor callback breadcrumb text
+
+Those formatting errors were noisy but did not change the Tonemap setup-sub-boundary classification or the failing-submit interpretation.
+
+### Updated interpretation
+
+This pass closes bead `oc-0nj` with the requested Tonemap setup-sub-boundary classification.
+
+Supported by the runtime evidence:
+
+- `setup_sub_boundary="pipeline_then_uniform"`
+- `first_internal_expansion="bind_render_pipeline"`
+- the surviving Tonemap setup seam now resolves to `bind_render_pipeline` first, then `bind_render_uniform_sets`, with zero backend-gap commands between those setup commands and the later draw
+- `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate on failing `submit_serial=9`
+- `Command Graph (L88) (Draw)` still remains the next heavier downstream local packet and still reads as amplification after Tonemap rather than a tighter first seam
+
+## 2026-05-19 — auditor addendum for bead `oc-ab8` (Tonemap bind/setup sub-boundary)
+
+Auditor re-checked the fresh Tonemap bind/setup evidence against both the active branch source and the saved artifact package:
+
+- source change under audit: Godot commit `5cc35d16` (`debug: split tonemap bind setup bucket`)
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-sub-boundary-vulkan-sourcebuild-20260519-073647/`
+
+Audit verdict:
+
+- the new evidence **does** advance the seam inside the current first poisoned-boundary candidate
+- it does **not** displace `Tonemap (L87) (Draw)` as the first poisoned-boundary candidate
+- it narrows the first surviving internal Tonemap seam from the old combined bind/setup bucket to **`bind_render_pipeline` first, then `bind_render_uniform_sets`**
+
+Why that verdict holds:
+
+- the artifact reports `setup_sub_boundary="pipeline_then_uniform"`
+- the recorded phase serials are contiguous: `begin_render_pass=7`, `pipeline_first=8`, `uniform_first=9`, `draw_first=10`, `end_render_pass=11`
+- all inter-phase backend gaps stay zero: `begin_to_setup_backend_gap_commands=0`, `pipeline_to_uniform_backend_gap_commands=0`, `setup_to_draw_backend_gap_commands=0`, `draw_to_end_backend_gap_commands=0`
+- the phase-command names align with the source instrumentation: `pipeline_first="bind_render_pipeline"`, `uniform_first="bind_render_uniform_sets"`, and `first_internal_expansion="bind_render_pipeline"`
+
+Important caveat:
+
+- this is a **leading-command** classification, not a proof that the pipeline bind alone is already the unique causal instruction
+- the surviving Tonemap setup packet is still contiguous across serials `8 -> 9`, so the uniform bind still remains the first downstream setup amplifier inside the same local packet
+
+Recommended next seam:
+
+1. inspect the pipeline-bind-owned seam inside Tonemap directly
+2. only if no smaller backend-owned attachment appears around `bind_render_pipeline`, treat pipeline bind as the current tightest surviving seam with uniform bind as the first downstream amplifier
+3. keep the Tonemap→L88 transition and the broader Tonemap-first ownership story as settled baselines unless new backend evidence directly contradicts them
+
+## 2026-05-19 — bead `oc-0mx` QA validation (`pipeline_bind_seam=` on refreshed source-built binary)
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-bind-seam-vulkan-sourcebuild-20260519-090955/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-bind-seam-vulkan-sourcebuild-20260519-090955/context.txt`
+- exact command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-bind-seam-vulkan-sourcebuild-20260519-090955/exact_command.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-bind-seam-vulkan-sourcebuild-20260519-090955/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-bind-seam-vulkan-sourcebuild-20260519-090955/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Launch used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-bind-seam-vulkan-sourcebuild-20260519-090955 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### `pipeline_bind_seam=` now pins the tightest surviving Tonemap sub-boundary exactly at the pipeline bind itself
+
+On the failing `submit_serial=9` command summary, QA observed the new payload inside `tonemap_local_attachment.local_packet_split`:
+
+- `setup_sub_boundary="pipeline_then_uniform"`
+- `pipeline_bind_seam={owned_attachment_class="pipeline_bind_direct_state_flip",pipeline_serial=8,uniform_serial=9,pipeline_to_uniform_backend_gap_commands=0,...}`
+- `state_before={render_pass_active=true,framebuffer_active=true,subpass=0,render_pipeline_bound=false,vertex_binding_count=0,index_buffer_bound=false,index_format=none,breadcrumb="NONE"}`
+- `state_after={render_pass_active=true,framebuffer_active=true,subpass=0,render_pipeline_bound=true,vertex_binding_count=0,index_buffer_bound=false,index_format=none,breadcrumb="NONE"}`
+- `state_delta={render_pass_active=same,framebuffer_active=same,subpass=same,render_pipeline_bound=changed,vertex_binding_count=same,index_buffer_bound=same,index_format=same,breadcrumb=same}`
+- `uniform_begin_state={render_pass_active=true,framebuffer_active=true,subpass=0,render_pipeline_bound=true,vertex_binding_count=0,index_buffer_bound=false,index_format=none,breadcrumb="NONE"}`
+- `uniform_begin_matches_pipeline_after=true`
+
+That answers the bead question cleanly:
+
+- the smallest surviving Tonemap sub-boundary is **not** a backend-owned attachment between `bind_render_pipeline` and `bind_render_uniform_sets`
+- it is **not** a seam that only appears once execution advances into uniform binding
+- the surviving seam classifies as a direct label-owned state flip at `bind_render_pipeline` itself, with the following uniform bind entering the exact post-pipeline state and no intervening backend commands
+
+#### The older `setup_sub_boundary=` interpretation still holds, but the new seam is tighter
+
+Compared against the earlier 2026-05-19 `setup_sub_boundary=` run:
+
+- the older answer said the first internal Tonemap setup expansion was `bind_render_pipeline`, followed contiguously by `bind_render_uniform_sets`
+- the new answer keeps that ordering, but now proves the tighter surviving class is `owned_attachment_class="pipeline_bind_direct_state_flip"`
+- `pipeline_to_uniform_backend_gap_commands=0` and `uniform_begin_matches_pipeline_after=true` demote both the “immediate backend-owned attachment after pipeline bind” theory and the “only poisoned once uniform binding begins” theory
+
+So the classification moved from “pipeline then uniform” to the sharper answer “pipeline bind itself, with uniform bind as the first downstream contiguous amplifier inside the same local packet.”
+
+#### Tonemap still remains the first self-owned poisoned-boundary candidate
+
+The rest of the failing `submit_serial=9` payload stayed aligned with the already-settled Tonemap-first baseline:
+
+- `tonemap_local_attachment.consumer_class="draw_payload"`
+- `nested_scope={descendant_labels=0,descendant_draw_labels=0,...}`
+- `scope_alignment={scope_matches_label_commands=true,scope_matches_label_plus_descendants=true,... all zero residual ...}`
+- `next_meaningful_after_target={distance_scopes=1,class="draw_payload",scope.owner_begin="Command Graph (L88) (Draw)",...}`
+- `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}`
+
+That means the refreshed source-built repro still reads the same way at the broader boundary level:
+
+- `Tonemap (L87) (Draw)` is still the first self-owned meaningful poisoned-boundary candidate
+- `Command Graph (L88) (Draw)` remains the immediately following heavier downstream packet
+- the new seam split advances *inside* Tonemap rather than displacing Tonemap with `L88`
+
+#### The outer failure envelope remained stable
+
+The same run preserved the already-established downstream failure signature:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the first failing frame-1 main submission waiting on that semaphore lineage
+- the first explicit failure still appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+### Updated interpretation
+
+This QA pass closes bead `oc-0mx` with the requested pipeline-bind seam classification complete.
+
+Supported by the runtime evidence:
+
+- `pipeline_bind_seam.owned_attachment_class="pipeline_bind_direct_state_flip"`
+- the tightest surviving Tonemap sub-boundary now lives exactly at `bind_render_pipeline`
+- there is no surviving immediate backend-owned attachment between pipeline bind and uniform bind (`pipeline_to_uniform_backend_gap_commands=0`)
+- the uniform bind begins in the exact state produced by the pipeline bind (`uniform_begin_matches_pipeline_after=true`)
+- `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate on failing `submit_serial=9`
+- `Command Graph (L88) (Draw)` still remains the next heavier downstream packet rather than a tighter first seam
+
+## 2026-05-19 — auditor addendum for bead `oc-x8s` (Tonemap pipeline-bind seam)
+
+Auditor re-checked the fresh Tonemap pipeline-bind evidence against both the active branch source and the saved artifact package:
+
+- source change under audit: Godot commit `7ff68572` (`debug: inspect tonemap pipeline bind seam`)
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-bind-seam-vulkan-sourcebuild-20260519-090955/`
+
+Audit verdict:
+
+- the new evidence **does** advance the seam inside the current first poisoned-boundary candidate
+- it does **not** displace `Tonemap (L87) (Draw)` as the first poisoned-boundary candidate
+- it narrows the tightest surviving internal Tonemap seam from `bind_render_pipeline`-then-`bind_render_uniform_sets` ordering to the **direct `bind_render_pipeline` state flip itself**
+
+Why that verdict holds:
+
+- the artifact reports `pipeline_bind_seam.owned_attachment_class="pipeline_bind_direct_state_flip"`
+- the recorded setup serials stay contiguous: `pipeline_serial=8`, `uniform_serial=9`, `pipeline_to_uniform_backend_gap_commands=0`
+- the tracked command state flips exactly once at pipeline bind: `state_before.render_pipeline_bound=false` and `state_after.render_pipeline_bound=true`
+- the first following uniform bind begins in the exact post-pipeline state: `uniform_begin_matches_pipeline_after=true`
+- the broader Tonemap-first evidence remains unchanged: `tonemap_local_attachment` still has zero descendant payload / exact scope alignment, `tonemap_l88_contrast.first_meaningful_expansion="l88_label"` still points to `Command Graph (L88) (Draw)` as the next downstream ownership expansion, and the outer failure envelope still runs `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`
+
+What is proven vs. not yet proven:
+
+- proven: the surviving smaller seam is no longer an unlabeled backend gap after pipeline bind and no longer something that first appears only when uniform binding begins
+- not yet proven: which exact pipeline object / pipeline-owned state property bound at serial `8` is the toxic ingredient inside that surviving pipeline-bind-owned boundary
+
+Next seam recommendation:
+
+- inspect the **pipeline-bind-owned state provenance** itself at Tonemap serial `8` — e.g. which exact graphics pipeline object / compatibility context is bound there and how it differs from neighboring pass packets
+- treat `bind_render_uniform_sets` as the first downstream amplifier, not the next tightest seam to reopen unless pipeline provenance evidence collapses
+
+## Follow-up QA pass for bead `oc-899` — classify the Tonemap pipeline-state provenance on failing `submit_serial=9`
+
+### Scope
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-kbk` added Tonemap pipeline provenance capture inside `pipeline_bind_seam=` plus `neighboring_pass_pipeline_compare=`. The question for this pass was:
+
+- what exact pipeline-state provenance becomes live at Tonemap serial `8`?
+- is that provenance unique to Tonemap, or does it only differ from neighboring pass packets at the compatibility/context level?
+- does Tonemap still remain the first poisoned-boundary candidate after the new provenance data lands?
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121/context.txt`
+- exact command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121/exact_command.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Launch used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### Tonemap serial `8` now resolves to a concrete `TonemapShaderRD:0` graphics pipeline provenance packet
+
+On the failing `submit_serial=9` command summary, QA observed the new provenance fields inside `tonemap_local_attachment.local_packet_split.pipeline_bind_seam=`:
+
+- `owned_attachment_class="pipeline_bind_direct_state_flip"`
+- `pipeline_serial=8`
+- `uniform_serial=9`
+- `state_before.pipeline_provenance=none`
+- `state_after.pipeline_provenance={pipeline_handle="0x61e17cfdfec0",pipeline_layout_handle="0x7f0990db06e0",render_pass_handle="0x61e17ce8dc10",render_subpass=0,shader_name="TonemapShaderRD:0"}`
+- `uniform_begin_state.pipeline_provenance={pipeline_handle="0x61e17cfdfec0",pipeline_layout_handle="0x7f0990db06e0",render_pass_handle="0x61e17ce8dc10",render_subpass=0,shader_name="TonemapShaderRD:0"}`
+- `uniform_begin_matches_pipeline_after=true`
+
+That means the Tonemap bind no longer resolves only to an abstract `render_pipeline_bound=true` flip. The new live provenance at serial `8` is a specific Tonemap graphics pipeline object plus its concrete compatibility context:
+
+- graphics pipeline handle `0x61e17cfdfec0`
+- pipeline layout handle `0x7f0990db06e0`
+- render pass handle `0x61e17ce8dc10`
+- render subpass `0`
+- shader name `TonemapShaderRD:0`
+
+#### In this surviving slice, the provenance is effectively unique to Tonemap rather than merely “same context, different handle”
+
+The new `neighboring_pass_pipeline_compare=` block answers the neighboring-pass question directly:
+
+- `previous=none`
+- `next={label="Command Graph (L88) (Draw)",pipeline_serial=13,relation="different_pipeline_different_compatibility_context",provenance={...,pipeline_provenance={pipeline_handle="0x7f098cf39dd0",pipeline_layout_handle="0x7f09a412f440",render_pass_handle="0x61e17ce8dc10",render_subpass=0,shader_name="CanvasShaderRD:0"}}}`
+
+That classification matters in two ways:
+
+1. **No previous meaningful neighboring pass packet contributes an earlier pipeline provenance.** The prior three pass scopes are still wrapper-only (`L15 -> L16 -> L86`), so there is no earlier surviving pass-local pipeline object to compare against at all.
+2. **The next meaningful neighboring pass does not just reuse Tonemap’s compatibility context with a different pipeline handle.** `Command Graph (L88) (Draw)` shares the same render pass handle and subpass, but the comparison still classifies the relation as `different_pipeline_different_compatibility_context` because both the pipeline identity and the compatibility-defining layout/context packet differ (`pipeline_handle`, `pipeline_layout_handle`, and shader all change).
+
+So the best exact read from this repro is:
+
+- the first surviving live pipeline provenance appears exactly at Tonemap serial `8`
+- it is a concrete Tonemap-owned `TonemapShaderRD:0` pipeline packet
+- in this command-buffer slice it is **unique to Tonemap** rather than a reused/same-context neighboring pipeline with only superficial identity differences
+- the next meaningful pass (`L88`) is a distinct downstream `CanvasShaderRD:0` packet that differs at both pipeline identity and compatibility/context level
+
+#### Tonemap still remains the first poisoned-boundary candidate
+
+The provenance expansion does not move the broader seam away from Tonemap. The same rerun preserved the already-settled Tonemap-first evidence:
+
+- `tonemap_local_attachment.consumer_class="draw_payload"`
+- zero descendant payload / exact scope alignment still hold
+- `previous_wrapper_chain_into_target={... "Render Depth Pre-Pass (L15) (Draw)", "Render Opaque Pass (L16) (Draw)", "Render 3D Transparent Pass (L86) (Draw)" ...}` still demotes the earlier passes as wrappers
+- `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}` still keeps `L88` in the downstream-amplification lane
+- `tonemap_to_l88_transition.first_meaningful_expansion="l88_label"` still places the first post-Tonemap ownership expansion exactly at `Command Graph (L88) (Draw)`
+
+So the new provenance payload sharpens *what* becomes live at the Tonemap seam, but it does **not** displace Tonemap as the first surviving poisoned-boundary candidate.
+
+#### The outer failure envelope remained stable, with the same incidental runtime noise
+
+The same run preserved the broader failure signature:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the first failing frame-1 main submission
+- the first explicit failure still appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+The previously seen compositor callback formatting noise also recurred:
+
+- repeated `vformat` errors such as `Formatting error in string "[gdgs][godot] compositor callback batch begin ... view_count=%u": incomplete format.`
+- repeated `unsupported format character` errors on the callback breadcrumb strings
+
+Those log-hygiene issues were noisy but did not change the Tonemap provenance classification or the failing-submit interpretation.
+
+### Updated interpretation
+
+This QA pass closes bead `oc-899` with the requested Tonemap pipeline-state provenance classification complete.
+
+Supported by the runtime evidence:
+
+- Tonemap serial `8` makes a concrete `TonemapShaderRD:0` graphics pipeline packet live: pipeline `0x61e17cfdfec0`, layout `0x7f0990db06e0`, render pass `0x61e17ce8dc10`, subpass `0`
+- the prior meaningful neighboring pipeline provenance is still absent (`previous=none`) because the earlier pass scopes remain wrapper-only
+- the next meaningful neighboring pass packet (`Command Graph (L88) (Draw)`) is classified as `different_pipeline_different_compatibility_context`, not as a same-context reuse of Tonemap’s packet
+- the provenance therefore reads as Tonemap-unique in this surviving slice rather than merely a compatibility-only delta against an already-live neighboring pass pipeline
+- `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`
+
+## 2026-05-19 — auditor addendum for bead `oc-ju6` (Tonemap pipeline-state provenance)
+
+Auditor re-checked the fresh Tonemap pipeline-state provenance evidence against both the active branch source and the saved QA artifact package:
+
+- source change under audit: Godot commit `3b84ea95` (`debug: inspect tonemap pipeline state provenance`)
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-provenance-vulkan-sourcebuild-20260519-102121/`
+
+Audit verdict:
+
+- the new evidence **does** advance the seam inside the current first poisoned-boundary candidate
+- it does **not** displace `Tonemap (L87) (Draw)` as the first poisoned-boundary candidate
+- it supports the narrower statement that the first surviving live pipeline provenance at serial `8` is effectively unique to Tonemap **in this local surviving slice**
+
+Why that verdict holds:
+
+- the source now persists `DebugPipelineBindingProvenance` at `render_pipeline_create()`, latches it on `command_bind_render_pipeline()`, and copies it into the Tonemap seam snapshots used by `pipeline_bind_seam=`
+- the artifact shows Tonemap serial `8` with a concrete packet: `pipeline_handle="0x61e17cfdfec0"`, `pipeline_layout_handle="0x7f0990db06e0"`, `render_pass_handle="0x61e17ce8dc10"`, `render_subpass=0`, `shader_name="TonemapShaderRD:0"`
+- `uniform_begin_matches_pipeline_after=true`, so the same Tonemap packet survives from the pipeline bind into the uniform-bind start state
+- `neighboring_pass_pipeline_compare=` shows `previous=none` and `next=Command Graph (L88) (Draw)` with a different packet: `pipeline_handle="0x7f098cf39dd0"`, `pipeline_layout_handle="0x7f09a412f440"`, same render pass/subpass, `shader_name="CanvasShaderRD:0"`
+- because the layout handle changes while render pass/subpass stay the same, the reported relation `different_pipeline_different_compatibility_context` is supported by the actual packet fields
+
+Important caveat:
+
+- this is still a **slice-local** uniqueness result, not a proof that Tonemap’s pipeline is globally unique across every pass in the command buffer
+- the current comparison window is only the first poisoned-boundary candidate versus its nearest meaningful surviving neighbor (`previous=none`, `next=L88`)
+
+Recommended next seam:
+
+1. keep the next backend split **inside Tonemap serial `8` itself**
+2. treat `bind_render_pipeline` as the current tightest surviving backend-owned seam
+3. treat `bind_render_uniform_sets` as the first downstream setup amplifier inside the same contiguous local packet unless a smaller bind-owned attachment is exposed around the pipeline bind itself
+
+## 2026-05-19 — bead `oc-rea` QA validation (`bind_owned_attachment=` on refreshed source-built binary)
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-bind-owned-attachment-vulkan-sourcebuild-20260519-1044/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-bind-owned-attachment-vulkan-sourcebuild-20260519-1044/context.txt`
+- exact command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-bind-owned-attachment-vulkan-sourcebuild-20260519-1044/exact_command.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-bind-owned-attachment-vulkan-sourcebuild-20260519-1044/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-bind-owned-attachment-vulkan-sourcebuild-20260519-1044/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Exact command used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-bind-owned-attachment-vulkan-sourcebuild-20260519-1044 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### `bind_owned_attachment=` exposes a smaller serial-8 seam than the old direct bind-state-flip classification
+
+On the failing `submit_serial=9` command summary, QA observed the new block inside `tonemap_local_attachment.local_packet_split.pipeline_bind_seam=`:
+
+- `owned_attachment_class="pipeline_bind_direct_state_flip"`
+- `bind_owned_attachment={class="pipeline_packet_scope_mismatch",narrower_bind_owned_seam="pipeline_compatibility_context",active_scope_stable_across_bind=true,pipeline_packet_matches_active_scope=false,bind_delta_is_pipeline_only=true,...}`
+- `active_scope_before={render_pass_handle="0x5e2991c8aff0",framebuffer_handle="0x5e2991ba1270",subpass=0}`
+- `active_scope_after={render_pass_handle="0x5e2991c8aff0",framebuffer_handle="0x5e2991ba1270",subpass=0}`
+- `pipeline_packet={render_pass_handle="0x5e29916b3630",render_subpass=0,pipeline_layout_handle="0x743e8c10dbd0",shader_name="TonemapShaderRD:0"}`
+- `pipeline_to_uniform_backend_gap_commands=0`
+- `uniform_begin_matches_pipeline_after=true`
+
+That gives the bead answer directly:
+
+- the surviving Tonemap seam is **not exhausted** at a pure direct `bind_render_pipeline` state flip
+- the active pass scope stays stable across serial `8`
+- the delta at the bind still remains pipeline-only
+- but the newly-live Tonemap pipeline packet does **not** match the active render-pass scope
+- the tighter surviving backend-owned seam is therefore the bind-owned **pipeline compatibility/context mismatch** itself, not an unlabeled backend gap after the bind and not a seam that first appears only when uniform binding begins
+
+#### Tonemap still remains the first poisoned-boundary candidate
+
+The broader source-built ownership story stayed unchanged in the same rerun:
+
+- `tonemap_local_attachment.consumer_class="draw_payload"`
+- zero descendant payload still holds
+- exact `scope_alignment` still holds
+- `tonemap_to_l88_transition.first_meaningful_expansion="l88_label"` still places the first downstream ownership expansion exactly at `Command Graph (L88) (Draw)`
+- `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}` still keeps `L88` in the downstream-amplification lane
+
+So the new bind-owned attachment advances the seam *inside* Tonemap serial `8`, but it does **not** displace `Tonemap (L87) (Draw)` as the first surviving poisoned-boundary candidate.
+
+#### The outer failure envelope remained stable, with the same incidental runtime noise
+
+The same valid repro preserved the already-established downstream failure signature:
+
+- `submit_serial=8` remains the transfer-worker handoff
+- `submit_serial=9` remains the first failing frame-1 main submission waiting on that semaphore lineage
+- the first explicit failure still appears at `fence_wait_error submit_serial=9 wait_result=-4`
+- the later lost-device breadcrumb still collapses to `BLIT_PASS`
+
+Incidental runtime noise persisted in this pass as well:
+
+- repeated compositor callback `vformat` formatting errors still appeared in the log before the failing submit chain
+
+Those formatting errors were noisy but did not change the bind-owned attachment classification or the failing-submit interpretation.
+
+### Updated interpretation
+
+This QA pass closes bead `oc-rea` with the requested bind-owned-attachment classification complete.
+
+Supported by the runtime evidence:
+
+- `bind_owned_attachment.class="pipeline_packet_scope_mismatch"`
+- `bind_owned_attachment.narrower_bind_owned_seam="pipeline_compatibility_context"`
+- the active pass scope remains stable across the Tonemap pipeline bind at serial `8`
+- the newly-live `TonemapShaderRD:0` pipeline packet does **not** match that active render-pass scope, so the tighter surviving backend-owned seam is the pipeline-compatibility-context mismatch itself
+- `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`
+- `Command Graph (L88) (Draw)` still remains the next heavier downstream packet rather than a tighter first seam
+
+## 2026-05-19 — auditor addendum for bead `oc-jdq` (Tonemap bind-owned attachment)
+
+Auditor re-checked the fresh bind-owned-attachment evidence against both the active branch source and the saved QA artifact package:
+
+- source commits checked: `e0489432` (`debug: inspect tonemap bind owned attachment`) plus the docs landing `8bfa11ed`
+- artifact root checked: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-bind-owned-attachment-vulkan-sourcebuild-20260519-1044/`
+
+Audit verdict:
+
+- the new evidence does **not** displace `Tonemap (L87) (Draw)` as the first poisoned-boundary candidate
+- it **does** sharpen the serial-8 seam beyond the old bare `pipeline_bind_direct_state_flip` label by proving that the bind delta is still pipeline-only while the active pass scope stays stable across the bind
+- but it only **partially** proves the stronger claim that the next seam is already a Tonemap-local `pipeline_compatibility_context` mismatch
+
+What is directly supported by source + artifact:
+
+- source now captures active render-pass / framebuffer handles inside the Tonemap pipeline-bind snapshots and emits `bind_owned_attachment={...}` from those captured states
+- the artifact shows `active_scope_stable_across_bind=true`, `pipeline_packet_matches_active_scope=false`, and `bind_delta_is_pipeline_only=true`
+- the artifact also shows the exact handle mismatch the new code is classifying: active scope handle `0x5e2991c8aff0` vs bound Tonemap pipeline packet render-pass handle `0x5e29916b3630`, both at subpass `0`
+
+Important audit concern:
+
+- the current `pipeline_packet_matches_active_scope` test is still a **raw render-pass-handle + subpass equality check**, not a richer Vulkan compatibility proof
+- the same saved payload shows the immediately following `Command Graph (L88) (Draw)` packet running under that same active scope handle while carrying a pipeline provenance packet with the **same** pipeline render-pass handle `0x5e29916b3630`
+- so the evidence currently proves a **pipeline-packet vs active-scope handle mismatch**, but it does **not** yet prove that the mismatch is uniquely Tonemap-local or that it names a true compatibility failure rather than a broader compatible-wrapper / provenance-alias pattern in this late pass lane
+
+Recommended next seam:
+
+1. stay inside Tonemap serial `8`
+2. inspect the **active render-pass provenance / compatibility lineage** directly — why the live active scope handle differs from the bound pipeline packet handle, and whether those objects are intentionally compatibility-equivalent wrappers
+3. compare that same lineage against `L88` (and, if needed, the nearest earlier surviving draw packet) before concluding that Tonemap’s tighter surviving seam is already a genuine compatibility-context break
+4. if the handles turn out to be expected compatible aliases, demote this new mismatch classification and continue inward on the smaller pipeline-layout / pipeline-object-owned delta instead
+
+Minor concern preserved for the record:
+
+- repeated compositor callback `vformat` formatting errors remain noisy in the runtime logs, but they did not contradict the bind-owned-attachment evidence
+
+## 2026-05-19 — bead `oc-hge` QA validation (active render-pass provenance at Tonemap serial `8`)
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656/`
+
+Key files:
+
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656/context.txt`
+- exact command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656/exact_command.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656/exit_status.txt`
+
+### Exact run performed
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Exact command used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656 no_present compositor projection_only disabled 120`
+
+### Findings
+
+#### Tonemap serial `8` now classifies as compatible render-pass aliasing / wrapping, not a broader incompatibility break
+
+Inside `tonemap_pass_scope.target.tonemap_local_attachment.local_packet_split.pipeline_bind_seam.bind_owned_attachment`, QA observed:
+
+- `class="direct_pipeline_bind_exhausted"`
+- `pipeline_packet_scope_relation="different_handle_same_render_pass_compatibility"`
+- `active_scope_stable_across_bind=true`
+- `pipeline_packet_matches_active_scope=false`
+- `pipeline_packet_shares_compatible_scope=true`
+- `bind_delta_is_pipeline_only=true`
+
+The paired `scope_packet_lineage=` payload keeps the same compatibility hash / subpass-compatibility hash on both sides while the exact render-pass handle and exact hash differ:
+
+- active scope: `render_pass_handle="0x56701a965130"`, `active_render_pass_create_serial=13`, `active_render_pass_exact_hash="0x5c19e291"`, `active_render_pass_compatibility_hash="0x425f4d3d"`, `active_render_subpass_compatibility_hash="0x81df0cad"`
+- pipeline packet: `render_pass_handle="0x56701a3e8bd0"`, `pipeline_render_pass_create_serial=9`, `pipeline_render_pass_exact_hash="0x547d0135"`, `pipeline_render_pass_compatibility_hash="0x425f4d3d"`, `pipeline_render_subpass_compatibility_hash="0x81df0cad"`
+
+So the raw Tonemap packet-vs-active-scope handle mismatch now reads as expected compatible render-pass aliasing/wrapping: different render-pass objects / exact recipes, but the same compatibility-context lineage for the active subpass.
+
+#### The same active-scope relation pattern also appears on the next meaningful `L88` packet, but the Tonemap↔L88 packet comparison still stays narrower than a broad late-pass compatibility issue
+
+The same saved payload shows the immediately following `Command Graph (L88) (Draw)` packet running under that same active scope with:
+
+- `scope_pipeline_relation="different_handle_same_render_pass_compatibility"`
+- `pipeline_provenance={pipeline_handle="0x729084180db0",pipeline_layout_handle="0x72909c2d4b60",render_pass_handle="0x56701a3e8bd0",render_pass_create_serial=9,render_pass_exact_hash="0x547d0135",render_pass_compatibility_hash="0x425f4d3d",render_subpass_compatibility_hash="0x81df0cad",render_subpass=0,shader_name="CanvasShaderRD:0"}`
+
+That matters because it means Tonemap is **not** the only late surviving local packet whose bound pipeline packet points at a distinct-but-compatible render-pass object while the active scope stays on the later wrapper-owned handle. So the packet-vs-active-scope relation itself is a broader late-pass pattern shared by the next meaningful `L88` packet.
+
+But the direct neighboring packet comparison still stays narrower than a broad compatibility-lineage break:
+
+- `neighboring_pass_pipeline_compare.previous=none`
+- `neighboring_pass_pipeline_compare.next.label="Command Graph (L88) (Draw)"`
+- `neighboring_pass_pipeline_compare.next.relation="different_pipeline_different_compatibility_context"`
+
+That comparison does **not** mean Tonemap and `L88` disagree about active-scope compatibility. It means the two self-owned packets are still materially different packets — different pipeline handle, different pipeline-layout handle, and different shader (`TonemapShaderRD:0` vs `CanvasShaderRD:0`) — even though both packets individually point at the same compatible render-pass lineage object (`create_serial=9`, compatibility hash `0x425f4d3d`, subpass-compatibility hash `0x81df0cad`) while the active scope stays on the later wrapper-owned handle (`create_serial=13`).
+
+#### Earlier surviving draw labels before Tonemap still do not surface as comparable self-owned local payload packets
+
+This rerun did **not** overturn the earlier pass-scope ownership story:
+
+- `Render Depth Pre-Pass (L15) (Draw)` remains a wrapper-only pass scope
+- `Render Opaque Pass (L16) (Draw)` remains a wrapper-only pass scope
+- `Render 3D Transparent Pass (L86) (Draw)` remains a wrapper-only pass scope
+- the first meaningful surviving local payload packet is still `Tonemap (L87) (Draw)`
+- the next meaningful surviving local payload packet is still `Command Graph (L88) (Draw)`
+
+So the new provenance answer is strongest on the Tonemap-vs-`L88` slice. There still is **not** an earlier surviving self-owned draw packet before Tonemap in this summary slice that would let QA claim the same local-packet relation pattern stretches back earlier than the wrapper chain.
+
+#### Tonemap still remains the first poisoned-boundary candidate
+
+The broader source-built envelope did not move in this rerun:
+
+- `tonemap_pass_scope.target_class="draw_payload"`
+- `first_meaningful_scope_is_target=true`
+- `tonemap_local_attachment` still shows zero descendant payload and exact scope alignment
+- `tonemap_l88_contrast={status=ok,scope_distance=1,next_meaningful_scope_is_l88=true,...}` still places `L88` exactly one meaningful scope later as a heavier downstream packet
+- `fence_wait_error submit_serial=9 wait_result=-4` remains the first explicit failure site
+- later lost-device breadcrumbs still collapse first to `BLIT_PASS`
+
+So the new provenance/lineage fields narrow the old handle-mismatch caveat without displacing Tonemap. The best current read is:
+
+1. Tonemap serial `8` is **not** a raw incompatible render-pass mismatch; it is a compatible aliasing/wrapping case.
+2. That same packet-vs-active-scope compatibility pattern is also present on the next meaningful `L88` packet, so it is a broader late-pass wrapper/pipeline-lineage pattern rather than a Tonemap-only active-scope anomaly.
+3. Tonemap still remains the first self-owned poisoned-boundary candidate because it is still the first meaningful surviving local payload packet, while `L88` remains the next heavier downstream amplification packet.
+
+### Runtime noise / drift
+
+This rerun again emitted repeated Godot callback `vformat` formatting errors before the failing submit chain. They were noisy but did not contradict the render-pass provenance / lineage classification above.
+
+## Auditor addendum — 2026-05-19
+
+Independent audit of commit `47799b38` and artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-render-pass-provenance-qa-vulkan-sourcebuild-20260519-110656/` confirms the new provenance fields are wired through source and reflected faithfully in the saved run.
+
+Key audit conclusions:
+
+- Tonemap pipeline-bind serial `8` now has enough lineage data to demote the old render-pass caveat from “possible incompatible mismatch” to **expected compatible aliasing**:
+  - active scope lineage: create serial `13`, exact hash `0x5c19e291`, compatibility hash `0x425f4d3d`, subpass compatibility hash `0x81df0cad`
+  - Tonemap packet lineage: create serial `9`, exact hash `0x547d0135`, compatibility hash `0x425f4d3d`, subpass compatibility hash `0x81df0cad`
+  - resulting relation: `different_handle_same_render_pass_compatibility`
+- The same scope-vs-packet relation also appears on `Command Graph (L88) (Draw)` under the same active scope, so the raw handle split is not the tightest surviving seam.
+- Tonemap still stays first in line as the poisoned-boundary candidate because it is the first self-owned late payload packet, but the next backend-owned inspection seam should remain **inside Tonemap’s local packet**, with the sharpest focus on:
+  1. serial `8` `bind_render_pipeline` as the first owned state flip, and
+  2. serial `9` `bind_render_uniform_sets` as the first immediate downstream setup amplifier.
+- Remaining caution: this evidence narrows the cause; it does **not** yet prove whether serial `8` alone is sufficient, because the harmful setup may still require the contiguous `8 -> 9` Tonemap setup pair.
+
+## 2026-05-19 — bead `oc-0cd` QA validation (Tonemap setup pair contract at serials `8 -> 9`)
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-aol` added `setup_pair_contract=` inside `tonemap_local_attachment.local_packet_split.pipeline_bind_seam=`. The question for this pass was whether the tightest surviving Tonemap seam now lives in the pipeline-owned state alone, the uniform-set-owned state alone, or the specific serial-`8 -> 9` handshake, while confirming whether Tonemap still remains the first poisoned-boundary candidate.
+
+### Artifact
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-pair-contract-vulkan-sourcebuild-20260519-112924/`
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-pair-contract-vulkan-sourcebuild-20260519-112924/context.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-pair-contract-vulkan-sourcebuild-20260519-112924/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-pair-contract-vulkan-sourcebuild-20260519-112924/exit_status.txt`
+
+### Exact run
+
+1. `projection_only + disabled` via the refreshed source-built editor on the host Wayland/Vulkan path — process abort / artifact exit code `134`
+
+Command used:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-setup-pair-contract-vulkan-sourcebuild-20260519-112924 no_present compositor projection_only disabled 120`
+
+### `setup_pair_contract=` now classifies the surviving Tonemap seam as pipeline-owned state alone
+
+On the failing `submit_serial=9` command summary, QA observed:
+
+- `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",pair_contract_exact=true,...}`
+- `pipeline_after_matches_uniform_before=true`
+- `pipeline_layout_matches_bind_shader=true`
+- `pipeline_shader_matches_bind_shader=true`
+- `uniform_packet_matches_bind_shader=true`
+- `contract_checks={all_sets_match_bind_shader_layout=true,all_sets_match_bind_shader_pipeline_layout=true,all_sets_match_bind_shader_name=true,all_sets_match_declared_set_index=true,...}`
+
+That is the direct classification answer for bead `oc-0cd`. The serial-`8 -> 9` handshake is currently **clean and exact** on the failing submit: the uniform bind inherits the exact post-pipeline-bind state, the pipeline layout / shader match the uniform bind, and the descriptor-set packet matches the requested shader layout plus declared set indices. So the surviving Tonemap seam no longer reads as a cross-pair contract bug or as a uniform-owned-only break. The best current answer is that the next seam lives in the **pipeline-owned state alone** at serial `8`, with serial `9` reduced to a clean contiguous downstream amplifier.
+
+### This preserves the earlier Tonemap-first read instead of displacing it
+
+The same rerun kept the broader Tonemap story intact:
+
+- `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",pipeline_packet_scope_relation="different_handle_same_render_pass_compatibility",pipeline_packet_shares_compatible_scope=true,bind_delta_is_pipeline_only=true,...}`
+- `tonemap_to_l88_transition={...,first_meaningful_expansion="l88_label"}`
+- `next_meaningful_after_target.scope.owner_begin="Command Graph (L88) (Draw)"`
+- `fence_wait_error submit_serial=9 wait_result=-4`
+- later lost-device breadcrumb still collapsed to `BLIT_PASS`
+
+So this pass advances the seam one notch past the old “maybe the harmful setup requires the contiguous pair” uncertainty, but it does **not** move the first poisoned-boundary candidate away from `Tonemap (L87) (Draw)`. Tonemap still remains the first self-owned meaningful local packet, and the next meaningful downstream ownership expansion still begins exactly at `Command Graph (L88) (Draw)`.
+
+### Runtime noise
+
+This rerun again emitted repeated Godot callback `vformat` formatting errors before the failing submit chain. They were noisy but did not contradict the setup-pair classification or the broader failing-submit interpretation.
+
+### Conclusion
+
+- the serial-`8 -> 9` Tonemap setup-pair contract currently classifies as **clean/exact**, not as the surviving seam
+- the exact classification result is `contract_class="pair_contract_clean"` with `next_seam_candidate="pipeline_owned_state"`
+- the tightest surviving Tonemap seam therefore stays on the **pipeline-owned state** made live at serial `8`, not on uniform-owned state alone and not on the cross-pair handshake
+- `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`
+
+## 2026-05-19 — bead `oc-i2z` QA validation (Tonemap pipeline-owned state packet at serial `8`)
+
+Run the same minimum valid host-Vulkan source-built repro after bead `oc-8vs` added `graphics_recipe_hash`, recipe component hashes, and `recipe_delta.changed_components` to the Tonemap pipeline provenance lane. The question for this pass was whether Tonemap’s serial-`8` pipeline-owned packet narrows to one unique field/component hash or stays broader across multiple pipeline recipe buckets, while confirming whether Tonemap still remains the first poisoned-boundary candidate.
+
+### Artifact package
+
+- Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-recipe-qa-vulkan-sourcebuild-20260519-115113/`
+- Exact command: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-recipe-qa-vulkan-sourcebuild-20260519-115113 no_present compositor projection_only disabled 120`
+- Durable files: `context.txt`, `env.txt`, `exact_command.txt`, `stdout.log`, `exit_status.txt`
+- Observed repro result: abort / exit `134` on the expected failing path (`submit_serial=9` -> later `BLIT_PASS`)
+
+### Tonemap pipeline-owned packet classification
+
+On the failing `submit_serial=9` command summary, the new pipeline-owned-state payload keeps the earlier narrowed seam intact and now classifies the surviving Tonemap packet contrast directly:
+
+- `pipeline_bind_seam.state_after.pipeline_provenance={shader_name="TonemapShaderRD:0",graphics_recipe_hash="0x9c44278c",shader_stage_recipe_hash="0x2b93d818",vertex_input_recipe_hash="0xae289b01",rasterization_recipe_hash="0xa23144e0",multisample_recipe_hash="0xd5984934",depth_stencil_recipe_hash="0x1c6fa349",blend_recipe_hash="0x2d67c100",dynamic_state_recipe_hash="0xfa756ac3",specialization_constant_hash="0x208ccbee",...}`
+- `neighboring_pass_pipeline_compare.previous=none`
+- `neighboring_pass_pipeline_compare.next={label="Command Graph (L88) (Draw)",pipeline_serial=13,relation="different_pipeline_different_compatibility_context",...}`
+- `neighboring_pass_pipeline_compare.next.recipe_delta={graphics_recipe_relation="different_graphics_recipe",graphics_recipe_hash_changed=true,changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"],...}`
+
+That is the direct classification answer for bead `oc-i2z`. Tonemap’s serial-`8` graphics-pipeline packet is still the first surviving self-owned pipeline-owned state packet, and the nearest meaningful compatible late-pass comparison (`L88`) does **not** collapse the seam to a single field or one component hash. Instead, the surviving packet contrast stays broad across **multiple recipe buckets at once**:
+
+1. `vertex_input_recipe`
+2. `blend_recipe`
+3. `specialization_constants`
+4. `pipeline_layout`
+
+Just as important, several other buckets stayed unchanged in the same comparison (`shader_stage_recipe_hash`, `rasterization_recipe_hash`, `multisample_recipe_hash`, `depth_stencil_recipe_hash`, `dynamic_state_recipe_hash`, plus the same compatible render-pass lineage). So the new instrumentation narrows the candidate set meaningfully, but the seam still does **not** collapse to one unique Tonemap-only field.
+
+### Tonemap still remains the first poisoned-boundary candidate
+
+The same rerun preserved the already-settled Tonemap-first ownership story:
+
+- `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",pipeline_packet_scope_relation="different_handle_same_render_pass_compatibility",pipeline_packet_shares_compatible_scope=true,...}` still keeps the old render-pass-handle caveat demoted to compatible aliasing rather than a surviving smaller seam
+- `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",pair_contract_exact=true,...}` still keeps the `8 -> 9` handshake clean, so the surviving seam remains pipeline-owned rather than uniform-owned or contract-owned
+- `tonemap_to_l88_transition.first_meaningful_expansion="l88_label"` still places the first downstream ownership expansion exactly at `Command Graph (L88) (Draw)`
+- the outer failure envelope still stays stable on the same run: `fence_wait_error submit_serial=9 wait_result=-4` followed later by `BLIT_PASS`
+
+So this pass sharpens **what about the Tonemap packet differs** from the next meaningful late-pass packet, but it still does **not** displace `Tonemap (L87) (Draw)` as the first poisoned-boundary candidate.
+
+### Runtime noise
+
+This rerun again emitted repeated Godot callback `vformat` formatting errors before the failing submit chain. They were noisy but did not change the pipeline-recipe classification or the broader failing-submit interpretation.
+
+### Conclusion
+
+- Tonemap serial `8` still resolves to a concrete `TonemapShaderRD:0` pipeline-owned packet with `graphics_recipe_hash="0x9c44278c"`
+- the nearest meaningful neighboring late-pass packet (`Command Graph (L88) (Draw)`) stays classified as `relation="different_pipeline_different_compatibility_context"`
+- the surviving recipe contrast does **not** collapse to one field/component hash; it remains broad across `vertex_input_recipe`, `blend_recipe`, `specialization_constants`, and `pipeline_layout`
+- several other recipe buckets remain unchanged in the same comparison, so the new seam is narrower than “everything about the pipeline,” but broader than a one-field proof
+- `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`
+
+## 2026-05-19 — auditor addendum for bead `oc-cq6` (Tonemap pipeline recipe contrast)
+
+Auditor re-checked the fresh source changes in `d42bd313` against the saved QA artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-recipe-qa-vulkan-sourcebuild-20260519-115113/`.
+
+### Verdict
+
+The new evidence is real progress, but it is still a **broad multi-bucket** Tonemap-local pipeline-owned seam rather than a one-field answer.
+
+What the audit confirmed:
+
+- source now records concrete pipeline recipe hashes and shape metadata at `render_pipeline_create()` and emits `recipe_delta=` in the Tonemap ↔ neighboring-pass comparison lane
+- the QA artifact matches that instrumentation exactly on failing `submit_serial=9`
+- Tonemap serial `8` still resolves to `TonemapShaderRD:0` with `graphics_recipe_hash="0x9c44278c"`
+- the nearest meaningful downstream comparison is still `Command Graph (L88) (Draw)`
+- that comparison still classifies as:
+  - `relation="different_pipeline_different_compatibility_context"`
+  - `graphics_recipe_relation="different_graphics_recipe"`
+  - `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`
+- the already-reduced seams remain reduced:
+  - `bind_owned_attachment` still demotes the render-pass-handle mismatch to compatible aliasing
+  - `setup_pair_contract` still keeps the serial-`8 -> 9` handshake clean
+  - `tonemap_to_l88_transition.first_meaningful_expansion="l88_label"` still keeps Tonemap as the first poisoned-boundary candidate
+
+### Recommended next seam
+
+If the next pass stays inside the surviving changed-component set, inspect **`vertex_input_recipe` first**.
+
+Why this is the tightest next backend-owned seam:
+
+- `pipeline_layout` already looks less suspicious after the clean serial-`8 -> 9` contract proof
+- `blend_recipe` and `specialization_constants` are still real deltas, but they stay broader shader-configuration buckets
+- `vertex_input_recipe` is the most structural surviving difference in the Tonemap-vs-L88 contrast and should be easiest to instrument down to a necessary/sufficient backend-owned contract
+
+### Remaining caution
+
+This classification is strong for the Tonemap-vs-`L88` comparison slice, but it is not yet proof that any single changed component is uniquely toxic by itself.
+
+## 2026-05-19 — bead `oc-lb4` QA validation (Tonemap vertex-input recipe seam at serial `8`)
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-vertex-input-qa-vulkan-sourcebuild-20260519-121213/`
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-vertex-input-qa-vulkan-sourcebuild-20260519-121213/context.txt`
+- exact command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-vertex-input-qa-vulkan-sourcebuild-20260519-121213/exact_command.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-vertex-input-qa-vulkan-sourcebuild-20260519-121213/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-vertex-input-qa-vulkan-sourcebuild-20260519-121213/exit_status.txt`
+
+### Exact run
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-vertex-input-qa-vulkan-sourcebuild-20260519-121213 no_present compositor projection_only disabled 120`
+
+### What QA re-verified
+
+- the refreshed source-built repro still fails on the same envelope: frame-1 main submission `submit_serial=9` queues, later hits `fence_wait_error ... wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`
+- `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate in `tonemap_pass_scope` and `tonemap_local_attachment`
+- the downstream Tonemap -> `Command Graph (L88) (Draw)` transition still stays gap-free: `backend_gap_commands=0`, `gap_has_backend_commands=false`, `post_gap_backend_command_count=0`, and `first_meaningful_expansion="l88_label"`
+
+### Vertex-input classification
+
+- Tonemap pipeline-bind serial `8` still resolves to Tonemap-owned provenance with `shader_name="TonemapShaderRD:0"`
+- Tonemap serial `8` still carries `vertex_input_class="null_vertex_input"` with:
+  - `binding_count=0`
+  - `attribute_count=0`
+  - `binding_stride_total=0`
+  - `binding_input_rate_mask="0x0"`
+  - `attribute_location_mask="0x0"`
+  - `attribute_binding_mask="0x0"`
+  - no binding/attribute layout or format hashes
+- the nearest meaningful compare at `Command Graph (L88) (Draw)` resolves to `vertex_input_class="instanced_vertex_input"` with:
+  - `binding_count=1`
+  - `attribute_count=8`
+  - `binding_stride_total=128`
+  - `binding_input_rate_mask="0x1"`
+  - `attribute_location_mask="0xff00"`
+  - `attribute_binding_mask="0x1"`
+  - `binding_layout_hash="0x93ad1991"`
+  - `attribute_layout_hash="0xad06536e"`
+  - `attribute_format_hash="0x5eb7e4a9"`
+- the new compare block classifies that exact delta as `vertex_input_delta={relation="null_vs_streamed_vertex_input", ... base_class="null_vertex_input", other_class="instanced_vertex_input" ...}`
+
+### QA conclusion
+
+- the instrumentation **does** sharpen the recipe story, but the remaining pipeline-owned seam still **does not collapse to a vertex-input-only boundary**
+- the same `recipe_delta.changed_components` set remains broad: `["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`
+- so the correct classification is:
+  - `vertex_input_delta` itself is a real Tonemap-vs-L88 contrast (`null_vertex_input` -> `instanced_vertex_input`)
+  - but the overall surviving recipe seam still stays **broad multi-component**, not a narrowed vertex-input-owned poisoned boundary
+- useful side read from the same artifact: the older pipeline-bind-owned lane stayed reduced rather than growing. `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}` and `setup_pair_contract={contract_class="pair_contract_clean",...}` still leave the Tonemap-owned packet isolated without turning vertex input into the sole surviving culprit
+
+### Runtime noise
+
+- repeated compositor callback `vformat` formatting errors still appeared in the log
+- they did not prevent the repro or change the vertex-input classification
+
+## 2026-05-19 — bead `oc-ifh` QA validation (Tonemap blend-recipe seam at serial `8`)
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-blend-qa-vulkan-sourcebuild-20260519-123655/`
+- context: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-blend-qa-vulkan-sourcebuild-20260519-123655/context.txt`
+- exact command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-blend-qa-vulkan-sourcebuild-20260519-123655/exact_command.txt`
+- stdout/log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-blend-qa-vulkan-sourcebuild-20260519-123655/stdout.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-blend-qa-vulkan-sourcebuild-20260519-123655/exit_status.txt`
+
+### Exact run
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-blend-qa-vulkan-sourcebuild-20260519-123655 no_present compositor projection_only disabled 120`
+
+### What QA re-verified
+
+- the refreshed source-built repro still fails on the same envelope: frame-1 main submission `submit_serial=9` queues, later hits `fence_wait_error ... wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`
+- `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate in `tonemap_pass_scope` and `tonemap_local_attachment`
+- the downstream Tonemap -> `Command Graph (L88) (Draw)` transition still stays gap-free: `backend_gap_commands=0`, `gap_has_backend_commands=false`, `post_gap_backend_command_count=0`, and `first_meaningful_expansion="l88_label"`
+
+### Blend classification
+
+- Tonemap pipeline-bind serial `8` still resolves to Tonemap-owned provenance with `shader_name="TonemapShaderRD:0"`
+- the new compare block now classifies the blend lane specifically as:
+  - `blend_delta={relation="different_attachment_recipe_same_constants", ...}`
+  - `attachment_recipe_hash_changed=true`
+  - `constant_value_hash_changed=false`
+  - `blend_enabled_attachment_mask_changed=true`
+  - `dynamic_blend_constants_changed=false`
+  - `uses_constant_factors_changed=false`
+- Tonemap’s own blend recipe remains a no-blend packet:
+  - `blend_enabled_attachment_mask="0x0"`
+  - `blend_attachment_recipe_hash="0xb9952359"`
+  - `blend_constant_value_hash="0xf90490b7"`
+  - `blend_summary.first_active_attachment.blend_enable=false`
+- the nearest meaningful compare at `Command Graph (L88) (Draw)` stays a blended neighbor with the same constant provenance but a different attachment recipe:
+  - `blend_enabled_attachment_mask="0x1"`
+  - `blend_attachment_recipe_hash="0x4e489967"`
+  - `blend_constant_value_hash="0xf90490b7"`
+  - `blend_summary.first_active_attachment={blend_enable=true,src_color=6,dst_color=7,color_op=0,src_alpha=1,dst_alpha=7,alpha_op=0,uses_constant_factors=false}`
+- the live command state also stays clean for blend constants on the Tonemap packet:
+  - `blend_constants={set=false,hash=none,last_set_serial=0,values=[0.0, 0.0, 0.0, 0.0]}`
+  - no `set_blend_constants` activity appears between Tonemap bind serial `8` and the later failing `submit_serial=9`
+
+### QA conclusion
+
+- the instrumentation **does** narrow the surviving blend-owned bucket to a smaller classification: the Tonemap-vs-L88 contrast is now specifically an **attachment-recipe-only blend delta with shared constant provenance**, not a dynamic blend-constant or constant-factor seam
+- however, the overall surviving pipeline-owned seam still **does not collapse to a blend-only poisoned sub-boundary**
+- `recipe_delta.changed_components` remains broad: `["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`
+- so the correct classification is:
+  - `blend_delta` itself narrows to `different_attachment_recipe_same_constants`
+  - but the surviving Tonemap-owned packet still remains a **broad multi-component pipeline-owned seam**, not an isolated blend-only culprit
+- the already-reduced ownership lanes stay reduced rather than regrowing:
+  - `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}`
+  - `setup_pair_contract={contract_class="pair_contract_clean",...}`
+- therefore `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`
+
+### Runtime noise
+
+- repeated compositor callback `vformat` formatting errors still appeared in the log (`12` occurrences in this rerun)
+- Wayland decoration/icon warnings appeared at startup
+- none of that changed the blend classification or the broader failing-submit interpretation
+
+## 2026-05-19 — bead `oc-76k` QA validation (Tonemap specialization-constant seam at serial `8`)
+
+Run the same minimum valid host-Vulkan source-built repro after the refreshed branch added the new `specialization_delta={...}` payload to the Tonemap -> neighboring-pass comparison lane. The question for this pass was whether the surviving Tonemap -> `Command Graph (L88) (Draw)` seam now collapses specifically to specialization constants or still remains broad alongside `pipeline_layout` and other recipe buckets, while confirming whether Tonemap still remains the first poisoned-boundary candidate.
+
+### Repro / artifact
+
+- Binary: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- Project: `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`
+- Harness: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- Mode: `projection_only__disabled` with `no_present compositor projection_only disabled 120`
+- Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-specialization-seam-vulkan-sourcebuild-20260519-164911`
+- Log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-specialization-seam-vulkan-sourcebuild-20260519-164911/stdout.log`
+- Observed repro result: abort / exit `134` on the expected failing path (`submit_serial=9` -> later `BLIT_PASS`)
+
+### Specialization-constant classification
+
+On the failing `submit_serial=9` command summary, QA observed the new Tonemap -> `Command Graph (L88) (Draw)` packet comparison inside `tonemap_pass_scope.target.tonemap_local_attachment.local_packet_split.pipeline_bind_seam.neighboring_pass_pipeline_compare.next.recipe_delta=`:
+
+- `relation="different_pipeline_different_compatibility_context"`
+- `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`
+- `specialization_delta={relation="different_specialization_recipe",hash_changed=true,id_hash_changed=true,value_hash_changed=true,count_changed=true,type_mask_changed=true,int_count_changed=true,min_id_changed=true,...}`
+- Tonemap/base specialization packet:
+  - `count=0`
+  - `type_mask="0x0"`
+  - `id_hash="0x208ccbee"`
+  - `value_hash="0x208ccbee"`
+  - `preview=[]`
+- `L88`/other specialization packet:
+  - `count=1`
+  - `type_mask="0x2"`
+  - `int_count=1`
+  - `id_hash="0xc5247e53"`
+  - `value_hash="0xc5247e53"`
+  - `preview=[{id=0,type="int",bits="0x0",value=0}]`
+
+That proves the specialization lane is now a real surviving Tonemap-vs-`L88` contrast rather than an uninstrumented unknown. But it does **not** collapse the seam to specialization constants alone. The same exact payload still reports a broad multi-bucket contrast at the same boundary:
+
+- `vertex_input_recipe` still changes (`null_vertex_input` -> `instanced_vertex_input`)
+- `blend_recipe` still changes (`different_attachment_recipe_same_constants`)
+- `pipeline_layout` still remains in `changed_components`
+- the overall packet relation still stays `different_pipeline_different_compatibility_context`
+
+So the exact classification answer for bead `oc-76k` is:
+
+1. specialization constants are a **confirmed surviving changed component** in the Tonemap -> `L88` contrast
+2. the seam does **not** reduce to a specialization-only sub-boundary on this evidence package
+3. the surviving Tonemap-owned packet remains a **broad multi-component pipeline-owned seam** spanning at least `vertex_input_recipe`, `blend_recipe`, `specialization_constants`, and `pipeline_layout`
+
+### Tonemap still remains the first poisoned-boundary candidate
+
+The same rerun preserved the already-settled Tonemap-first ownership story:
+
+- `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",pair_contract_exact=true,...}` still keeps the surviving seam on serial-`8` pipeline-owned state rather than the serial-`8 -> 9` handshake
+- `tonemap_to_l88_transition={backend_gap_commands=0,gap_has_backend_commands=false,post_gap_backend_command_count=0,first_meaningful_expansion="l88_label",...}` still keeps the first downstream ownership expansion exactly at `Command Graph (L88) (Draw)`
+- `submit_serial=9` remains the first failing frame-1 main submission
+- `fence_wait_error submit_serial=9 wait_result=-4` still remains the first explicit failure site
+
+So the new specialization payload sharpens one more surviving recipe bucket, but it does **not** displace `Tonemap (L87) (Draw)` as the first poisoned-boundary candidate.
+
+### QA verdict
+
+- Tonemap serial `8` still resolves to the first surviving self-owned pipeline-owned packet on the failing `submit_serial=9` path
+- the new specialization payload confirms a real Tonemap-vs-`L88` specialization contrast: Tonemap has zero specialization constants while `L88` carries one `int` specialization constant (`id=0`, `value=0`)
+- however the same boundary still remains broad across multiple buckets, with `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`
+- exact classification: **the remaining seam does not collapse to specialization constants; it remains a broad multi-bucket pipeline-owned seam that includes specialization constants alongside pipeline layout, vertex input, and blend recipe differences**
+- `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`
+
+### Runtime noise
+
+- the usual compositor callback `vformat` formatting noise still appeared in the log
+- Wayland decoration/icon warnings still appeared at startup
+- none of that changed the specialization classification or the broader failing-submit interpretation
+
+## 2026-05-19 — bead `oc-bgd` QA validation (Tonemap pipeline-layout seam at serial `8`)
+
+Run the same minimum valid host-Vulkan source-built repro after the refreshed branch added the new `pipeline_layout_delta={...}` payload to the Tonemap -> neighboring-pass comparison lane. The question for this pass was whether the surviving Tonemap -> `Command Graph (L88) (Draw)` seam now collapses specifically to pipeline layout or still remains broad alongside the other surviving recipe buckets, while confirming whether Tonemap still remains the first poisoned-boundary candidate.
+
+### Artifact root and failure envelope
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-19/official-tonemap-pipeline-layout-qa-vulkan-sourcebuild-20260519-195448/`
+- exact command saved at `exact_command.txt` under that root
+- observed repro result: abort / exit `134` on the expected failing path (`submit_serial=9` -> later `BLIT_PASS`)
+- the first failing frame-1 main submission still queues as `submit_serial=9`, later hits `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`
+- `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate in `tonemap_pass_scope` and `tonemap_local_attachment`
+- the downstream Tonemap -> `Command Graph (L88) (Draw)` transition still stays gap-free: `backend_gap_commands=0`, `gap_has_backend_commands=false`, `post_gap_backend_command_count=0`, and `first_meaningful_expansion="l88_label"`
+
+### Tonemap pipeline-layout classification
+
+On the failing `submit_serial=9` command summary, QA observed the new Tonemap -> `Command Graph (L88) (Draw)` packet comparison inside `tonemap_pass_scope.target.tonemap_local_attachment.local_packet_split.pipeline_bind_seam.neighboring_pass_pipeline_compare.next.recipe_delta=`:
+
+- `pipeline_layout_delta={relation="different_pipeline_layout_recipe",handle_changed=true,descriptor_set_layout_hash_changed=true,descriptor_set_layout_count_changed=false,first_descriptor_set_layout_handle_changed=true,last_descriptor_set_layout_handle_changed=true,push_constant_hash_changed=true,push_constant_range_count_changed=false,push_constant_stage_mask_changed=true,push_constant_total_offset_changed=false,push_constant_total_size_changed=true,...}`
+- Tonemap/base pipeline-layout recipe:
+  - `descriptor_set_layout_count=4`
+  - `descriptor_set_layout_hash="0xb45ace77"`
+  - `push_constant_hash="0x8f2faf58"`
+  - `push_constant_stage_mask="0x10"`
+  - `push_constant_total_size=112`
+- immediate `L88` neighbor pipeline-layout recipe:
+  - `descriptor_set_layout_count=4`
+  - `descriptor_set_layout_hash="0x23ba2460"`
+  - `push_constant_hash="0x9b5fef81"`
+  - `push_constant_stage_mask="0x11"`
+  - `push_constant_total_size=32`
+
+That proves pipeline layout is a **real surviving changed recipe bucket** in the Tonemap-vs-`L88` contrast, and it is now structurally explained down to descriptor-set-layout lineage plus push-constant recipe drift. But it does **not** collapse the seam to pipeline layout alone. The same exact payload still reports a broad multi-bucket contrast at the same boundary:
+
+- `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`
+- the compare relation still stays `different_pipeline_different_compatibility_context`
+- the already-reduced ownership lanes remain reduced rather than reopening:
+  - `bind_owned_attachment={class="direct_pipeline_bind_exhausted",narrower_bind_owned_seam="none",...}`
+  - `setup_pair_contract={contract_class="pair_contract_clean",next_seam_candidate="pipeline_owned_state",...}`
+
+### Exact classification
+
+- pipeline layout is now a **confirmed, structurally explained surviving bucket**, not an opaque handle-only drift
+- however the remaining Tonemap -> `L88` seam still remains broad across multiple buckets, with `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]`
+- exact classification: **the remaining seam does not collapse to pipeline layout; it remains a broad multi-bucket pipeline-owned seam that includes pipeline layout alongside vertex input, blend recipe, and specialization-constant differences**
+- `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`
+
+### Runtime noise
+
+- the usual compositor callback `vformat` formatting noise still appeared in the log (`12` occurrences)
+- startup Wayland warnings still appeared (`XDG decoration manager`, `xdg-toplevel-icon`, and `FIFO protocol`)
+- none of that changed the pipeline-layout classification or the broader failing-submit interpretation
+
+## 2026-05-20 — bead `oc-91u` coder validation (Tonemap-vs-`L88` combined surviving-recipe interaction seam)
+
+Run the same minimum valid host-Vulkan source-built repro after the refreshed branch added the new `surviving_bucket_interaction={...}` classifier to the Tonemap -> neighboring-pass recipe comparison lane. The narrow question for this pass was whether the surviving Tonemap -> `Command Graph (L88) (Draw)` seam can now be honestly described as a **combined interaction** of the remaining changed buckets — `vertex_input_recipe`, `blend_recipe`, `specialization_constants`, and `pipeline_layout` — rather than as one surviving bucket in isolation.
+
+### Artifact root and failure envelope
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-combined-interaction-vulkan-sourcebuild-20260520-121325/`
+- exact command saved at `exact_command.txt` under that root
+- observed repro result: abort / exit `134` on the expected failing path (`submit_serial=9` -> later `BLIT_PASS`)
+- the first failing frame-1 main submission still queues as `submit_serial=9`, later hits `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`
+- `Tonemap (L87) (Draw)` still remains the first self-owned poisoned-boundary candidate in `tonemap_pass_scope` / `tonemap_local_attachment`
+- the downstream Tonemap -> `Command Graph (L88) (Draw)` transition still stays gap-free: `backend_gap_commands=0`, `gap_has_backend_commands=false`, `post_gap_backend_command_count=0`, and `first_meaningful_expansion="l88_label"`
+
+### Combined surviving-bucket interaction classification
+
+On the failing `submit_serial=9` command summary, QA/coder observed the new Tonemap -> `Command Graph (L88) (Draw)` packet comparison inside `tonemap_pass_scope.target.tonemap_local_attachment.local_packet_split.pipeline_bind_seam.neighboring_pass_pipeline_compare.next.recipe_delta=`:
+
+- `changed_components=["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]` still remains the exact surviving changed set
+- the new `surviving_bucket_interaction={...}` block now reports:
+  - `tracked_changed_bucket_count=4`
+  - `full_combo_hash_changed=true`
+  - `proper_subset_match_counts={size1=0,size2=0,size3=0}`
+  - `largest_matching_proper_subset_size=0`
+  - `minimal_distinguishing_changed_bucket_count=4`
+  - `classification="full_four_bucket_interaction"`
+  - `matching_largest_proper_subsets=[]`
+  - `minimal_changed_bucket_candidates=[["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]]`
+
+This is the first honest structural cut that answers the planning question directly. Within the locked Tonemap-vs-`L88` neighbor comparison, **no proper subset of the surviving buckets matches across the seam** — not any single bucket, not any pair, and not any 3-of-4 subset. So the surviving Tonemap -> `L88` recipe boundary is now best classified as a **full four-bucket interaction** rather than as a single-bucket survivor that just had not been named yet.
+
+### Exact classification
+
+- the seam still does **not** collapse to one isolated surviving bucket
+- the new interaction classifier tightens the read beyond the older per-bucket passes: the smallest still-distinguishing structural delta at the locked Tonemap -> `L88` compare is the **entire four-bucket set together**
+- exact classification: **the surviving poisoned-boundary contrast is currently a full four-bucket interaction across `vertex_input_recipe`, `blend_recipe`, `specialization_constants`, and `pipeline_layout` at the Tonemap -> `Command Graph (L88) (Draw)` seam**
+- this remains a structural classification on the same failing `submit_serial=9` path, not yet a causal proof of which field inside that four-bucket packet is toxic
+- `Tonemap (L87) (Draw)` still remains the first poisoned-boundary candidate on failing `submit_serial=9`
+
+## 2026-05-20 — bead `oc-f9d` coder validation (pre-rebind carried Tonemap pipeline-packet contract at `L88`)
+
+Stay on the same minimum valid host-Vulkan source-built repro after the refreshed branch added the new `pre_rebind_carried_packet_contract={...}` classifier inside the existing Tonemap -> `L88` boundary handoff lane. The narrow question for this pass was no longer which broad Tonemap-vs-`L88` recipe buckets diverge after rebinding — that was already locked — but which **carried Tonemap packet contract fields** remain live *before* `L88` performs its first pipeline rebind, and whether the minimum still-distinguishing pre-rebind hazard is exact packet identity/layout/push-constant carry or only the carried packet’s render-pass lineage.
+
+### Result summary
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-pre-rebind-contract-vulkan-sourcebuild-20260520-151506/`
+- observed repro result: abort / exit `134` on the expected failing path (`submit_serial=9` -> later `BLIT_PASS`)
+- the first failing frame-1 main submission still queues as `submit_serial=9`, later hits `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`
+- the Tonemap -> `L88` handoff still stays gap-free: `backend_gap_commands=0`, `gap_has_backend_commands=false`, `post_gap_backend_command_count=0`, and `l88_pipeline_before_keeps_carried_packet=true`
+- `L88` still re-establishes render-pass/framebuffer scope before its own first rebind: `l88_reestablishes_scope_before_own_pipeline=true`
+
+### Pre-rebind carried packet classification
+
+On the failing `submit_serial=9` command summary, coder observed the new `tonemap_pass_scope.target.tonemap_l88_contrast.pre_rebind_carried_packet_contract=` payload:
+
+- `classification="exact_pipeline_packet_with_compatible_only_render_pass_lineage"`
+- `minimum_distinguishing_hazard="render_pass_compatibility_lineage_attached_to_carried_packet"`
+- `pipeline_identity={relation="same_pipeline",exact=true,...}`
+- `pipeline_layout_descriptor_contract={exact=true,layout_handle_match=true,descriptor_set_layout_hash_match=true,descriptor_set_layout_count_match=true,first_descriptor_set_layout_handle_match=true,last_descriptor_set_layout_handle_match=true,...}`
+- `push_constant_range_contract={exact=true,hash_match=true,range_count_match=true,stage_mask_match=true,total_offset_match=true,total_size_match=true,...}`
+- `render_pass_lineage={relation="different_handle_same_render_pass_compatibility",exact=false,compatible_only=true,...}`
+
+That is the narrow answer the prior planning slice asked for. Before `L88` does its own pipeline bind, the carried Tonemap packet is still the **exact same pipeline object** with the **exact same pipeline-layout / descriptor-set-layout provenance** and the **exact same push-constant-range contract**. The only tracked field family that is no longer exact at that pre-rebind moment is the packet’s attached render-pass lineage: the active `L88` scope has a different render-pass handle and different exact render-pass hash, but it still matches the carried packet by render-pass compatibility hash, subpass compatibility hash, and subpass index.
+
+### Conclusion
+
+This narrows the remaining pre-rebind seam one step further without reopening older demoted lanes:
+
+- the minimum still-distinguishing hazard **before** `L88` first pipeline rebind is **not** exact pipeline identity drift
+- it is **not** pipeline-layout / descriptor-set-layout provenance drift
+- it is **not** push-constant-range drift
+- the smallest surviving pre-rebind contract hazard is the **carried packet’s render-pass compatibility lineage**: exact packet identity/layout/push constants are preserved, while the carried pipeline remains attached to Tonemap’s render-pass lineage and only matches `L88`’s re-established active scope at the compatibility level
+
+### Runtime noise
+
+- the usual compositor callback `vformat` formatting noise still appeared in the log
+- startup Wayland warnings still appeared
+- none of that changed the combined-interaction classification or the broader failing-submit interpretation
+
+## 2026-05-20 — bead `oc-s5m` coder validation (smallest pre-rebind render-pass lineage field before `L88` first rebind)
+
+Stay on the same minimum valid host-Vulkan source-built repro after the refreshed branch added one narrower render-pass-lineage cut inside the existing `pre_rebind_carried_packet_contract={...}` lane. The question for this pass was no longer whether the carried Tonemap packet vs rebuilt pre-rebind `L88` scope differs only by render-pass compatibility-lineage in the broad sense — that was already locked — but which **exact render-pass lineage field family** is still the minimum still-distinguishing contract hazard once compatibility-hash, subpass-compatibility, pipeline identity, layout provenance, and push-constant-range contract are all held fixed.
+
+### Result summary
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-pre-rebind-lineage-vulkan-sourcebuild-20260520-180122/`
+- exact command saved at `exact_command.txt` under that root
+- observed repro result: abort / exit `134` on the expected failing path (`submit_serial=9` -> later `BLIT_PASS`)
+- the first failing frame-1 main submission still queues as `submit_serial=9`, later hits `fence_wait_error submit_serial=9 wait_result=-4`, and the later lost-device breadcrumb still collapses to `BLIT_PASS`
+- the Tonemap -> `L88` handoff still stays gap-free and still preserves the carried Tonemap packet up to `L88`’s first bind (`l88_pipeline_before_keeps_carried_packet=true`)
+
+### New lineage-field classifier
+
+The refreshed lane persists three exact-only render-pass lineage family hashes onto both the carried pipeline provenance and the active pre-rebind scope snapshot:
+
+- `render_pass_attachment_exact_hash`
+- `render_pass_dependency_hash`
+- `render_pass_view_density_hash`
+
+Those fields now feed a new `render_pass_lineage={field_classifier,minimum_distinguishing_field,...}` block nested inside `pre_rebind_carried_packet_contract=` on the failing `submit_serial=9` summary.
+
+### Classification outcome
+
+On the failing `submit_serial=9` command summary, coder observed:
+
+- `pre_rebind_carried_packet_contract={classification="exact_pipeline_packet_with_compatible_only_render_pass_lineage",minimum_distinguishing_hazard="attachment_exact_recipe",...}`
+- `render_pass_lineage={relation="different_handle_same_render_pass_compatibility",exact=false,compatible_only=true,field_classifier="attachment_exact_recipe_is_minimum_hazard",minimum_distinguishing_field="attachment_exact_recipe",...}`
+- `compatibility_hash_match=true`
+- `subpass_compatibility_hash_match=true`
+- `attachment_exact_hash_match=false`
+- `dependency_hash_match=true`
+- `view_density_hash_match=true`
+- `subpass_match=true`
+- `subpass_count_match=true`
+- `attachment_count_match=true`
+- `dependency_count_match=true`
+- `view_count_match=true`
+- `fragment_density_usage_match=true`
+
+This is the narrowest honest answer currently available on the locked pre-rebind lane. The carried Tonemap packet and rebuilt active `L88` scope still disagree on render-pass handle and exact render-pass recipe, but once the compatibility spine is held fixed, the remaining exact-only family split is **not** dependency lineage and **not** view-density lineage. The minimum still-distinguishing render-pass contract hazard is the **attachment exact recipe**.
+
+### Exact conclusion
+
+- exact pipeline identity still survives before `L88` rebinds
+- exact pipeline-layout / descriptor-set-layout provenance still survives before `L88` rebinds
+- exact push-constant-range contract still survives before `L88` rebinds
+- exact render-pass dependency lineage also survives across the carried Tonemap packet vs rebuilt pre-rebind `L88` scope
+- exact render-pass view-density lineage also survives across that same seam
+- the smallest surviving render-pass-lineage hazard is therefore the **attachment exact recipe** attached to the carried Tonemap packet before `L88` first pipeline rebind
+
+### Runtime noise
+
+- the usual compositor callback `vformat` formatting noise still appeared in the log
+- startup Wayland warnings still appeared
+- none of that changed the attachment-exact-recipe classification or the broader failing-submit interpretation
+
+## 2026-05-20 — bead `oc-sld` coder validation (minimum attachment exact-recipe field before `L88` first rebind)
+
+Stay on the same minimum valid host-Vulkan source-built repro after the refreshed branch narrowed the carried Tonemap packet vs rebuilt pre-rebind `L88` scope seam all the way down to the render-pass attachment exact recipe. The question for this pass was no longer which broad render-pass lineage family survives — that was already locked to attachment exactness — but which **specific attachment exact-recipe field** is still the minimum still-distinguishing contract hazard once attachment count, compatibility lineage, dependency lineage, view-density lineage, pipeline identity, layout provenance, and push-constant-range contract are all held fixed.
+
+### Result summary
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-attachment-exact-vulkan-sourcebuild-20260520-182834/`
+- exact command saved at `exact_command.txt` under that root
+- observed repro result: abort / exit `134` on the expected failing path (`submit_serial=9` -> later `BLIT_PASS`)
+- the Tonemap -> `L88` handoff still stays gap-free and still preserves the carried Tonemap packet up to `L88`’s first bind (`l88_pipeline_before_keeps_carried_packet=true`)
+
+### New attachment-field classifier
+
+The refreshed lane now persists per-field attachment exact-recipe hashes onto both the carried pipeline provenance and the active pre-rebind scope snapshot for:
+
+- `format`
+- `samples`
+- `load_op`
+- `store_op`
+- `stencil_load_op`
+- `stencil_store_op`
+- `initial_layout`
+- `final_layout`
+
+Those fields now feed a nested `attachment_exact_recipe={field_classifier,minimum_distinguishing_field,...}` block inside `pre_rebind_carried_packet_contract.render_pass_lineage=` on the failing `submit_serial=9` summary.
+
+### Classification outcome
+
+On the failing `submit_serial=9` command summary, coder observed:
+
+- `attachment_exact_recipe={exact=false,field_classifier="load_op_is_minimum_attachment_exact_hazard",minimum_distinguishing_field="load_op",mismatch_count=1,mismatch_fields=["load_op"],...}`
+- `attachment_count_match=true`
+- `format_match=true`
+- `samples_match=true`
+- `load_op_match=false`
+- `store_op_match=true`
+- `stencil_load_op_match=true`
+- `stencil_store_op_match=true`
+- `initial_layout_match=true`
+- `final_layout_match=true`
+
+This is the narrowest honest answer currently available on the locked pre-rebind lane. The carried Tonemap packet and rebuilt active `L88` scope still disagree on render-pass handle and whole exact render-pass recipe, but once the seam is reduced only to attachment exactness, **every tracked attachment exact-recipe field matches except `load_op`**.
+
+### Exact conclusion
+
+- exact attachment count still survives across the carried Tonemap packet vs rebuilt pre-rebind `L88` scope
+- exact attachment `format`, `samples`, `store_op`, `stencil_load_op`, `stencil_store_op`, `initial_layout`, and `final_layout` all survive across that same seam
+- the **only** still-distinguishing attachment exact-recipe field is `load_op`
+- the smallest surviving pre-rebind contract hazard is therefore the carried Tonemap packet’s attachment **`load_op` exactness** before `L88` first pipeline rebind
