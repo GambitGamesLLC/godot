@@ -73,6 +73,23 @@ static const char *_debug_draw_list_load_op_source_to_string(DebugDrawListLoadOp
 			return "unknown";
 	}
 }
+
+static const char *_debug_discardable_provenance_to_string(RenderingDeviceGraph::DebugDiscardableProvenance p_provenance) {
+	switch (p_provenance) {
+		case RenderingDeviceGraph::DEBUG_DISCARDABLE_PROVENANCE_ROOT_TEXTURE_CREATE:
+			return "root_texture_create";
+		case RenderingDeviceGraph::DEBUG_DISCARDABLE_PROVENANCE_SHARED_FALLBACK_CREATE:
+			return "shared_fallback_create";
+		case RenderingDeviceGraph::DEBUG_DISCARDABLE_PROVENANCE_SLICE_TRACKER_CREATE:
+			return "slice_tracker_create";
+		case RenderingDeviceGraph::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_TRUE:
+			return "texture_set_discardable_true";
+		case RenderingDeviceGraph::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_FALSE:
+			return "texture_set_discardable_false";
+		default:
+			return "unknown";
+	}
+}
 #endif
 
 RenderingDeviceGraph::RenderingDeviceGraph() {
@@ -957,7 +974,8 @@ void RenderingDeviceGraph::_get_draw_list_render_pass_and_framebuffer(const Reco
 		for (uint32_t i = 0; i < p_draw_list_command->trackers_count; i++) {
 			const ResourceTracker *tracker = p_draw_list_command->trackers()[i];
 			const bool has_parent = tracker != nullptr && tracker->parent != nullptr;
-			attachment_summaries.push_back(vformat("{index=%d,load_op=%d,store_op=%d,source=\"%s\",tracker_discardable=%s,tracker_has_parent=%s,tracker_write_index=%d,parent_write_index=%d,texture_usage=0x%x}", i, (int)load_ops[i], (int)store_ops[i], _debug_draw_list_load_op_source_to_string((DebugDrawListLoadOpSource)debug_load_op_sources[i]), tracker != nullptr && tracker->is_discardable ? "true" : "false", has_parent ? "true" : "false", tracker != nullptr ? tracker->write_command_or_list_index : -1, has_parent ? tracker->parent->write_command_or_list_index : -1, tracker != nullptr ? tracker->texture_usage : 0));
+			const bool is_non_discardable_default = debug_load_op_sources[i] == DEBUG_DRAW_LIST_LOAD_OP_SOURCE_NON_DISCARDABLE_DEFAULT;
+			attachment_summaries.push_back(vformat("{index=%d,load_op=%d,store_op=%d,source=\"%s\",tracker_discardable=%s,tracker_has_parent=%s,tracker_write_index=%d,parent_write_index=%d,texture_usage=0x%x,discardable_provenance=\"%s\",discardable_seed=%s,non_discardable_basis=\"%s\",default_non_discardable_policy=\"%s\"}", i, (int)load_ops[i], (int)store_ops[i], _debug_draw_list_load_op_source_to_string((DebugDrawListLoadOpSource)debug_load_op_sources[i]), tracker != nullptr && tracker->is_discardable ? "true" : "false", has_parent ? "true" : "false", tracker != nullptr ? tracker->write_command_or_list_index : -1, has_parent ? tracker->parent->write_command_or_list_index : -1, tracker != nullptr ? tracker->texture_usage : 0, tracker != nullptr ? _debug_discardable_provenance_to_string((DebugDiscardableProvenance)tracker->debug_discardable_provenance) : "unknown", tracker != nullptr && tracker->debug_discardable_seed_value ? "true" : "false", is_non_discardable_default ? "tracker_is_non_discardable" : "n/a", is_non_discardable_default ? "always_load_without_extra_per_attachment_split" : "n/a"));
 		}
 		print_line(vformat("[gdgs-rdg] draw_list_render_pass_create key=0x%s render_pass_id=0x%s framebuffer_id=0x%s label=\"%s\" breadcrumb=%d attachments=%s", String::num_uint64(key, 16), String::num_uint64(storage.render_pass.id, 16), String::num_uint64(storage.framebuffer.id, 16), label_name, (int)p_draw_list_command->breadcrumb, String("[") + String(",").join(attachment_summaries) + "]"));
 #endif

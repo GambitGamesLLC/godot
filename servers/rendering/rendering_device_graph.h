@@ -179,6 +179,17 @@ public:
 		RESOURCE_USAGE_MAX
 	};
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	enum DebugDiscardableProvenance : uint8_t {
+		DEBUG_DISCARDABLE_PROVENANCE_UNKNOWN = 0,
+		DEBUG_DISCARDABLE_PROVENANCE_ROOT_TEXTURE_CREATE = 1,
+		DEBUG_DISCARDABLE_PROVENANCE_SHARED_FALLBACK_CREATE = 2,
+		DEBUG_DISCARDABLE_PROVENANCE_SLICE_TRACKER_CREATE = 3,
+		DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_TRUE = 4,
+		DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_FALSE = 5,
+	};
+#endif
+
 	struct ResourceTracker {
 		uint32_t reference_count = 0;
 		int64_t command_frame = -1;
@@ -209,6 +220,10 @@ public:
 		bool in_parent_dirty_list = false;
 		bool write_command_list_enabled = false;
 		bool is_discardable = false;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		uint8_t debug_discardable_provenance = DEBUG_DISCARDABLE_PROVENANCE_UNKNOWN;
+		bool debug_discardable_seed_value = false;
+#endif
 
 		_FORCE_INLINE_ void reset_if_outdated(int64_t new_command_frame) {
 			if (new_command_frame != command_frame) {

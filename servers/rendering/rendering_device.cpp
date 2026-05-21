@@ -1825,6 +1825,10 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 		tracker->texture_subresources = texture.barrier_range();
 		tracker->texture_usage = alias_format.usage_bits;
 		tracker->is_discardable = texture.is_discardable;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		tracker->debug_discardable_provenance = RDG::DEBUG_DISCARDABLE_PROVENANCE_SHARED_FALLBACK_CREATE;
+		tracker->debug_discardable_seed_value = texture.is_discardable;
+#endif
 		tracker->reference_count = 1;
 		texture.shared_fallback->texture_tracker = tracker;
 		texture.shared_fallback->revision = 0;
@@ -2005,6 +2009,10 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		tracker->texture_subresources = slice_range;
 		tracker->texture_usage = slice_format.usage_bits;
 		tracker->is_discardable = slice_format.is_discardable;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		tracker->debug_discardable_provenance = RDG::DEBUG_DISCARDABLE_PROVENANCE_SHARED_FALLBACK_CREATE;
+		tracker->debug_discardable_seed_value = slice_format.is_discardable;
+#endif
 		tracker->reference_count = 1;
 		texture.shared_fallback->texture_tracker = tracker;
 		texture.shared_fallback->revision = 0;
@@ -3100,10 +3108,18 @@ void RenderingDevice::texture_set_discardable(RID p_texture, bool p_discardable)
 
 	if (texture->draw_tracker != nullptr) {
 		texture->draw_tracker->is_discardable = p_discardable;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		texture->draw_tracker->debug_discardable_provenance = p_discardable ? RDG::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_TRUE : RDG::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_FALSE;
+		texture->draw_tracker->debug_discardable_seed_value = p_discardable;
+#endif
 	}
 
 	if (texture->shared_fallback != nullptr && texture->shared_fallback->texture_tracker != nullptr) {
 		texture->shared_fallback->texture_tracker->is_discardable = p_discardable;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		texture->shared_fallback->texture_tracker->debug_discardable_provenance = p_discardable ? RDG::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_TRUE : RDG::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_FALSE;
+		texture->shared_fallback->texture_tracker->debug_discardable_seed_value = p_discardable;
+#endif
 	}
 }
 
@@ -7457,6 +7473,10 @@ bool RenderingDevice::_texture_make_mutable(Texture *p_texture, RID p_texture_id
 						draw_tracker->texture_subresources = p_texture->barrier_range();
 						draw_tracker->texture_usage = p_texture->usage_flags;
 						draw_tracker->texture_slice_or_dirty_rect = p_texture->slice_rect;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+						draw_tracker->debug_discardable_provenance = RDG::DEBUG_DISCARDABLE_PROVENANCE_SLICE_TRACKER_CREATE;
+						draw_tracker->debug_discardable_seed_value = draw_tracker->is_discardable;
+#endif
 						(*owner_texture->slice_trackers)[p_texture->slice_rect] = draw_tracker;
 					}
 
@@ -7479,6 +7499,10 @@ bool RenderingDevice::_texture_make_mutable(Texture *p_texture, RID p_texture_id
 			p_texture->draw_tracker->texture_subresources = p_texture->barrier_range();
 			p_texture->draw_tracker->texture_usage = p_texture->usage_flags;
 			p_texture->draw_tracker->is_discardable = p_texture->is_discardable;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+			p_texture->draw_tracker->debug_discardable_provenance = RDG::DEBUG_DISCARDABLE_PROVENANCE_ROOT_TEXTURE_CREATE;
+			p_texture->draw_tracker->debug_discardable_seed_value = p_texture->is_discardable;
+#endif
 			p_texture->draw_tracker->reference_count = 1;
 
 			if (p_texture_id.is_valid()) {

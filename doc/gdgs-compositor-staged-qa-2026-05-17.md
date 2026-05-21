@@ -4480,3 +4480,57 @@ More precise statement now supported by direct evidence:
 - `Command Graph (L88) (Draw)` does not create a newer slot-0 `LOAD` variant; it enters the already-live Tonemap-owned `create_serial=13` scope and then performs its own pipeline/vertex/index rebind work inside it
 
 So the first attributable divergence is now classified as: **RDG Tonemap draw-list slot 0 chose `LOAD` because the attachment tracker contract said “non-discardable target with no clear/ignore override.”**
+
+## 2026-05-21 — Task 109 follow-up: split `non_discardable` attribution vs default-`LOAD` policy
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/exact_command.txt`
+- stdout: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/stdout.log`
+- stderr: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/stderr.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/exit_status.txt`
+
+### Diagnostic added
+
+A smaller debug-only follow-up was added in the owning Godot source tree:
+
+- `servers/rendering/rendering_device_graph.h`
+- `servers/rendering/rendering_device_graph.cpp`
+- `servers/rendering/rendering_device.cpp`
+
+It does two narrowly targeted things on the same locked repro lane:
+
+1. records discardable provenance for the tracker feeding the Tonemap draw-list attachment (`root_texture_create`, `shared_fallback_create`, `slice_tracker_create`, or explicit `texture_set_discardable_*` override)
+2. annotates the `non_discardable_default_load_contract` branch itself as an unconditional policy (`default_non_discardable_policy="always_load_without_extra_per_attachment_split"`)
+
+The relevant runtime lines from `stdout.log` were:
+
+- `[gdgs-rdg] draw_list_render_pass_create key=0x0 render_pass_id=0x7077c26b32e8 framebuffer_id=0x6503122abcd0 label="Tonemap" breadcrumb=0 attachments=[{index=0,load_op=0,store_op=0,source="non_discardable_default_load_contract",tracker_discardable=false,tracker_has_parent=false,tracker_write_index=132,parent_write_index=-1,texture_usage=0x8b,discardable_provenance="root_texture_create",discardable_seed=false,non_discardable_basis="tracker_is_non_discardable",default_non_discardable_policy="always_load_without_extra_per_attachment_split"}]`
+- `[gdgs-vk] begin_render_pass_scope create_serial=13 render_pass_id=0x7077c26b32e8 framebuffer_id=0x6503122abcd0 owner_label="Tonemap (L87) (Draw)" owner_level=87 breadcrumb=NONE attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72 compatibility_hash=0x425f4d3d`
+- `[gdgs-vk] begin_render_pass_scope create_serial=13 render_pass_id=0x7077c26b32e8 framebuffer_id=0x6503122abcd0 owner_label="Command Graph (L88) (Draw)" owner_level=88 breadcrumb=UI_PASS attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72 compatibility_hash=0x425f4d3d`
+
+### What this proves
+
+This split resolves the branch one step deeper without reopening demoted lanes:
+
+- the Tonemap slot-0 tracker is already a **root texture tracker** with `discardable_seed=false`
+- there is no parent/slice/shared-fallback nuance in this lane (`tracker_has_parent=false`, `discardable_provenance="root_texture_create"`)
+- once the code lands in the `non_discardable_default_load_contract` branch, there is **no further per-attachment policy split** for this case; the branch is just the unconditional default `LOAD`
+
+So the surviving seam is best explained by **why slot 0 is classified as non-discardable**, not by any deeper Tonemap-specific explanation of why the default non-discardable branch picked `LOAD`. On this lane, the default branch is boring and global; the meaningful remaining ownership fact is that the Tonemap attachment reaches it as a root texture tracker seeded non-discardable.
+
+### Updated interpretation
+
+The smallest honest current statement is now:
+
+- carried Tonemap pipeline packet still keeps slot 0 at `CLEAR`
+- Tonemap’s active-scope render-pass recipe still flips slot 0 to `LOAD`
+- that flip now cleanly decomposes into:
+  - **attribution seam:** slot 0 arrived as a root tracker seeded `is_discardable=false`
+  - **policy seam:** the non-discardable default branch is unconditional `LOAD`, with no narrower Tonemap-local sub-branch left to split here
+
+So the best next question, if the lane continues, is no longer “why does default non-discardable choose `LOAD`?” The better question is: **who/what made this Tonemap attachment root tracker non-discardable in the first place?**

@@ -2684,6 +2684,49 @@ What actually happened vs. the task question:
 
 ---
 
+### Task 109: Split the Tonemap RDG active-scope slot-0 `LOAD` decision into `non_discardable` attribution vs default-load policy
+
+**Bead ID:** `Pending`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. The current stopping point is locked: the first attributable source of slot-0 `LOAD` is the Tonemap RDG active-scope recipe branch `source="non_discardable_default_load_contract"` with `tracker_discardable=false`, and `L88` only reuses that already-live compatible scope. Add the smallest honest diagnostic that splits this branch one step deeper: determine whether the surviving seam is best explained by **why slot 0 is classified as non-discardable**, or by **why the default non-discardable branch chooses `LOAD`** for this Tonemap attachment. Prefer render-pass / RDG recipe / command-buffer ownership evidence over widening back into demoted lanes. If `bd` is healthy, create/claim the next bead on start; if the local bead CLI remains wedged, proceed on this exact task and record the bead blockage clearly in your results. Save durable notes/artifact references, update this plan with what actually happened, and close the bead if one exists.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/exit_status.txt`
+
+**Status:** ✅ Complete
+
+**Results:** Tried to create the next bead at task start, but the local `bd` CLI remained unhealthy/wedged again, so I did **not** burn more time fighting it and proceeded on the locked Task 109 scope with that blockage recorded here.
+
+Implemented the smallest honest follow-up in `rendering_device_graph.*` plus `rendering_device.cpp`: the Tonemap draw-list attachment debug payload now records **discardable provenance** (`root_texture_create`, `shared_fallback_create`, `slice_tracker_create`, or explicit `texture_set_discardable_*`) and annotates the `non_discardable_default_load_contract` branch itself as `default_non_discardable_policy="always_load_without_extra_per_attachment_split"`. That split is intentionally narrow: it does not reopen broader render-pass, pipeline, or post-rebind lanes; it only distinguishes whether the remaining seam lives in the attachment’s non-discardable attribution or in a narrower Tonemap-local policy branch under default non-discardable handling.
+
+Validation stayed on the same source-built host-Vulkan `projection_only__disabled` lane using artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `context.txt`, `exit_status.txt`). The repro still aborts at `submit_serial=9` with `exit_status=134`, and the new evidence resolves the requested split cleanly:
+
+- Tonemap runtime line: `[gdgs-rdg] draw_list_render_pass_create ... label="Tonemap" ... attachments=[{index=0,load_op=0,store_op=0,source="non_discardable_default_load_contract",tracker_discardable=false,tracker_has_parent=false,...,discardable_provenance="root_texture_create",discardable_seed=false,non_discardable_basis="tracker_is_non_discardable",default_non_discardable_policy="always_load_without_extra_per_attachment_split"}]`
+- Vulkan scope lines still show Tonemap and `L88` sharing the already-live active `create_serial=13` scope with `attachment_load_ops=[0:LOAD]`.
+
+What actually happened vs. the Task 109 question:
+- The surviving seam is **best explained by why slot 0 is classified as non-discardable**, not by any narrower Tonemap-specific explanation of why the default non-discardable branch chooses `LOAD`.
+- In this locked lane, the Tonemap slot-0 tracker is already a **root texture tracker** with `discardable_seed=false` and `tracker_has_parent=false`; there is no slice/parent/shared-fallback nuance carrying the seam.
+- Once the code reaches `non_discardable_default_load_contract`, there is **no additional per-attachment policy split left** here: the default policy is simply unconditional `LOAD`.
+- So the next honest seam, if this lane continues, is upstream of the default-load rule: **who/what seeded this Tonemap attachment’s root tracker as non-discardable in the first place?**
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
@@ -2762,14 +2805,14 @@ Start the next session from this plan plus `REF-07`, then execute in this order:
 
 ### Landing-the-plane handoff
 
-**Stopping point:** The live failing seam is now pinned to the **Tonemap RDG active-scope recipe** that makes slot 0 non-discardable and therefore assigns `load_op=LOAD`, while the carried Tonemap pipeline packet still keeps slot 0 at `CLEAR` across the zero-gap handoff into `L88`.
+**Stopping point:** The live failing seam is now pinned one step deeper: Tonemap slot 0 reaches the RDG recipe as a **root tracker seeded `is_discardable=false`**, and the graph’s `non_discardable_default_load_contract` then applies an unconditional `LOAD`, while the carried Tonemap pipeline packet still keeps slot 0 at `CLEAR` across the zero-gap handoff into `L88`.
 
-**Best current one-line read:** the carried packet is not the first source of the `LOAD` divergence; the earliest concrete cause is Tonemap’s RDG `non_discardable_default_load_contract`, and `L88` just reuses that already-live compatible scope.
+**Best current one-line read:** the carried packet is still not the first source of the `LOAD` divergence; the earliest concrete cause is Tonemap’s root non-discardable attachment attribution feeding the unconditional RDG default-`LOAD` branch, and `L88` just reuses that already-live compatible scope.
 
-**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-active-scope-rebuild-recipe-vulkan-sourcebuild-20260520-223754/`
+**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/`
 
-**Best next move:** stay on the same locked repro lane and split the Tonemap RDG active-scope contract one step deeper: determine whether the smallest honest next seam is why slot 0 is classified as `non_discardable`, or why the default non-discardable branch chooses `LOAD` for this Tonemap attachment.
+**Best next move:** stay on the same locked repro lane and walk one step upstream of the default-load rule: determine **who/what seeds the Tonemap slot-0 root tracker as non-discardable** on this path. Do not reopen the already-resolved question of why default non-discardable chooses `LOAD`; that branch is now evidenced as unconditional in this lane.
 
 ---
 
-*Updated on 2026-05-20 (partial; stopping point advanced from an unattributed carried-vs-active `load_op` mismatch to the Tonemap RDG non-discardable default-load contract as the first attributable source of slot-0 `LOAD` before failing `submit_serial=9`)*
+*Updated on 2026-05-21 (partial; stopping point advanced from the Tonemap RDG non-discardable default-load contract as the first attributable source of slot-0 `LOAD` to the narrower fact that the remaining seam lives in the root tracker’s non-discardable attribution, while the default non-discardable policy itself is unconditional `LOAD` on this lane)*
