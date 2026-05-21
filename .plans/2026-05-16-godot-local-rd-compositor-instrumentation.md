@@ -2881,6 +2881,34 @@ What actually happened vs. the Task 109 question:
 
 ---
 
+### Task 116: Classify the exact eager shared-view enable condition for the Tonemap render target despite no observed need at failing `submit_serial=9`
+
+**Bead ID:** `oc-tas`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-tas` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: on this failing lane the transparent-support/shared-view ownership rule is too broad for the observed usage (`transparent_bg=false`, `viewport_texture_requests=0`), yet Tonemap still lands on `lane_policy=persistent_root_sampled_shared` and later hits the non-discardable `LOAD` path. Implement the smallest honest diagnostic needed to classify **what exact condition eagerly enables shared-view ownership anyway** for this render target on this lane — e.g. a creation-time rule, a default render-target capability assumption, an unconditional shared-view allocation path, or another exact ownership trigger. Prefer texture-storage / render-target ownership / usage-flow evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-tas` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest ownership-trigger diagnostic in `servers/rendering/renderer_rd/storage_rd/texture_storage.{h,cpp}` by recording the `_update_render_target()` trigger reason/generation and printing it alongside the existing shared-root policy line. Rebuilt the source editor and reran the same host-Vulkan `projection_only__disabled` repro lane, saving artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-trigger-vulkan-sourcebuild-20260521-121350/` (`exact_command.txt`, `run.log`, `exit_status.txt`). The decisive runtime evidence is that the first eager shared-view ownership event fires on `render_target_set_size`, not on `render_target_set_transparent`, `render_target_set_use_hdr`, `render_target_set_msaa`, or any observed `render_target_get_texture()` consumer request: `render_target_update_entry generation=1 reason=render_target_set_size ... transparent_bg=false ...` is immediately followed by `render_target_policy_cause ... trigger_reason=render_target_set_size ... viewport_texture_requests=0 ... render_target_texture_shared_view=true ...`. That classifies the behavior precisely: on this failing lane the shared-view ownership is enabled by the ordinary non-zero-size render-target allocation/update path, where `_update_render_target()` unconditionally creates the shared render-target texture aliases from `rt->color`. Updated `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the exact artifact root and conclusion. `bd` claim/close succeeded for bead `oc-tas`.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

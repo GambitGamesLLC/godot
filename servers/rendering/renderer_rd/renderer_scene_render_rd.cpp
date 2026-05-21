@@ -843,6 +843,9 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			}
 		}
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		print_line(vformat("[gdgs-ts] tonemap_render_target_lane submit_focus=submit_serial_9 path=%s tonemap_dest={dest_is_msaa_2d=%s,using_scaling_pass=%s,use_smaa=%s,can_use_storage=%s} lane=%s", can_use_storage ? "tonemapper" : "tonemapper_mobile", dest_is_msaa_2d ? "true" : "false", using_scaling_pass ? "true" : "false", use_smaa ? "true" : "false", can_use_storage ? "true" : "false", texture_storage->render_target_debug_describe_tonemap_lane(render_target, dest_is_msaa_2d, using_scaling_pass, use_smaa)));
+#endif
 		if (can_use_storage) {
 			tone_mapper->tonemapper(color_texture, dest_fb, tonemap);
 		} else {

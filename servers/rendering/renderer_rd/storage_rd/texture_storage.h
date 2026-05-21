@@ -489,6 +489,8 @@ private:
 		bool was_used;
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		uint64_t debug_render_target_texture_requests = 0;
+		String debug_update_reason = "initial";
+		uint64_t debug_update_generation = 0;
 #endif
 
 		//clear request

@@ -4845,3 +4845,59 @@ More precisely:
 ### Updated conclusion
 
 For the locked failing `submit_serial=9` Tonemap lane, transparent-support shared-view ownership is **not shown to be required by this repro’s actual usage flow**. The current rule is broader: it eagerly upgrades the root to a persistent sampled/shared owner even when this lane is non-transparent and has no observed render-target texture requests before the crash.
+
+## 2026-05-21 — Task 116 follow-up: classify the exact eager shared-view enable trigger on the failing Tonemap lane
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-trigger-vulkan-sourcebuild-20260521-121350/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-trigger-vulkan-sourcebuild-20260521-121350/exact_command.txt`
+- log: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-trigger-vulkan-sourcebuild-20260521-121350/run.log`
+- exit marker: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-trigger-vulkan-sourcebuild-20260521-121350/exit_status.txt`
+
+### Diagnostic added
+
+A tiny debug-only ownership-trigger breadcrumb was added on the owning render target:
+
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+
+It does only two new things:
+
+- records the last `_update_render_target()` trigger reason on the owning `RenderTarget`
+- prints that reason plus a monotonic generation counter when the root texture and its shared render-target views are recreated
+
+This keeps the question narrow: **what exact event eagerly turns on the shared-view ownership for the failing Tonemap lane?**
+
+### Relevant runtime lines
+
+From `run.log` on the same failing source-built host-Vulkan `projection_only__disabled` lane:
+
+- `[gdgs-ts] render_target_update_entry generation=1 reason=render_target_set_size size=1152x648 view_count=1 transparent_bg=false use_hdr=false msaa=0 override_active=false`
+- `[gdgs-ts] render_target_policy_cause ... trigger_reason=render_target_set_size trigger_generation=1 ... transparent_bg=false viewport_texture_requests=0 ...`
+- `[gdgs-ts] render_target_update_entry generation=2 reason=render_target_set_size size=2304x1296 view_count=1 transparent_bg=false use_hdr=false msaa=0 override_active=false`
+- `[gdgs-ts] render_target_policy_cause ... trigger_reason=render_target_set_size trigger_generation=2 ... transparent_bg=false viewport_texture_requests=0 ...`
+- there are **no** `render_target_set_transparent`, `render_target_set_use_hdr`, or `render_target_set_msaa` trigger entries before the same later failure at `fence_wait_error submit_serial=9 wait_result=-4`
+
+### What this proves
+
+This narrows the ownership trigger exactly:
+
+- the eager shared render-target views are **not** first enabled by a transparent-background mutation on this lane
+- they are **not** first enabled by an observed render-target texture request on this lane
+- they are **not** waiting on a later sampled-consumer registration
+- instead, the root/shared ownership is turned on by the normal **render-target size allocation path**: once `render_target_set_size()` gives the RT a non-zero extent, `_update_render_target()` allocates `rt->color` and immediately creates the shared render-target texture aliases from it
+
+So the correct classification for this failing lane is:
+
+- **not** a special transparent-only trigger
+- **not** a late consumer-driven trigger
+- **not** a separate creation-time `render_target_create()` policy in isolation
+- **yes:** an **unconditional shared-view allocation path inside `_update_render_target()` that is reached from `render_target_set_size()` for ordinary RT allocation**
+
+### Updated conclusion
+
+For the locked failing `submit_serial=9` Tonemap lane, the exact eager-enable condition is the first non-zero-size render-target allocation/update path. In practice, `RendererViewport::_viewport_set_size()` calls `render_target_set_size()`, which calls `_update_render_target()`, which unconditionally creates the shared render-target texture views from `rt->color` on that path. That is why Tonemap still lands on `lane_policy=persistent_root_sampled_shared` even though this repro shows `transparent_bg=false` and `viewport_texture_requests=0` before the crash.

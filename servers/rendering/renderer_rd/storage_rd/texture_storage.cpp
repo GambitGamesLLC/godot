@@ -4287,6 +4287,8 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 	}
 
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	rt->debug_update_generation++;
+	print_line(vformat("[gdgs-ts] render_target_update_entry generation=%s reason=%s size=%dx%d view_count=%d transparent_bg=%s use_hdr=%s msaa=%d override_active=%s", String::num_uint64(rt->debug_update_generation), rt->debug_update_reason, rt->size.width, rt->size.height, (int)rt->view_count, rt->is_transparent ? "true" : "false", rt->use_hdr ? "true" : "false", (int)rt->msaa, rt->overridden.color.is_valid() ? "true" : "false"));
 	print_line(vformat("[gdgs-ts] render_target_color_format scope=non_msaa_color create_path=TextureStorage::_update_render_target usage_bits=0x%x is_discardable=%s discardable_contract=\"texture_format_default_false_unset\" discardable_basis=\"TextureFormat::is_discardable default remains false on non_msaa_color_path\" resolve_buffer=%s msaa=%d", rd_color_attachment_format.usage_bits, rd_color_attachment_format.is_discardable ? "true" : "false", rd_color_attachment_format.is_resolve_buffer ? "true" : "false", (int)rt->msaa));
 #endif
 
@@ -4351,7 +4353,7 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 		}
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		print_line(vformat("[gdgs-ts] render_target_color_policy scope=non_msaa_color owner=persistent_root_color policy_class=sampled_shared_root sampled_by_root_texture=true shared_to_render_target_texture=true shared_to_srgb_texture=%s resolve_buffer=%s msaa=%d", tex->rd_texture_srgb.is_valid() ? "true" : "false", rd_color_attachment_format.is_resolve_buffer ? "true" : "false", (int)rt->msaa));
-		print_line(vformat("[gdgs-ts] render_target_policy_cause scope=non_msaa_color owner=persistent_root_color primary_cause=render_target_texture_shared_view_rule specific_sampled_consumer_registration=false render_target_texture_shared_view=%s srgb_shared_view=%s shareable_formats={base=true,srgb=%s} usage_bits=0x%x usage_family={sampling=%s,color_attachment=%s,copy_from=%s,storage=%s} transparent_bg=%s viewport_texture_requests=%s discardable_override_on_root=false policy_contract=\"rt->color is the canonical backing store for eager shared viewport/render-target texture views; only the MSAA intermediate branch is explicitly discardable\" creation_note=\"shared root texture is created so transparent can be supported\"", tex->rd_texture.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", rd_color_attachment_format.usage_bits, (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_SAMPLING_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_STORAGE_BIT) ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests)));
+		print_line(vformat("[gdgs-ts] render_target_policy_cause scope=non_msaa_color owner=persistent_root_color primary_cause=render_target_texture_shared_view_rule trigger_reason=%s trigger_generation=%s specific_sampled_consumer_registration=false render_target_texture_shared_view=%s srgb_shared_view=%s shareable_formats={base=true,srgb=%s} usage_bits=0x%x usage_family={sampling=%s,color_attachment=%s,copy_from=%s,storage=%s} transparent_bg=%s viewport_texture_requests=%s discardable_override_on_root=false policy_contract=\"rt->color is the canonical backing store for eager shared viewport/render-target texture views; only the MSAA intermediate branch is explicitly discardable\" creation_note=\"shared root texture is created so transparent can be supported\"", rt->debug_update_reason, String::num_uint64(rt->debug_update_generation), tex->rd_texture.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", rd_color_attachment_format.usage_bits, (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_SAMPLING_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_STORAGE_BIT) ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests)));
 #endif
 		tex->rd_view = view;
 		tex->width = rt->size.width;
@@ -4412,6 +4414,9 @@ RID TextureStorage::render_target_create() {
 
 	render_target.was_used = false;
 	render_target.clear_requested = false;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	render_target.debug_update_reason = "render_target_create";
+#endif
 
 	_update_render_target(&render_target);
 	return render_target_owner.make_rid(render_target);
@@ -4447,6 +4452,9 @@ void TextureStorage::render_target_set_size(RID p_render_target, int p_width, in
 		rt->size.x = p_width;
 		rt->size.y = p_height;
 		rt->view_count = p_view_count;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		rt->debug_update_reason = "render_target_set_size";
+#endif
 		_update_render_target(rt);
 	}
 }
@@ -4590,6 +4598,9 @@ void TextureStorage::render_target_set_transparent(RID p_render_target, bool p_i
 	RenderTarget *rt = render_target_owner.get_or_null(p_render_target);
 	ERR_FAIL_NULL(rt);
 	rt->is_transparent = p_is_transparent;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	rt->debug_update_reason = "render_target_set_transparent";
+#endif
 	_update_render_target(rt);
 }
 
@@ -4627,6 +4638,9 @@ void TextureStorage::render_target_set_msaa(RID p_render_target, RSE::ViewportMS
 	}
 
 	rt->msaa = p_msaa;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	rt->debug_update_reason = "render_target_set_msaa";
+#endif
 	_update_render_target(rt);
 }
 
@@ -4671,6 +4685,9 @@ void TextureStorage::render_target_set_use_hdr(RID p_render_target, bool p_use_h
 	}
 
 	rt->use_hdr = p_use_hdr;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	rt->debug_update_reason = "render_target_set_use_hdr";
+#endif
 	_update_render_target(rt);
 }
 
