@@ -31,6 +31,7 @@
 #include "texture_storage.h"
 
 #include "core/config/engine.h"
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
@@ -2236,6 +2237,9 @@ RID TextureStorage::texture_get_rd_texture(RID p_texture, bool p_srgb) const {
 		}
 	}
 #endif
+	if (tex->render_target) {
+		const_cast<TextureStorage *>(this)->_ensure_render_target_shared_views(tex->render_target, tex, true);
+	}
 
 	return (p_srgb && tex->rd_texture_srgb.is_valid()) ? tex->rd_texture_srgb : tex->rd_texture;
 }
@@ -2253,6 +2257,9 @@ uint64_t TextureStorage::texture_get_native_handle(RID p_texture, bool p_srgb) c
 		}
 	}
 #endif
+	if (tex->render_target) {
+		const_cast<TextureStorage *>(this)->_ensure_render_target_shared_views(tex->render_target, tex, true);
+	}
 
 	if (p_srgb && tex->rd_texture_srgb.is_valid()) {
 		return RD::get_singleton()->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE, tex->rd_texture_srgb);
@@ -4367,23 +4374,22 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 		rt->debug_rd_msaa_texture_requests = 0;
 #endif
 
-		//create shared textures to the color buffer,
-		//so transparent can be supported
-		RD::TextureView view;
-		view.format_override = rt->color_format;
-		if (!rt->is_transparent) {
-			view.swizzle_a = RD::TEXTURE_SWIZZLE_ONE;
-		}
-		tex->rd_texture = RD::get_singleton()->texture_create_shared(view, rt->color);
-		if (rt->color_format_srgb != RD::DATA_FORMAT_MAX) {
-			view.format_override = rt->color_format_srgb;
-			tex->rd_texture_srgb = RD::get_singleton()->texture_create_shared(view, rt->color);
+		const bool gdgs_lazy_shared_view_experiment = _gdgs_debug_lazy_shared_view_experiment_enabled(rt);
+		if (!gdgs_lazy_shared_view_experiment) {
+			//create shared textures to the color buffer,
+			//so transparent can be supported
+			_ensure_render_target_shared_views(rt, tex);
+		} else {
+			tex->rd_view = RD::TextureView();
+			tex->rd_view.format_override = rt->color_format;
+			if (!rt->is_transparent) {
+				tex->rd_view.swizzle_a = RD::TEXTURE_SWIZZLE_ONE;
+			}
 		}
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
-		print_line(vformat("[gdgs-ts] render_target_color_policy scope=non_msaa_color owner=persistent_root_color policy_class=sampled_shared_root sampled_by_root_texture=true shared_to_render_target_texture=true shared_to_srgb_texture=%s resolve_buffer=%s msaa=%d", tex->rd_texture_srgb.is_valid() ? "true" : "false", rd_color_attachment_format.is_resolve_buffer ? "true" : "false", (int)rt->msaa));
-		print_line(vformat("[gdgs-ts] render_target_policy_cause scope=non_msaa_color owner=persistent_root_color primary_cause=render_target_texture_shared_view_rule trigger_reason=%s trigger_generation=%s specific_sampled_consumer_registration=false render_target_texture_shared_view=%s srgb_shared_view=%s shareable_formats={base=true,srgb=%s} usage_bits=0x%x usage_family={sampling=%s,color_attachment=%s,copy_from=%s,storage=%s} transparent_bg=%s viewport_texture_requests=%s discardable_override_on_root=false policy_contract=\"rt->color is the canonical backing store for eager shared viewport/render-target texture views; only the MSAA intermediate branch is explicitly discardable\" creation_note=\"shared root texture is created so transparent can be supported\"", rt->debug_update_reason, String::num_uint64(rt->debug_update_generation), tex->rd_texture.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", rd_color_attachment_format.usage_bits, (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_SAMPLING_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_STORAGE_BIT) ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests)));
+		print_line(vformat("[gdgs-ts] render_target_color_policy scope=non_msaa_color owner=persistent_root_color policy_class=%s sampled_by_root_texture=true shared_to_render_target_texture=%s shared_to_srgb_texture=%s resolve_buffer=%s msaa=%d", gdgs_lazy_shared_view_experiment ? "sampled_shared_root_lazy_candidate" : "sampled_shared_root", tex->rd_texture.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", rd_color_attachment_format.is_resolve_buffer ? "true" : "false", (int)rt->msaa));
+		print_line(vformat("[gdgs-ts] render_target_policy_cause scope=non_msaa_color owner=persistent_root_color primary_cause=%s trigger_reason=%s trigger_generation=%s specific_sampled_consumer_registration=false render_target_texture_shared_view=%s srgb_shared_view=%s shareable_formats={base=true,srgb=%s} usage_bits=0x%x usage_family={sampling=%s,color_attachment=%s,copy_from=%s,storage=%s} transparent_bg=%s viewport_texture_requests=%s discardable_override_on_root=false lazy_shared_view_experiment=%s policy_contract=\"rt->color is the canonical backing store for viewport/render-target texture views; only the MSAA intermediate branch is explicitly discardable\" creation_note=%s", gdgs_lazy_shared_view_experiment ? "render_target_texture_shared_view_rule_lazy_debug_gate" : "render_target_texture_shared_view_rule", rt->debug_update_reason, String::num_uint64(rt->debug_update_generation), tex->rd_texture.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", tex->rd_texture_srgb.is_valid() ? "true" : "false", rd_color_attachment_format.usage_bits, (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_SAMPLING_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT) ? "true" : "false", (rd_color_attachment_format.usage_bits & RD::TEXTURE_USAGE_STORAGE_BIT) ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), gdgs_lazy_shared_view_experiment ? "true" : "false", gdgs_lazy_shared_view_experiment ? "shared root texture creation deferred until first explicit shared-view demand on the narrow debug lane" : "shared root texture is created so transparent can be supported"));
 #endif
-		tex->rd_view = view;
 		tex->width = rt->size.width;
 		tex->height = rt->size.height;
 		tex->width_2d = rt->size.width;
@@ -4398,6 +4404,49 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 			texture_proxy_update(proxies[i], rt->texture);
 		}
 	}
+}
+
+bool TextureStorage::_gdgs_debug_lazy_shared_view_experiment_enabled(const RenderTarget *rt) const {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (!OS::get_singleton()->has_environment("GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW")) {
+		return false;
+	}
+	const String value = OS::get_singleton()->get_environment("GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW").strip_edges().to_lower();
+	const bool enabled = !(value.is_empty() || value == "0" || value == "false" || value == "off" || value == "no");
+	if (!enabled) {
+		return false;
+	}
+	if (!rt) {
+		return false;
+	}
+	return rt->msaa == RSE::VIEWPORT_MSAA_DISABLED && !rt->is_transparent && rt->view_count == 1 && rt->overridden.color.is_null();
+#else
+	return false;
+#endif
+}
+
+void TextureStorage::_ensure_render_target_shared_views(RenderTarget *rt, Texture *tex, bool p_on_demand) const {
+	ERR_FAIL_NULL(rt);
+	ERR_FAIL_NULL(tex);
+	if (tex->rd_texture.is_valid()) {
+		return;
+	}
+	ERR_FAIL_COND(rt->color.is_null());
+
+	RD::TextureView view;
+	view.format_override = rt->color_format;
+	if (!rt->is_transparent) {
+		view.swizzle_a = RD::TEXTURE_SWIZZLE_ONE;
+	}
+	tex->rd_texture = RD::get_singleton()->texture_create_shared(view, rt->color);
+	if (rt->color_format_srgb != RD::DATA_FORMAT_MAX) {
+		view.format_override = rt->color_format_srgb;
+		tex->rd_texture_srgb = RD::get_singleton()->texture_create_shared(view, rt->color);
+	}
+	tex->rd_view = view;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	print_line(vformat("[gdgs-ts] render_target_shared_view_create scope=non_msaa_color owner=persistent_root_color create_mode=%s trigger_reason=%s trigger_generation=%s request_counts={viewport_texture=%s,texture_rd={base=%s,srgb=%s},native_handle={base=%s,srgb=%s}}", p_on_demand ? "on_demand" : "eager", rt->debug_update_reason, String::num_uint64(rt->debug_update_generation), String::num_uint64(rt->debug_render_target_texture_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests), String::num_uint64(rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_srgb_requests)));
+#endif
 }
 
 void TextureStorage::_create_render_target_backbuffer(RenderTarget *rt) {
@@ -4757,10 +4806,13 @@ String TextureStorage::render_target_debug_describe_tonemap_lane(RID p_render_ta
 	const auto rid_debug_name = [](RID p_rid) {
 		return p_rid.is_valid() ? "RID:" + itos(p_rid.get_id()) : String("RID:invalid");
 	};
+	Texture *rt_texture = rt->texture.is_valid() ? get_texture(rt->texture) : nullptr;
+	const bool lazy_shared_view_experiment = _gdgs_debug_lazy_shared_view_experiment_enabled(rt);
+	const bool shared_view_materialized = rt_texture && rt_texture->rd_texture.is_valid();
 	String path_class = "persistent_root_direct";
 	String lane_owner = "rt->color";
-	String lane_policy = "persistent_root_sampled_shared";
-	String lane_rationale = "tonemap_direct_to_render_target_framebuffer";
+	String lane_policy = lazy_shared_view_experiment && !shared_view_materialized ? "persistent_root_direct_lazy_shared_view" : "persistent_root_sampled_shared";
+	String lane_rationale = lazy_shared_view_experiment && !shared_view_materialized ? "tonemap_direct_to_render_target_framebuffer_without_materialized_shared_view" : "tonemap_direct_to_render_target_framebuffer";
 	String attachment_rid_summary = "color=" + rid_debug_name(rt->color);
 	if (rt->overridden.color.is_valid()) {
 		path_class = "overridden_color_direct";
@@ -4796,7 +4848,7 @@ String TextureStorage::render_target_debug_describe_tonemap_lane(RID p_render_ta
 	} else if (direct_root_access_count > 0) {
 		invariant_classifier = "lazy_on_demand_shared_view_candidate";
 	}
-	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,msaa=%d,view_count=%d,override_active=%s,shared_view_requirement={transparent_bg=%s,shared_view_entrypoints={viewport_texture_requests=%s,texture_rd={base=%s,srgb=%s,total=%s},native_handle={base=%s,srgb=%s,total=%s},total=%s},requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests), String::num_uint64(rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests + rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests + rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(shared_view_entrypoint_count), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
+	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,msaa=%d,view_count=%d,override_active=%s,shared_view_materialized=%s,lazy_shared_view_experiment=%s,shared_view_requirement={transparent_bg=%s,shared_view_entrypoints={viewport_texture_requests=%s,texture_rd={base=%s,srgb=%s,total=%s},native_handle={base=%s,srgb=%s,total=%s},total=%s},requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", shared_view_materialized ? "true" : "false", lazy_shared_view_experiment ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests), String::num_uint64(rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests + rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests + rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(shared_view_entrypoint_count), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
 }
 
 RID TextureStorage::render_target_get_rd_texture(RID p_render_target) {

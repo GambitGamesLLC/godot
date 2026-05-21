@@ -514,6 +514,8 @@ private:
 	void _clear_render_target(RenderTarget *rt);
 	void _update_render_target(RenderTarget *rt);
 	void _create_render_target_backbuffer(RenderTarget *rt);
+	bool _gdgs_debug_lazy_shared_view_experiment_enabled(const RenderTarget *rt) const;
+	void _ensure_render_target_shared_views(RenderTarget *rt, Texture *tex, bool p_on_demand = false) const;
 	void _render_target_allocate_sdf(RenderTarget *rt);
 	void _render_target_clear_sdf(RenderTarget *rt);
 	Rect2i _render_target_get_sdf_rect(const RenderTarget *rt) const;

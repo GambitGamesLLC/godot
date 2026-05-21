@@ -5006,3 +5006,58 @@ For this exact host-Vulkan `projection_only__disabled` repro lane, the most hone
 - therefore the fix shape for **this lane** now looks more like **lazy/on-demand shared-view creation** than "some broader pre-failure consumer exists but we just have not seen it yet"
 
 Scope boundary: this is still a lane-local classification, not a proof that all eager shared-view creation can be removed engine-wide.
+
+## 2026-05-21 — Task 119 follow-up: narrow debug-gated lazy shared-view creation experiment on the locked Tonemap lane
+
+Artifact roots:
+- control (env off): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-control-vulkan-sourcebuild-20260521-1411/`
+- experiment (env on): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-on-vulkan-sourcebuild-20260521-1410/`
+
+### What changed
+
+I kept the experiment narrowly scoped inside `TextureStorage` and made it reversible behind a debug/dev-only environment gate:
+
+- `GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW=1`
+- applies only to the current non-MSAA, non-transparent, single-view, non-overridden render-target lane
+- skips eager `texture_create_shared()` creation for the render-target texture alias during `_update_render_target()`
+- still preserves on-demand materialization if some later caller actually asks for the render-target texture's RD/native-handle shared alias
+- updates the Tonemap lane summary so the lane contract can honestly report whether the shared view was actually materialized
+
+### Runtime result
+
+Control run (env off) stayed on the old contract and reproduced:
+
+- `lane_policy=persistent_root_sampled_shared`
+- `shared_view_materialized=true`
+- `lazy_shared_view_experiment=false`
+- `exit_status=134`
+- unchanged `fence_wait_error submit_serial=9 wait_result=-4`
+
+Experiment run (env on) changed the Tonemap lane contract before failure to:
+
+- `lane_policy=persistent_root_direct_lazy_shared_view`
+- `lane_rationale=tonemap_direct_to_render_target_framebuffer_without_materialized_shared_view`
+- `shared_view_materialized=false`
+- `lazy_shared_view_experiment=true`
+- `shared_view_entrypoints={viewport_texture_requests=0,texture_rd={base=0,srgb=0,total=0},native_handle={base=0,srgb=0,total=0},total=0}`
+- `direct_root_accesses={framebuffer=1,rd_texture=0,rd_texture_slice=0,rd_texture_msaa=0,total=1}`
+
+Notably, the experiment run never logged `render_target_shared_view_create`, so no deferred shared-view demand appeared before failure.
+
+But the failure envelope itself did **not** move:
+
+- `exit_status=134`
+- same `fence_wait_error submit_serial=9 wait_result=-4`
+- later breadcrumbs still collapse to `BLIT_PASS`
+
+### What this proves
+
+This narrow experiment successfully changed the render-target ownership contract on the locked failing Tonemap lane from an **eager sampled/shared-root policy** to a **direct-root lazy-shared-view policy** without observing any real shared-view demand before failure.
+
+So for this exact repro lane:
+
+- **yes:** the Tonemap lane really can be reclassified as a lazy/on-demand shared-view candidate in practice, not just in theory
+- **yes:** eager shared-view creation was removable on this lane without breaking any observed pre-failure consumer contract
+- **no:** changing that contract alone did **not** change the failing `submit_serial=9` / `BLIT_PASS` envelope
+
+Updated conclusion: eager shared-view creation is now demoted from an active suspect on this locked lane. It was a real policy mismatch worth testing, but the device-loss trigger survives even after the lane is forced onto the narrower direct-root/no-materialized-shared-view contract.

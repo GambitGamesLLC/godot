@@ -2957,6 +2957,44 @@ What actually happened vs. the Task 109 question:
 
 ---
 
+### Task 119: Experiment with lazy/on-demand shared-view creation for the Tonemap lane and compare the failure contract at failing `submit_serial=9`
+
+**Bead ID:** `oc-zz7`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-zz7` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: this failing Tonemap lane looks like a lazy/on-demand shared-view creation candidate (`viewport_texture_requests=0`, texture/native-handle shared-view counters all zero before failure, direct root framebuffer access only), yet eager shared-view creation at `render_target_set_size()` still pushes the lane onto the persistent-root sampled/shared path that later reaches the non-discardable `LOAD` branch. Implement the smallest safe fix-shaped experiment needed to test that theory: defer shared-view creation for this lane until first real demand, or otherwise gate the eager shared-view path behind the narrowest possible debug-only condition on the locked repro lane, then compare whether Tonemap’s lane/policy contract changes and whether the failing `submit_serial=9` envelope changes. Keep the experiment reversible and tightly scoped; prefer texture-storage / render-target ownership / usage-flow evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-zz7` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Implemented the smallest reversible experiment directly in `TextureStorage`: a debug/dev-only `GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW=1` gate that only affects the locked non-MSAA / non-transparent / single-view / non-overridden render-target lane, skips eager `texture_create_shared()` creation during `_update_render_target()`, and still materializes the shared RD aliases on-demand if some later caller actually requests them. The Tonemap lane summary was extended so it now reports `shared_view_materialized` and whether the lazy shared-view experiment is active, letting the contract reflect the real pre-failure state instead of the eager-policy assumption.
+
+Rebuilt the source editor and ran the same host-Vulkan `projection_only__disabled` repro twice from the same binary:
+
+- control artifact root (env off): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-control-vulkan-sourcebuild-20260521-1411/`
+- experiment artifact root (env on): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-on-vulkan-sourcebuild-20260521-1410/`
+
+Exact contract change observed:
+
+- control run stayed at `lane_policy=persistent_root_sampled_shared`, `shared_view_materialized=true`, `lazy_shared_view_experiment=false`
+- experiment run flipped to `lane_policy=persistent_root_direct_lazy_shared_view`, `lane_rationale=tonemap_direct_to_render_target_framebuffer_without_materialized_shared_view`, `shared_view_materialized=false`, `lazy_shared_view_experiment=true`
+- in the experiment run the shared-view demand counters still stayed fully dark before failure: `shared_view_entrypoints={viewport_texture_requests=0,texture_rd={base=0,srgb=0,total=0},native_handle={base=0,srgb=0,total=0},total=0}`
+- no `render_target_shared_view_create` line appeared in the experiment run, so no deferred shared-view materialization was demanded before the crash
+
+Exact failure result: the contract changed, but the failure envelope did not. Both runs still exited `134`, still hit the same `fence_wait_error submit_serial=9 wait_result=-4`, and still later collapsed to `BLIT_PASS`. Conclusion: this lane really is a valid lazy/on-demand shared-view candidate and the eager shared-view policy was removable on the locked repro lane without any observed pre-failure consumer, but that policy is not the submit-9 device-loss trigger. Updated `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md` with the control + experiment artifact roots and the new conclusion. `bd update oc-zz7 --status in_progress --json` worked at start; bead closure still pending final wrap-up/commit.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
