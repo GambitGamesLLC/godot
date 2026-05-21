@@ -101,6 +101,61 @@ Relevant chain from the accurate rerun:
 
 That means the first failing boundary is now much tighter than before: the crash no longer requires radix sort, tile boundaries, the final render pass, or compositor writeback/present. Projection dispatch alone is enough.
 
+## 2026-05-20 source-build follow-up — Task 105 (`oc-7hi`)
+
+A source-built Godot follow-up stayed on the same host-Vulkan `projection_only__disabled` repro lane and added one more diagnostic step inside the carried Tonemap -> `L88` zero-gap boundary: per-attachment `load_op` values plus a per-slot non-`load_op` recipe cohort hash.
+
+Artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/`
+
+Validation command:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130 no_present compositor projection_only disabled 120`
+
+Outcome:
+
+- Repro still aborts at `submit_serial=9` (`exit_status=134`; see `stdout.log`, `stderr.log`, `exit_status.txt`).
+- The carried render-pass exact-recipe delta is still narrowed to `load_op` only.
+- The new slot-level classification is:
+  - `load_op_slot_classifier="single_attachment_slot"`
+  - `load_op_contract_scope="single_slot_without_same_recipe_siblings"`
+  - `load_op_minimum_contract_hazard="single_slot_load_op_flip"`
+  - `active_load_ops=["0:LOAD"]`
+  - `pipeline_load_ops=["0:CLEAR"]`
+  - `load_op_mismatch_slots=["{index=0,active="LOAD",pipeline="CLEAR",family_hash_match=true,active_family_hash="0x2a58ca8c",pipeline_family_hash="0x2a58ca8c"}"]`
+
+Interpretation:
+
+- The differing `load_op` is **not** spread across a broader attachment-family cohort in this lane; the active pre-rebind scope and carried Tonemap packet each expose only one attachment slot here.
+- The non-`load_op` recipe cohort hash still matches on that slot, so the surviving carried attachment contract hazard before `L88` first binds its own pipeline is honestly just a **single-slot `CLEAR` vs `LOAD` flip**.
+- Because there are no same-recipe sibling slots in this pass (`single_slot_without_same_recipe_siblings`), this run cannot honestly pin that flip as an active-scope-only cohort rule or a carried-packet-only cohort rule; it only proves the slot-local carried-vs-active `load_op` difference.
+
+## 2026-05-20 source-build follow-up — Task 106 (`oc-a4g`)
+
+A second source-built follow-up stayed on the same host-Vulkan `projection_only__disabled` repro lane and added the smallest ownership-focused classifier on top of the existing slot-0 `load_op` diff. Instead of widening into new lanes, the instrumentation now records whether the surviving slot-0 mismatch can honestly be attributed to one side's attachment-family ownership or only to a narrower carried-vs-active slot-local mismatch.
+
+Artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-slot0-load-op-ownership-vulkan-sourcebuild-20260520-211039/`
+
+Validation command:
+
+- `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-slot0-load-op-ownership-vulkan-sourcebuild-20260520-211039 no_present compositor projection_only disabled 120`
+
+Outcome:
+
+- Repro still aborts at `submit_serial=9` (`exit_status=134`; see `stdout.log`, `stderr.log`, `exit_status.txt`).
+- The carried render-pass exact-recipe delta is still narrowed to `load_op` only.
+- The new ownership payload reports:
+  - `load_op_ownership_classifier={classification="slot_local_carried_vs_active_mismatch_unattributed", best_explanation="carried_vs_active_slot_local_mismatch", basis="single_slot_mismatch_with_matching_non_load_recipe_and_no_same_recipe_siblings", slot_index=0, active_scope_reestablished_before_rebind=true, carried_packet_kept_live_before_rebind=true, family_hash_match=true, active_load_op="LOAD", pipeline_load_op="CLEAR", active_render_pass_create_serial="0xd", pipeline_render_pass_create_serial="0x9"}`
+
+Interpretation:
+
+- The active pre-rebind scope does re-establish its own compatible render pass before `L88` first rebinds (`active_render_pass_create_serial=13`), and the carried Tonemap packet also remains live across the zero-gap boundary (`pipeline_render_pass_create_serial=9`, `carried_packet_kept_live_before_rebind=true`).
+- But because the exact surviving difference is still only one slot with a matching non-`load_op` family hash and no same-recipe sibling slots, the new classifier still **cannot honestly attribute slot-0 `load_op` ownership farther** than a carried-vs-active slot-local mismatch.
+- So the best current explanation is **not** `carried_packet_owned_slot_0_contract` and **not** `active_pre_rebind_scope_owned_slot_0_contract`; it is the narrower `carried_vs_active_slot_local_mismatch` bucket.
+
 ## Interpretation
 
 This QA pass materially reduces the suspect set.
@@ -4353,3 +4408,75 @@ This is the narrowest honest answer currently available on the locked pre-rebind
 - exact attachment `format`, `samples`, `store_op`, `stencil_load_op`, `stencil_store_op`, `initial_layout`, and `final_layout` all survive across that same seam
 - the **only** still-distinguishing attachment exact-recipe field is `load_op`
 - the smallest surviving pre-rebind contract hazard is therefore the carried Tonemap packet’s attachment **`load_op` exactness** before `L88` first pipeline rebind
+
+## Follow-up QA pass for bead `oc-vpw` — classify the active-scope rebuild recipe behind slot-0 `LOAD` before `L88`
+
+### Scope
+
+Stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`, then add the smallest render-pass/graph diagnostic needed to classify which active-scope reconstruction input turns slot 0 into `LOAD` before the first `Command Graph (L88) (Draw)` pipeline bind.
+
+Branches / worktree state used:
+
+- Godot repo branch: `gambit/instrumentation/2026-05-17-gdgs-compositor-breadcrumbs` @ `31d1308cd022`
+- GDGS repo branch: local repro target unchanged for the locked `projection_only__disabled` case
+
+### Runtime used
+
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- launch path: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 --display-driver wayland --rendering-driver vulkan`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-active-scope-rebuild-recipe-vulkan-sourcebuild-20260520-223754/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-active-scope-rebuild-recipe-vulkan-sourcebuild-20260520-223754/exact_command.txt`
+- stdout: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-active-scope-rebuild-recipe-vulkan-sourcebuild-20260520-223754/stdout.log`
+- stderr: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-active-scope-rebuild-recipe-vulkan-sourcebuild-20260520-223754/stderr.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-active-scope-rebuild-recipe-vulkan-sourcebuild-20260520-223754/exit_status.txt`
+
+### Diagnostic added
+
+Two debug-only traces were added in the owning Godot source tree:
+
+- `servers/rendering/rendering_device_graph.h`
+- `servers/rendering/rendering_device_graph.cpp`
+- `drivers/vulkan/rendering_device_driver_vulkan.cpp`
+
+They do two things:
+
+1. record a per-attachment load-op source classifier when the draw-list render-pass recipe is assembled in `RenderingDeviceGraph`
+2. print the actual active Vulkan render-pass scope begin packet so the graph-side recipe can be correlated to the scope that survives into `Tonemap` / `L88`
+
+The relevant runtime lines from `stdout.log` were:
+
+- `[gdgs-rdg] draw_list_render_pass_create key=0x0 render_pass_id=0x76a1166b32e8 framebuffer_id=0x5c63aa0e9ce0 label="Tonemap" breadcrumb=0 attachments=[{index=0,load_op=0,store_op=0,source="non_discardable_default_load_contract",tracker_discardable=false,tracker_has_parent=false,tracker_write_index=132,parent_write_index=-1,texture_usage=0x8b}]`
+- `[gdgs-vk] begin_render_pass_scope create_serial=13 render_pass_id=0x76a1166b32e8 framebuffer_id=0x5c63aa0e9ce0 owner_label="Tonemap (L87) (Draw)" owner_level=87 breadcrumb=NONE attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72 compatibility_hash=0x425f4d3d`
+- `[gdgs-vk] begin_render_pass_scope create_serial=13 render_pass_id=0x76a1166b32e8 framebuffer_id=0x5c63aa0e9ce0 owner_label="Command Graph (L88) (Draw)" owner_level=88 breadcrumb=UI_PASS attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72 compatibility_hash=0x425f4d3d`
+
+### What this proves
+
+The slot-0 `LOAD` does **not** first appear at `L88` itself. The active scope is already using the same `create_serial=13` Tonemap/L88-compatible render pass with slot 0 set to `LOAD`, and `L88` simply reuses that active scope.
+
+The first attributable divergence is the graph-side load-op recipe selection for the Tonemap draw-list attachment:
+
+- there is no `ATTACHMENT_OPERATION_CLEAR`
+- there is no `ATTACHMENT_OPERATION_IGNORE`
+- the attachment tracker is present and `is_discardable=false`
+- the code therefore falls into the default `non_discardable_default_load_contract` branch and assigns `RDD::ATTACHMENT_LOAD_OP_LOAD`
+
+In other words, the earliest exact recipe field/contract that flips slot 0 is the **scope-owned non-discardable attachment contract** in `RenderingDeviceGraph`, not any later pipeline rebind detail. The rebuilt active scope that survives into `L88` inherits `LOAD` from the Tonemap draw-list render-pass recipe because the tracked color attachment is treated as preserve/restore content rather than clear/discard content.
+
+### Updated interpretation
+
+This narrows the seam one level further than the earlier “active pre-rebind scope reconstruction” finding.
+
+More precise statement now supported by direct evidence:
+
+- the carried Tonemap pipeline packet still references the pipeline-side render pass recipe whose slot 0 is `CLEAR`
+- the active scope that Tonemap actually begins on the command buffer is a different-but-compatible render pass whose slot 0 is `LOAD`
+- that active scope is born at Tonemap render-pass begin from the graph-side recipe branch `non_discardable_default_load_contract`
+- `Command Graph (L88) (Draw)` does not create a newer slot-0 `LOAD` variant; it enters the already-live Tonemap-owned `create_serial=13` scope and then performs its own pipeline/vertex/index rebind work inside it
+
+So the first attributable divergence is now classified as: **RDG Tonemap draw-list slot 0 chose `LOAD` because the attachment tracker contract said “non-discardable target with no clear/ignore override.”**

@@ -463,12 +463,30 @@ private:
 			return reinterpret_cast<const RDD::AttachmentStoreOp *>(&load_ops()[trackers_count]);
 		}
 
-		_FORCE_INLINE_ uint8_t *instruction_data() {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		_FORCE_INLINE_ uint8_t *debug_load_op_sources() {
 			return reinterpret_cast<uint8_t *>(&store_ops()[trackers_count]);
 		}
 
-		_FORCE_INLINE_ const uint8_t *instruction_data() const {
+		_FORCE_INLINE_ const uint8_t *debug_load_op_sources() const {
 			return reinterpret_cast<const uint8_t *>(&store_ops()[trackers_count]);
+		}
+#endif
+
+		_FORCE_INLINE_ uint8_t *instruction_data() {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+			return reinterpret_cast<uint8_t *>(&debug_load_op_sources()[trackers_count]);
+#else
+			return reinterpret_cast<uint8_t *>(&store_ops()[trackers_count]);
+#endif
+		}
+
+		_FORCE_INLINE_ const uint8_t *instruction_data() const {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+			return reinterpret_cast<const uint8_t *>(&debug_load_op_sources()[trackers_count]);
+#else
+			return reinterpret_cast<const uint8_t *>(&store_ops()[trackers_count]);
+#endif
 		}
 	};
 

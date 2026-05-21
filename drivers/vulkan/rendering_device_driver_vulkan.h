@@ -500,6 +500,8 @@ private:
 		uint32_t render_pass_attachment_count = 0;
 		uint32_t render_pass_dependency_count = 0;
 		uint32_t render_pass_view_count = 0;
+		LocalVector<uint8_t> render_pass_attachment_load_ops;
+		LocalVector<uint64_t> render_pass_attachment_non_load_recipe_hashes;
 		bool render_pass_uses_fragment_density_map = false;
 		String shader_name;
 		uint64_t graphics_recipe_hash = 0;
@@ -595,6 +597,8 @@ private:
 		uint32_t active_render_pass_attachment_count = 0;
 		uint32_t active_render_pass_dependency_count = 0;
 		uint32_t active_render_pass_view_count = 0;
+		LocalVector<uint8_t> active_render_pass_attachment_load_ops;
+		LocalVector<uint64_t> active_render_pass_attachment_non_load_recipe_hashes;
 		bool active_render_pass_uses_fragment_density_map = false;
 		bool render_pipeline_bound = false;
 		uint32_t vertex_binding_count = 0;
@@ -1076,6 +1080,8 @@ private:
 		uint32_t debug_attachment_count = 0;
 		uint32_t debug_dependency_count = 0;
 		uint32_t debug_view_count = 0;
+		LocalVector<uint8_t> debug_attachment_load_ops;
+		LocalVector<uint64_t> debug_attachment_non_load_recipe_hashes;
 	};
 
 public:

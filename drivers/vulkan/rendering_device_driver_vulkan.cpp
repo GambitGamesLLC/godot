@@ -5556,6 +5556,38 @@ static uint64_t _debug_hash_render_pass_attachment_field(const VectorView<RDD::A
 	return hash;
 }
 
+static uint64_t _debug_hash_render_pass_attachment_non_load_recipe(const RDD::Attachment &p_attachment) {
+	uint64_t hash = 0x9e3779b97f4a7c15ULL;
+	hash = hash_murmur3_one_64(p_attachment.format, hash);
+	hash = hash_murmur3_one_64(p_attachment.samples, hash);
+	hash = hash_murmur3_one_64(p_attachment.store_op, hash);
+	hash = hash_murmur3_one_64(p_attachment.stencil_load_op, hash);
+	hash = hash_murmur3_one_64(p_attachment.stencil_store_op, hash);
+	hash = hash_murmur3_one_64(p_attachment.initial_layout, hash);
+	hash = hash_murmur3_one_64(p_attachment.final_layout, hash);
+	return hash;
+}
+
+static const char *_debug_attachment_load_op_to_string(RDD::AttachmentLoadOp p_load_op) {
+	switch (p_load_op) {
+		case RDD::ATTACHMENT_LOAD_OP_LOAD:
+			return "LOAD";
+		case RDD::ATTACHMENT_LOAD_OP_CLEAR:
+			return "CLEAR";
+		case RDD::ATTACHMENT_LOAD_OP_DONT_CARE:
+			return "DONT_CARE";
+	}
+	return "UNKNOWN";
+}
+
+static String debug_attachment_load_ops_summary(const LocalVector<uint8_t> &p_load_ops) {
+	PackedStringArray slots;
+	for (uint32_t i = 0; i < p_load_ops.size(); i++) {
+		slots.push_back(vformat("%d:%s", i, _debug_attachment_load_op_to_string((RDD::AttachmentLoadOp)p_load_ops[i])));
+	}
+	return String("[") + String(",").join(slots) + "]";
+}
+
 static uint64_t _debug_hash_render_pass_attachment_exact(const VectorView<RDD::Attachment> &p_attachments) {
 	uint64_t hash = hash_murmur3_one_64(p_attachments.size());
 	for (uint32_t i = 0; i < p_attachments.size(); i++) {
@@ -5848,6 +5880,12 @@ RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Att
 	render_pass->debug_attachment_count = p_attachments.size();
 	render_pass->debug_dependency_count = p_subpass_dependencies.size();
 	render_pass->debug_view_count = p_view_count;
+	render_pass->debug_attachment_load_ops.resize(p_attachments.size());
+	render_pass->debug_attachment_non_load_recipe_hashes.resize(p_attachments.size());
+	for (uint32_t i = 0; i < p_attachments.size(); i++) {
+		render_pass->debug_attachment_load_ops[i] = (uint8_t)p_attachments[i].load_op;
+		render_pass->debug_attachment_non_load_recipe_hashes[i] = _debug_hash_render_pass_attachment_non_load_recipe(p_attachments[i]);
+	}
 	render_pass->debug_subpass_compatibility_hashes.resize(p_subpasses.size());
 	for (uint32_t i = 0; i < p_subpasses.size(); i++) {
 		render_pass->debug_subpass_compatibility_hashes[i] = _debug_hash_render_pass_subpass_compatibility(p_attachments, p_subpasses[i]);
@@ -5920,6 +5958,7 @@ void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cm
 			}
 		}
 		command_buffer->debug_active_render_pass_scope_index = scope_index;
+		print_line(vformat("[gdgs-vk] begin_render_pass_scope create_serial=%d render_pass_id=0x%s framebuffer_id=0x%s owner_label=\"%s\" owner_level=%d breadcrumb=%s attachment_load_ops=%s attachment_exact_hash=0x%s compatibility_hash=0x%s", render_pass->debug_create_serial, String::num_uint64(p_render_pass.id, 16), String::num_uint64(p_framebuffer.id, 16), scope.begin_owner_label, scope.begin_owner_level, _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb), debug_attachment_load_ops_summary(render_pass->debug_attachment_load_ops), String::num_uint64(render_pass->debug_attachment_exact_hash, 16), String::num_uint64(render_pass->debug_compatibility_hash, 16)));
 	} else {
 		command_buffer->debug_render_pass_scope_overflow = true;
 		command_buffer->debug_active_render_pass_scope_index = UINT32_MAX;
@@ -6954,6 +6993,8 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	pipeline_provenance.render_pass_attachment_count = render_pass->debug_attachment_count;
 	pipeline_provenance.render_pass_dependency_count = render_pass->debug_dependency_count;
 	pipeline_provenance.render_pass_view_count = render_pass->debug_view_count;
+	pipeline_provenance.render_pass_attachment_load_ops = render_pass->debug_attachment_load_ops;
+	pipeline_provenance.render_pass_attachment_non_load_recipe_hashes = render_pass->debug_attachment_non_load_recipe_hashes;
 	pipeline_provenance.render_pass_uses_fragment_density_map = render_pass->uses_fragment_density_map;
 	pipeline_provenance.shader_name = shader_info->name;
 	pipeline_provenance.graphics_recipe_hash = graphics_recipe_hash;
@@ -10904,6 +10945,224 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			carried_attachment_exact_minimum_field = String(",").join(carried_attachment_exact_mismatch_fields);
 			carried_attachment_exact_field_classifier = "multiple_attachment_exact_fields_remain_joint_hazard";
 		}
+		String carried_load_op_contract_scope = "not_applicable";
+		String carried_load_op_slot_classifier = "not_applicable";
+		String carried_load_op_minimum_contract_hazard = "not_applicable";
+		String carried_load_op_ownership_classification = "not_applicable";
+		String carried_load_op_ownership_basis = "load_op_minimum_field_not_selected";
+		String carried_load_op_ownership_best_explanation = "not_applicable";
+		String carried_load_op_attribution_classification = "not_applicable";
+		String carried_load_op_attribution_basis = "load_op_minimum_field_not_selected";
+		String carried_load_op_attribution_first_step = "not_applicable";
+		int32_t carried_load_op_ownership_slot_index = -1;
+		uint64_t carried_load_op_ownership_active_family_hash = 0;
+		uint64_t carried_load_op_ownership_pipeline_family_hash = 0;
+		RDD::AttachmentLoadOp carried_load_op_ownership_active_value = RDD::ATTACHMENT_LOAD_OP_LOAD;
+		RDD::AttachmentLoadOp carried_load_op_ownership_pipeline_value = RDD::ATTACHMENT_LOAD_OP_LOAD;
+		RDD::AttachmentLoadOp carried_load_op_attribution_tonemap_end_value = RDD::ATTACHMENT_LOAD_OP_LOAD;
+		RDD::AttachmentLoadOp carried_load_op_attribution_l88_begin_value = RDD::ATTACHMENT_LOAD_OP_LOAD;
+		RDD::AttachmentLoadOp carried_load_op_attribution_pre_rebind_pipeline_value = RDD::ATTACHMENT_LOAD_OP_LOAD;
+		RDD::AttachmentLoadOp carried_load_op_attribution_pre_rebind_active_value = RDD::ATTACHMENT_LOAD_OP_LOAD;
+		bool carried_load_op_ownership_family_hash_match = false;
+		bool carried_load_op_ownership_active_scope_reestablished_before_rebind = false;
+		bool carried_load_op_ownership_carried_packet_kept_live_before_rebind = false;
+		bool carried_load_op_attribution_boundary_packet_exact = false;
+		bool carried_load_op_attribution_pre_rebind_packet_exact = false;
+		bool carried_load_op_attribution_active_scope_available = false;
+		PackedStringArray carried_load_op_mismatch_slots;
+		PackedStringArray active_load_op_slots;
+		PackedStringArray pipeline_load_op_slots;
+		if (carried_attachment_exact_minimum_field == "load_op" &&
+				l88_pre_rebind_scope.active_render_pass_attachment_load_ops.size() == l88_pre_rebind_scope.active_render_pass_attachment_non_load_recipe_hashes.size() &&
+				carried_pipeline_packet.render_pass_attachment_load_ops.size() == carried_pipeline_packet.render_pass_attachment_non_load_recipe_hashes.size() &&
+				l88_pre_rebind_scope.active_render_pass_attachment_load_ops.size() == carried_pipeline_packet.render_pass_attachment_load_ops.size()) {
+			carried_load_op_attribution_active_scope_available = l88_reestablishes_scope_before_own_pipeline &&
+					l88_pre_rebind_scope.active_render_pass_attachment_load_ops.size() == l88_pre_rebind_scope.active_render_pass_attachment_count;
+			carried_load_op_attribution_boundary_packet_exact =
+					tonemap_end_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() == l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() &&
+					tonemap_end_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() == carried_pipeline_packet.render_pass_attachment_load_ops.size() &&
+					tonemap_end_snapshot.render_pipeline_provenance.render_pass_attachment_load_op_hash == l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_op_hash &&
+					tonemap_end_snapshot.render_pipeline_provenance.render_pass_attachment_load_op_hash == carried_pipeline_packet.render_pass_attachment_load_op_hash;
+			carried_load_op_attribution_pre_rebind_packet_exact =
+					carried_load_op_attribution_boundary_packet_exact &&
+					l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() == carried_pipeline_packet.render_pass_attachment_load_ops.size() &&
+					l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_op_hash == carried_pipeline_packet.render_pass_attachment_load_op_hash;
+			const uint32_t attachment_count = l88_pre_rebind_scope.active_render_pass_attachment_load_ops.size();
+			LocalVector<uint64_t> mismatch_family_hashes;
+			LocalVector<uint32_t> mismatch_slot_indices;
+			bool all_mismatch_family_hashes_match = true;
+			for (uint32_t i = 0; i < attachment_count; i++) {
+				const RDD::AttachmentLoadOp active_load_op = (RDD::AttachmentLoadOp)l88_pre_rebind_scope.active_render_pass_attachment_load_ops[i];
+				const RDD::AttachmentLoadOp pipeline_load_op = (RDD::AttachmentLoadOp)carried_pipeline_packet.render_pass_attachment_load_ops[i];
+				const uint64_t active_family_hash = l88_pre_rebind_scope.active_render_pass_attachment_non_load_recipe_hashes[i];
+				const uint64_t pipeline_family_hash = carried_pipeline_packet.render_pass_attachment_non_load_recipe_hashes[i];
+				active_load_op_slots.push_back(vformat("%d:%s", i, _debug_attachment_load_op_to_string(active_load_op)));
+				pipeline_load_op_slots.push_back(vformat("%d:%s", i, _debug_attachment_load_op_to_string(pipeline_load_op)));
+				if (active_load_op != pipeline_load_op) {
+					mismatch_slot_indices.push_back(i);
+					carried_load_op_mismatch_slots.push_back(vformat("{index=%d,active=\"%s\",pipeline=\"%s\",family_hash_match=%s,active_family_hash=%s,pipeline_family_hash=%s}", i, _debug_attachment_load_op_to_string(active_load_op), _debug_attachment_load_op_to_string(pipeline_load_op), active_family_hash == pipeline_family_hash ? "true" : "false", debug_uint64_or_none(active_family_hash), debug_uint64_or_none(pipeline_family_hash)));
+					if (active_family_hash != pipeline_family_hash) {
+						all_mismatch_family_hashes_match = false;
+					}
+					bool family_hash_seen = false;
+					for (uint32_t family_index = 0; family_index < mismatch_family_hashes.size(); family_index++) {
+						if (mismatch_family_hashes[family_index] == active_family_hash) {
+							family_hash_seen = true;
+							break;
+						}
+					}
+					if (!family_hash_seen) {
+						mismatch_family_hashes.push_back(active_family_hash);
+					}
+				}
+			}
+			if (mismatch_slot_indices.is_empty()) {
+				carried_load_op_slot_classifier = "no_load_op_slot_mismatch";
+				carried_load_op_contract_scope = "none";
+				carried_load_op_minimum_contract_hazard = "none";
+			} else {
+				if (mismatch_slot_indices.size() == 1) {
+					carried_load_op_slot_classifier = "single_attachment_slot";
+				} else if (all_mismatch_family_hashes_match && mismatch_family_hashes.size() == 1) {
+					carried_load_op_slot_classifier = "broader_attachment_family_recipe_cohort";
+				} else if (all_mismatch_family_hashes_match) {
+					carried_load_op_slot_classifier = "multiple_attachment_recipe_cohorts";
+				} else {
+					carried_load_op_slot_classifier = "non_load_recipe_context_differs_per_slot";
+				}
+				const uint32_t first_mismatch_index = mismatch_slot_indices[0];
+				const uint64_t mismatch_family_hash = l88_pre_rebind_scope.active_render_pass_attachment_non_load_recipe_hashes[first_mismatch_index];
+				const bool mismatch_family_hash_consistent = all_mismatch_family_hashes_match && carried_pipeline_packet.render_pass_attachment_non_load_recipe_hashes[first_mismatch_index] == mismatch_family_hash;
+				carried_load_op_ownership_slot_index = first_mismatch_index;
+				carried_load_op_ownership_active_family_hash = mismatch_family_hash;
+				carried_load_op_ownership_pipeline_family_hash = carried_pipeline_packet.render_pass_attachment_non_load_recipe_hashes[first_mismatch_index];
+				carried_load_op_ownership_active_value = (RDD::AttachmentLoadOp)l88_pre_rebind_scope.active_render_pass_attachment_load_ops[first_mismatch_index];
+				carried_load_op_ownership_pipeline_value = (RDD::AttachmentLoadOp)carried_pipeline_packet.render_pass_attachment_load_ops[first_mismatch_index];
+				carried_load_op_attribution_pre_rebind_active_value = carried_load_op_ownership_active_value;
+				carried_load_op_attribution_pre_rebind_pipeline_value = carried_load_op_ownership_pipeline_value;
+				if (tonemap_end_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() > first_mismatch_index) {
+					carried_load_op_attribution_tonemap_end_value = (RDD::AttachmentLoadOp)tonemap_end_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops[first_mismatch_index];
+				}
+				if (l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() > first_mismatch_index) {
+					carried_load_op_attribution_l88_begin_value = (RDD::AttachmentLoadOp)l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops[first_mismatch_index];
+				}
+				carried_load_op_ownership_family_hash_match = mismatch_family_hash_consistent;
+				carried_load_op_ownership_active_scope_reestablished_before_rebind = l88_reestablishes_scope_before_own_pipeline;
+				carried_load_op_ownership_carried_packet_kept_live_before_rebind = carried_pipeline_identity_exact;
+				uint32_t family_slot_count = 0;
+				uint32_t family_mismatch_count = 0;
+				LocalVector<uint8_t> active_family_load_ops;
+				LocalVector<uint8_t> pipeline_family_load_ops;
+				for (uint32_t i = 0; i < attachment_count; i++) {
+					if (l88_pre_rebind_scope.active_render_pass_attachment_non_load_recipe_hashes[i] == mismatch_family_hash && carried_pipeline_packet.render_pass_attachment_non_load_recipe_hashes[i] == mismatch_family_hash) {
+						family_slot_count++;
+						const uint8_t active_load_op = l88_pre_rebind_scope.active_render_pass_attachment_load_ops[i];
+						const uint8_t pipeline_load_op = carried_pipeline_packet.render_pass_attachment_load_ops[i];
+						bool active_seen = false;
+						for (uint32_t j = 0; j < active_family_load_ops.size(); j++) {
+							if (active_family_load_ops[j] == active_load_op) {
+								active_seen = true;
+								break;
+							}
+						}
+						if (!active_seen) {
+							active_family_load_ops.push_back(active_load_op);
+						}
+						bool pipeline_seen = false;
+						for (uint32_t j = 0; j < pipeline_family_load_ops.size(); j++) {
+							if (pipeline_family_load_ops[j] == pipeline_load_op) {
+								pipeline_seen = true;
+								break;
+							}
+						}
+						if (!pipeline_seen) {
+							pipeline_family_load_ops.push_back(pipeline_load_op);
+						}
+						if (active_load_op != pipeline_load_op) {
+							family_mismatch_count++;
+						}
+					}
+				}
+				if (!mismatch_family_hash_consistent) {
+					carried_load_op_contract_scope = "non_load_recipe_context_not_stable_enough";
+					carried_load_op_minimum_contract_hazard = "load_op_plus_non_load_recipe_context";
+				} else if (family_slot_count <= 1) {
+					carried_load_op_contract_scope = "single_slot_without_same_recipe_siblings";
+					carried_load_op_minimum_contract_hazard = "single_slot_load_op_flip";
+				} else if (family_mismatch_count == family_slot_count && active_family_load_ops.size() == 1 && pipeline_family_load_ops.size() == 1) {
+					carried_load_op_contract_scope = "cohort_wide_between_carried_and_active";
+					carried_load_op_minimum_contract_hazard = "attachment_family_load_op_flip";
+				} else if (active_family_load_ops.size() > pipeline_family_load_ops.size() && pipeline_family_load_ops.size() == 1) {
+					carried_load_op_contract_scope = "isolated_to_active_pre_rebind_scope";
+					carried_load_op_minimum_contract_hazard = "active_scope_load_op_override_inside_attachment_family";
+				} else if (pipeline_family_load_ops.size() > active_family_load_ops.size() && active_family_load_ops.size() == 1) {
+					carried_load_op_contract_scope = "isolated_to_carried_tonemap_packet";
+					carried_load_op_minimum_contract_hazard = "carried_packet_load_op_override_inside_attachment_family";
+				} else if (family_mismatch_count < family_slot_count) {
+					carried_load_op_contract_scope = "subset_of_attachment_family_slots";
+					carried_load_op_minimum_contract_hazard = "partial_attachment_family_load_op_flip";
+				} else {
+					carried_load_op_contract_scope = "mixed_on_both_sides";
+					carried_load_op_minimum_contract_hazard = "load_op_relation_requires_both_sides";
+				}
+
+				if (carried_load_op_contract_scope == "isolated_to_carried_tonemap_packet") {
+					carried_load_op_ownership_classification = "carried_packet_owned_slot_load_op_contract";
+					carried_load_op_ownership_basis = "same_recipe_attachment_family_points_to_carried_packet_side_as_the_only_extra_load_op_owner_before_rebind";
+					carried_load_op_ownership_best_explanation = "carried_packet_owned_slot_0_contract";
+				} else if (carried_load_op_contract_scope == "isolated_to_active_pre_rebind_scope") {
+					carried_load_op_ownership_classification = "active_pre_rebind_scope_owned_slot_load_op_contract";
+					carried_load_op_ownership_basis = "same_recipe_attachment_family_points_to_active_pre_rebind_scope_as_the_only_extra_load_op_owner_before_rebind";
+					carried_load_op_ownership_best_explanation = "active_pre_rebind_scope_owned_slot_0_contract";
+				} else if (carried_load_op_contract_scope == "single_slot_without_same_recipe_siblings") {
+					carried_load_op_ownership_classification = "slot_local_carried_vs_active_mismatch_unattributed";
+					carried_load_op_ownership_basis = "single_slot_mismatch_with_matching_non_load_recipe_and_no_same_recipe_siblings";
+					carried_load_op_ownership_best_explanation = "carried_vs_active_slot_local_mismatch";
+				} else if (carried_load_op_contract_scope == "cohort_wide_between_carried_and_active" || carried_load_op_contract_scope == "subset_of_attachment_family_slots" || carried_load_op_contract_scope == "mixed_on_both_sides") {
+					carried_load_op_ownership_classification = "slot_local_carried_vs_active_mismatch_unattributed";
+					carried_load_op_ownership_basis = "both_sides_participate_in_the_same_attachment_recipe_family_load_op_relation";
+					carried_load_op_ownership_best_explanation = "carried_vs_active_slot_local_mismatch";
+				} else if (carried_load_op_contract_scope == "non_load_recipe_context_not_stable_enough") {
+					carried_load_op_ownership_classification = "slot_local_carried_vs_active_mismatch_unattributed";
+					carried_load_op_ownership_basis = "load_op_difference_cannot_be_attributed_without_stable_non_load_recipe_context";
+					carried_load_op_ownership_best_explanation = "carried_vs_active_slot_local_mismatch";
+				}
+
+				const bool tonemap_to_l88_begin_slot_exact =
+						tonemap_end_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() > first_mismatch_index &&
+						l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() > first_mismatch_index &&
+						tonemap_end_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops[first_mismatch_index] == l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops[first_mismatch_index];
+				const bool l88_begin_to_pre_rebind_packet_slot_exact =
+						l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops.size() > first_mismatch_index &&
+						carried_pipeline_packet.render_pass_attachment_load_ops.size() > first_mismatch_index &&
+						l88_begin_snapshot.render_pipeline_provenance.render_pass_attachment_load_ops[first_mismatch_index] == carried_pipeline_packet.render_pass_attachment_load_ops[first_mismatch_index];
+				const bool active_scope_rebuild_introduces_slot_mismatch =
+						carried_load_op_attribution_active_scope_available &&
+						carried_load_op_attribution_boundary_packet_exact &&
+						tonemap_to_l88_begin_slot_exact &&
+						l88_begin_to_pre_rebind_packet_slot_exact &&
+						carried_load_op_attribution_pre_rebind_active_value != carried_load_op_attribution_pre_rebind_pipeline_value;
+				const bool carried_packet_persistence_introduces_slot_mismatch =
+						carried_load_op_attribution_active_scope_available &&
+						!active_scope_rebuild_introduces_slot_mismatch &&
+						carried_load_op_attribution_pre_rebind_packet_exact &&
+						(carried_load_op_attribution_tonemap_end_value != carried_load_op_attribution_pre_rebind_pipeline_value ||
+								carried_load_op_attribution_l88_begin_value != carried_load_op_attribution_pre_rebind_pipeline_value);
+				if (active_scope_rebuild_introduces_slot_mismatch) {
+					carried_load_op_attribution_classification = "active_scope_rebuild_first_attributable_step";
+					carried_load_op_attribution_basis = "carried_packet_slot_value_stays_exact_from_tonemap_end_through_l88_begin_into_pre_rebind_while_active_scope_rebuild_first_introduces_the_opposing_slot_0_load_op";
+					carried_load_op_attribution_first_step = "active_pre_rebind_scope_reconstruction";
+				} else if (carried_packet_persistence_introduces_slot_mismatch) {
+					carried_load_op_attribution_classification = "carried_packet_persistence_first_attributable_step";
+					carried_load_op_attribution_basis = "active_scope_rebuild_is_available_but_the_carried_packet_slot_value_changes_or_first_becomes_distinguishing_during_packet_persistence_before_rebind";
+					carried_load_op_attribution_first_step = "carried_packet_persistence";
+				} else if (carried_load_op_ownership_classification == "slot_local_carried_vs_active_mismatch_unattributed") {
+					carried_load_op_attribution_classification = "narrower_slot_local_mismatch_only";
+					carried_load_op_attribution_basis = "the_locked_slot_0_load_op_flip_is_visible_pre_rebind_but_the_state_timeline_does_not_make_one_side_the_first_new_divergence_event";
+					carried_load_op_attribution_first_step = "unresolved";
+				}
+			}
+		}
 		String carried_render_pass_lineage_field_class = "inconclusive";
 		String carried_render_pass_lineage_minimum_field = "unknown";
 		if (carried_render_pass_lineage_exact) {
@@ -11014,6 +11273,51 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",stencil_store_op_match=" + String(carried_render_pass_attachment_stencil_store_op_hash_match ? "true" : "false");
 		text += ",initial_layout_match=" + String(carried_render_pass_attachment_initial_layout_hash_match ? "true" : "false");
 		text += ",final_layout_match=" + String(carried_render_pass_attachment_final_layout_hash_match ? "true" : "false");
+		text += ",load_op_slot_classifier=\"" + carried_load_op_slot_classifier + "\"";
+		text += ",load_op_contract_scope=\"" + carried_load_op_contract_scope + "\"";
+		text += ",load_op_minimum_contract_hazard=\"" + carried_load_op_minimum_contract_hazard + "\"";
+		text += ",active_load_ops=";
+		if (active_load_op_slots.is_empty()) {
+			text += "none";
+		} else {
+			text += "[\"" + String("\",\"").join(active_load_op_slots) + "\"]";
+		}
+		text += ",pipeline_load_ops=";
+		if (pipeline_load_op_slots.is_empty()) {
+			text += "none";
+		} else {
+			text += "[\"" + String("\",\"").join(pipeline_load_op_slots) + "\"]";
+		}
+		text += ",load_op_mismatch_slots=";
+		if (carried_load_op_mismatch_slots.is_empty()) {
+			text += "none";
+		} else {
+			text += "[\"" + String("\",\"").join(carried_load_op_mismatch_slots) + "\"]";
+		}
+		text += ",load_op_ownership_classifier={classification=\"" + carried_load_op_ownership_classification + "\"";
+		text += ",best_explanation=\"" + carried_load_op_ownership_best_explanation + "\"";
+		text += ",basis=\"" + carried_load_op_ownership_basis + "\"";
+		text += ",slot_index=" + itos(carried_load_op_ownership_slot_index);
+		text += ",active_scope_reestablished_before_rebind=" + String(carried_load_op_ownership_active_scope_reestablished_before_rebind ? "true" : "false");
+		text += ",carried_packet_kept_live_before_rebind=" + String(carried_load_op_ownership_carried_packet_kept_live_before_rebind ? "true" : "false");
+		text += ",family_hash_match=" + String(carried_load_op_ownership_family_hash_match ? "true" : "false");
+		text += String(",active_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_ownership_active_value) + "\"";
+		text += String(",pipeline_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_ownership_pipeline_value) + "\"";
+		text += ",active_family_hash=" + debug_uint64_or_none(carried_load_op_ownership_active_family_hash);
+		text += ",pipeline_family_hash=" + debug_uint64_or_none(carried_load_op_ownership_pipeline_family_hash);
+		text += ",active_render_pass_create_serial=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_create_serial);
+		text += ",pipeline_render_pass_create_serial=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_create_serial) + "}";
+		text += ",load_op_attribution_split={classification=\"" + carried_load_op_attribution_classification + "\"";
+		text += ",basis=\"" + carried_load_op_attribution_basis + "\"";
+		text += ",first_attributable_step=\"" + carried_load_op_attribution_first_step + "\"";
+		text += ",boundary_packet_exact=" + String(carried_load_op_attribution_boundary_packet_exact ? "true" : "false");
+		text += ",pre_rebind_packet_exact=" + String(carried_load_op_attribution_pre_rebind_packet_exact ? "true" : "false");
+		text += ",active_scope_available=" + String(carried_load_op_attribution_active_scope_available ? "true" : "false");
+		text += String(",tonemap_end_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_attribution_tonemap_end_value) + "\"";
+		text += String(",l88_begin_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_attribution_l88_begin_value) + "\"";
+		text += String(",pre_rebind_pipeline_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_attribution_pre_rebind_pipeline_value) + "\"";
+		text += String(",pre_rebind_active_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_attribution_pre_rebind_active_value) + "\"";
+		text += ",slot_index=" + itos(carried_load_op_ownership_slot_index) + "}";
 		text += ",active_format_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_format_hash);
 		text += ",active_samples_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_samples_hash);
 		text += ",active_load_op_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_load_op_hash);
@@ -11212,6 +11516,8 @@ RenderingDeviceDriverVulkan::DebugCommandStateSnapshot RenderingDeviceDriverVulk
 		snapshot.active_render_pass_attachment_count = p_command_buffer->active_render_pass->debug_attachment_count;
 		snapshot.active_render_pass_dependency_count = p_command_buffer->active_render_pass->debug_dependency_count;
 		snapshot.active_render_pass_view_count = p_command_buffer->active_render_pass->debug_view_count;
+		snapshot.active_render_pass_attachment_load_ops = p_command_buffer->active_render_pass->debug_attachment_load_ops;
+		snapshot.active_render_pass_attachment_non_load_recipe_hashes = p_command_buffer->active_render_pass->debug_attachment_non_load_recipe_hashes;
 		snapshot.active_render_pass_uses_fragment_density_map = p_command_buffer->active_render_pass->uses_fragment_density_map;
 		if (p_command_buffer->active_render_subpass < p_command_buffer->active_render_pass->debug_subpass_compatibility_hashes.size()) {
 			snapshot.active_render_subpass_compatibility_hash = p_command_buffer->active_render_pass->debug_subpass_compatibility_hashes[p_command_buffer->active_render_subpass];

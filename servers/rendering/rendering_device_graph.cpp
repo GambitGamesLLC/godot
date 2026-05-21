@@ -38,6 +38,43 @@
 // Prints the total number of bytes used for draw lists in a frame.
 #define PRINT_DRAW_LIST_STATS 0
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+enum DebugDrawListLoadOpSource : uint8_t {
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_UNKNOWN = 0,
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_ATTACHMENT_CLEAR = 1,
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_ATTACHMENT_IGNORE = 2,
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_SELF_MODIFIED = 3,
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_PARENT_MODIFIED = 4,
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_SELF_UNMODIFIED = 5,
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_PARENT_UNMODIFIED = 6,
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_NON_DISCARDABLE_DEFAULT = 7,
+	DEBUG_DRAW_LIST_LOAD_OP_SOURCE_NULL_TRACKER = 8,
+};
+
+static const char *_debug_draw_list_load_op_source_to_string(DebugDrawListLoadOpSource p_source) {
+	switch (p_source) {
+		case DEBUG_DRAW_LIST_LOAD_OP_SOURCE_ATTACHMENT_CLEAR:
+			return "attachment_operation_clear";
+		case DEBUG_DRAW_LIST_LOAD_OP_SOURCE_ATTACHMENT_IGNORE:
+			return "attachment_operation_ignore";
+		case DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_SELF_MODIFIED:
+			return "discardable_self_modified_this_frame";
+		case DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_PARENT_MODIFIED:
+			return "discardable_parent_modified_this_frame";
+		case DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_SELF_UNMODIFIED:
+			return "discardable_self_unmodified_this_frame";
+		case DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_PARENT_UNMODIFIED:
+			return "discardable_parent_unmodified_this_frame";
+		case DEBUG_DRAW_LIST_LOAD_OP_SOURCE_NON_DISCARDABLE_DEFAULT:
+			return "non_discardable_default_load_contract";
+		case DEBUG_DRAW_LIST_LOAD_OP_SOURCE_NULL_TRACKER:
+			return "null_tracker";
+		default:
+			return "unknown";
+	}
+}
+#endif
+
 RenderingDeviceGraph::RenderingDeviceGraph() {
 	driver_honors_barriers = false;
 	driver_clears_with_copy_engine = false;
@@ -907,6 +944,23 @@ void RenderingDeviceGraph::_get_draw_list_render_pass_and_framebuffer(const Reco
 
 		storage.framebuffer = driver->framebuffer_create(storage.render_pass, framebuffer_cache->textures, framebuffer_cache->width, framebuffer_cache->height);
 		ERR_FAIL_COND(!storage.framebuffer);
+
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		String label_name = "none";
+		if (p_draw_list_command->label_index >= 0 && p_draw_list_command->label_index < command_label_offsets.size()) {
+			const char *label_chars = &command_label_chars[command_label_offsets[p_draw_list_command->label_index]];
+			label_name = "";
+			label_name.append_utf8(label_chars);
+		}
+		PackedStringArray attachment_summaries;
+		const uint8_t *debug_load_op_sources = p_draw_list_command->debug_load_op_sources();
+		for (uint32_t i = 0; i < p_draw_list_command->trackers_count; i++) {
+			const ResourceTracker *tracker = p_draw_list_command->trackers()[i];
+			const bool has_parent = tracker != nullptr && tracker->parent != nullptr;
+			attachment_summaries.push_back(vformat("{index=%d,load_op=%d,store_op=%d,source=\"%s\",tracker_discardable=%s,tracker_has_parent=%s,tracker_write_index=%d,parent_write_index=%d,texture_usage=0x%x}", i, (int)load_ops[i], (int)store_ops[i], _debug_draw_list_load_op_source_to_string((DebugDrawListLoadOpSource)debug_load_op_sources[i]), tracker != nullptr && tracker->is_discardable ? "true" : "false", has_parent ? "true" : "false", tracker != nullptr ? tracker->write_command_or_list_index : -1, has_parent ? tracker->parent->write_command_or_list_index : -1, tracker != nullptr ? tracker->texture_usage : 0));
+		}
+		print_line(vformat("[gdgs-rdg] draw_list_render_pass_create key=0x%s render_pass_id=0x%s framebuffer_id=0x%s label=\"%s\" breadcrumb=%d attachments=%s", String::num_uint64(key, 16), String::num_uint64(storage.render_pass.id, 16), String::num_uint64(storage.framebuffer.id, 16), label_name, (int)p_draw_list_command->breadcrumb, String("[") + String(",").join(attachment_summaries) + "]"));
+#endif
 
 		it = framebuffer_cache->storage_map.insert(key, storage);
 	}
@@ -2327,8 +2381,13 @@ void RenderingDeviceGraph::add_draw_list_end() {
 	uint32_t clear_values_size = sizeof(RDD::RenderPassClearValue) * draw_instruction_list.attachment_clear_values.size();
 	uint32_t trackers_count = framebuffer_cache != nullptr ? framebuffer_cache->trackers.size() : 0;
 	uint32_t trackers_and_ops_size = (sizeof(ResourceTracker *) + sizeof(RDD::AttachmentLoadOp) + sizeof(RDD::AttachmentStoreOp)) * trackers_count;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	uint32_t debug_load_op_sources_size = sizeof(uint8_t) * trackers_count;
+#else
+	uint32_t debug_load_op_sources_size = 0;
+#endif
 	uint32_t instruction_data_size = draw_instruction_list.data.size();
-	uint32_t command_size = sizeof(RecordedDrawListCommand) + clear_values_size + trackers_and_ops_size + instruction_data_size;
+	uint32_t command_size = sizeof(RecordedDrawListCommand) + clear_values_size + trackers_and_ops_size + debug_load_op_sources_size + instruction_data_size;
 	RecordedDrawListCommand *command = static_cast<RecordedDrawListCommand *>(_allocate_command(command_size, command_index));
 	command->type = RecordedCommand::TYPE_DRAW_LIST;
 	command->self_stages = draw_instruction_list.stages;
@@ -2350,27 +2409,50 @@ void RenderingDeviceGraph::add_draw_list_end() {
 	ResourceTracker **trackers = command->trackers();
 	RDD::AttachmentLoadOp *load_ops = command->load_ops();
 	RDD::AttachmentStoreOp *store_ops = command->store_ops();
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	uint8_t *debug_load_op_sources = command->debug_load_op_sources();
+#endif
 	for (uint32_t i = 0; i < command->trackers_count; i++) {
 		ResourceTracker *resource_tracker = framebuffer_cache->trackers[i];
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		debug_load_op_sources[i] = DEBUG_DRAW_LIST_LOAD_OP_SOURCE_UNKNOWN;
+#endif
 		if (resource_tracker != nullptr) {
 			if (i < command->clear_values_count && i < attachment_op_count && draw_instruction_list.attachment_operations[i] == ATTACHMENT_OPERATION_CLEAR) {
 				load_ops[i] = RDD::ATTACHMENT_LOAD_OP_CLEAR;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+				debug_load_op_sources[i] = DEBUG_DRAW_LIST_LOAD_OP_SOURCE_ATTACHMENT_CLEAR;
+#endif
 			} else if (i < attachment_op_count && draw_instruction_list.attachment_operations[i] == ATTACHMENT_OPERATION_IGNORE) {
 				load_ops[i] = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+				debug_load_op_sources[i] = DEBUG_DRAW_LIST_LOAD_OP_SOURCE_ATTACHMENT_IGNORE;
+#endif
 			} else if (resource_tracker->is_discardable) {
 				bool resource_has_parent = resource_tracker->parent != nullptr;
 				ResourceTracker *search_tracker = resource_has_parent ? resource_tracker->parent : resource_tracker;
 				search_tracker->reset_if_outdated(tracking_frame);
 				bool resource_was_modified_this_frame = search_tracker->write_command_or_list_index >= 0;
 				load_ops[i] = resource_was_modified_this_frame ? RDD::ATTACHMENT_LOAD_OP_LOAD : RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+				debug_load_op_sources[i] = resource_was_modified_this_frame ?
+						(resource_has_parent ? DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_PARENT_MODIFIED : DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_SELF_MODIFIED) :
+						(resource_has_parent ? DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_PARENT_UNMODIFIED : DEBUG_DRAW_LIST_LOAD_OP_SOURCE_DISCARDABLE_SELF_UNMODIFIED);
+#endif
 			} else {
 				load_ops[i] = RDD::ATTACHMENT_LOAD_OP_LOAD;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+				debug_load_op_sources[i] = DEBUG_DRAW_LIST_LOAD_OP_SOURCE_NON_DISCARDABLE_DEFAULT;
+#endif
 			}
 
 			store_ops[i] = resource_tracker->is_discardable ? RDD::ATTACHMENT_STORE_OP_DONT_CARE : RDD::ATTACHMENT_STORE_OP_STORE;
 		} else {
 			load_ops[i] = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
 			store_ops[i] = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+			debug_load_op_sources[i] = DEBUG_DRAW_LIST_LOAD_OP_SOURCE_NULL_TRACKER;
+#endif
 		}
 
 		trackers[i] = resource_tracker;

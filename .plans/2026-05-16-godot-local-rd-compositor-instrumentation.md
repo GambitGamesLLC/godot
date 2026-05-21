@@ -2561,6 +2561,129 @@ Validation stayed on the same source-built host-Vulkan `projection_only__disable
 
 ---
 
+### Task 105: Classify the smallest carried attachment `load_op` contract before `L88` first pipeline rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-7hi`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-7hi` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The planning truth is now locked one step deeper: the only still-distinguishing carried render-pass attachment exact-recipe field before `L88` first pipeline rebind is `load_op`. Implement the smallest `load_op`-focused diagnostic needed to classify the surviving carried attachment contract at that zero-gap Tonemap -> `L88` boundary: determine whether the differing `load_op` is isolated to the active pre-rebind scope versus the carried Tonemap packet, whether it tracks a broader attachment-family recipe cohort or a single attachment slot, and what the minimum still-distinguishing `load_op` contract hazard honestly is before `L88` binds its own pipeline. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-7hi` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/env.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/exit_status.txt`
+
+**Status:** ✅ Complete
+
+**Results:** Implemented the smallest additional `load_op` diagnostic in `rendering_device_driver_vulkan.*` by threading per-attachment `load_op` values plus a per-slot non-`load_op` recipe cohort hash through render-pass creation, carried pipeline provenance, and active pre-rebind command-state snapshots. The existing `attachment_exact_recipe={...}` payload now also reports `load_op_slot_classifier`, `load_op_contract_scope`, `load_op_minimum_contract_hazard`, `active_load_ops`, `pipeline_load_ops`, and `load_op_mismatch_slots` so the same locked `submit_serial=9` seam can classify slot-vs-cohort without widening into already-demoted lanes.
+
+Validation stayed on the same source-built host-Vulkan `projection_only__disabled` lane using artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `context.txt`, `env.txt`, `exit_status.txt`). The repro still aborts at `submit_serial=9` with `exit_status=134`, and the new payload proves the remaining carried attachment contract is narrower than a family-wide recipe rule in this lane: `attachment_exact_recipe={... field_classifier="load_op_is_minimum_attachment_exact_hazard", minimum_distinguishing_field="load_op", load_op_slot_classifier="single_attachment_slot", load_op_contract_scope="single_slot_without_same_recipe_siblings", load_op_minimum_contract_hazard="single_slot_load_op_flip", active_load_ops=["0:LOAD"], pipeline_load_ops=["0:CLEAR"], load_op_mismatch_slots=["{index=0,active="LOAD",pipeline="CLEAR",family_hash_match=true,active_family_hash="0x2a58ca8c",pipeline_family_hash="0x2a58ca8c"}"] ...}`.
+
+What actually happened vs. the original question:
+- The differing `load_op` is **not** tracking a broader attachment-family cohort in this locked lane; there is only one surviving attachment slot before `L88` first binds its own pipeline, so the classifier is `single_attachment_slot`.
+- The non-`load_op` recipe cohort hash still matches on that slot (`family_hash_match=true`), so the minimum honest hazard remains a **single-slot `CLEAR` vs `LOAD` flip** rather than any broader render-pass recipe change.
+- Because there are no same-recipe sibling slots in this pass (`single_slot_without_same_recipe_siblings`), this evidence cannot honestly pin the difference as an active-pre-rebind-only cohort rule or a carried-Tonemap-packet-only cohort rule. It only proves the exact surviving contract at the zero-gap boundary: active pre-rebind scope slot 0 is `LOAD`, carried Tonemap packet slot 0 is `CLEAR`, and every other attachment-exact field still matches.
+
+---
+
+### Task 106: Classify slot-0 `load_op` ownership before `L88` first pipeline rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-a4g`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-a4g` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The planning truth is now locked one step deeper: the smallest surviving carried attachment exact-recipe hazard before `L88` first pipeline rebind is a single-slot `load_op` flip (`active slot 0 = LOAD`, carried Tonemap packet slot 0 = CLEAR`) with matching non-`load_op` family hash. Implement the smallest ownership-focused diagnostic needed to classify that slot-0 `load_op` difference: determine whether the surviving hazard is best explained as a carried-packet-owned slot-0 contract, an active pre-rebind scope-owned slot-0 contract, or only as a narrower carried-vs-active slot-local mismatch that cannot yet be attributed farther. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; save durable notes/artifact references; update this plan with what actually happened; and close bead `oc-a4g` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-a4g`, kept the same source-built host-Vulkan `projection_only__disabled` repro lane, and added the smallest ownership-focused follow-up directly inside the existing carried attachment exact-recipe payload. `drivers/vulkan/rendering_device_driver_vulkan.cpp` now emits `load_op_ownership_classifier={...}` alongside the already-locked slot-0 `load_op` diff so the same `submit_serial=9` seam can say whether the mismatch is best explained by the carried Tonemap packet, the active pre-rebind scope, or only a narrower slot-local carried-vs-active mismatch.
+
+Validation used artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-slot0-load-op-ownership-vulkan-sourcebuild-20260520-211039/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `exit_status.txt`) with the same source-built binary and repro script. The run still aborts at `submit_serial=9` with `exit_status=134`, but the new ownership evidence is decisive at the requested scope: `load_op_ownership_classifier={classification="slot_local_carried_vs_active_mismatch_unattributed", best_explanation="carried_vs_active_slot_local_mismatch", basis="single_slot_mismatch_with_matching_non_load_recipe_and_no_same_recipe_siblings", slot_index=0, active_scope_reestablished_before_rebind=true, carried_packet_kept_live_before_rebind=true, family_hash_match=true, active_load_op="LOAD", pipeline_load_op="CLEAR", active_render_pass_create_serial="0xd", pipeline_render_pass_create_serial="0x9"}`.
+
+What actually happened vs. the task question:
+- The active pre-rebind scope really does own a re-established compatible render-pass instance before `L88` first binds its own pipeline (`active_render_pass_create_serial=13`).
+- The carried Tonemap packet also really does survive the zero-gap boundary into that pre-rebind state (`pipeline_render_pass_create_serial=9`, `carried_packet_kept_live_before_rebind=true`).
+- But there is still only one surviving attachment slot, its non-`load_op` family hash matches on both sides, and there are no same-recipe sibling slots to show a side-local cohort rule. So the honest conclusion is **only** the narrower `carried_vs_active_slot_local_mismatch` bucket — not a farther attribution to `carried_packet_owned_slot_0_contract` or `active_pre_rebind_scope_owned_slot_0_contract`.
+
+---
+
+### Task 107: Split slot-0 `load_op` attribution between active-scope rebuild and carried-packet persistence before `L88` first pipeline rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-1l7`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-1l7` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the smallest surviving seam before `L88` first pipeline rebind is a single-slot `load_op` mismatch on slot 0 (`active=LOAD`, carried Tonemap packet=`CLEAR`), but ownership is still unattributed. Implement the smallest attribution-focused diagnostic needed to split whether that slot-0 mismatch first becomes attributable at the active pre-rebind scope reconstruction step or at the carried-packet persistence step, while keeping the zero-gap Tonemap -> `L88` boundary model intact. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; save durable notes/artifact references; update this plan with what actually happened; and close bead `oc-1l7` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrow `load_op_attribution_split` diagnostic beside the existing slot-local ownership classifier in `drivers/vulkan/rendering_device_driver_vulkan.cpp`, without widening the capture lane beyond the locked Tonemap -> `L88` zero-gap boundary model. The new output records the slot-0 `load_op` value at `tonemap_end_snapshot`, `l88_begin_snapshot`, the carried pre-rebind pipeline packet, and the active pre-rebind scope, then classifies which side first introduces the mismatch.
+
+Validation stayed on the same source-built host-Vulkan `projection_only + disabled` repro lane. I rebuilt the source binary (`scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`), confirmed the new marker string was present in the binary, then reran the staged case against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`. Durable artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-slot0-load-op-attribution-vulkan-sourcebuild-20260520-213316/`.
+
+What actually happened vs. the task question:
+- The failure stayed locked to the same seam: `submit_serial=9` still ends in `fence_wait_error ... wait_result=-4` with last breadcrumb `BLIT_PASS`.
+- The new classifier reported `load_op_attribution_split={classification="active_scope_rebuild_first_attributable_step", first_attributable_step="active_pre_rebind_scope_reconstruction", boundary_packet_exact=true, pre_rebind_packet_exact=true, active_scope_available=true, tonemap_end_load_op="CLEAR", l88_begin_load_op="CLEAR", pre_rebind_pipeline_load_op="CLEAR", pre_rebind_active_load_op="LOAD", slot_index=0}`.
+- That means the carried Tonemap packet keeps slot 0 exactly `CLEAR` across `tonemap_end -> l88_begin -> pre_rebind pipeline packet`; the first new divergent value appears only when the active compatible render-pass scope is rebuilt before `L88` first rebinds its own pipeline, where slot 0 becomes `LOAD`.
+- So the surviving hazard no longer stays only in the earlier undifferentiated `carried_vs_active_slot_local_mismatch` bucket. Temporally, it first becomes attributable to the **active pre-rebind scope reconstruction** side, while the carried packet persistence side remains exact across the zero-gap boundary.
+
+---
+
+### Task 108: Classify the active-scope rebuild recipe that flips slot-0 `load_op` to `LOAD` before `L88` first pipeline rebind at failing `submit_serial=9`
+
+**Bead ID:** `oc-vpw`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-vpw` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the carried Tonemap packet keeps slot-0 `load_op=CLEAR` across the zero-gap Tonemap -> `L88` handoff, and the first attributable divergence appears when the active compatible render-pass scope is rebuilt before `L88` first pipeline rebind. Implement the smallest rebuild-focused diagnostic needed to classify what exact active-scope reconstruction recipe input or scope-owned attachment contract causes slot 0 to become `LOAD`. Prefer render-pass / pass-scope / command-buffer ownership evidence over shader-side probes; keep the staged repro model intact; save durable notes/artifact references; update this plan with what actually happened; and close bead `oc-vpw` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a minimal debug-only RDG/Vulkan correlation seam on the locked source-built host-Vulkan `projection_only__disabled` repro lane, then reran the exact staged case and saved the artifact package at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-active-scope-rebuild-recipe-vulkan-sourcebuild-20260520-223754/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `exit_status.txt`). The new RDG line proved the Tonemap draw-list render-pass recipe for slot 0 is assembled with `source="non_discardable_default_load_contract"`, `tracker_discardable=false`, no clear/ignore override, and `load_op=LOAD`; the paired Vulkan scope-begin line proved that same `create_serial=13` render pass is already active for `Tonemap (L87) (Draw)` and is then reused unchanged by `Command Graph (L88) (Draw)` with `attachment_load_ops=[0:LOAD]`. That means the first attributable divergence is **not** `L88`’s own first pipeline rebind. It is the earlier RDG Tonemap draw-list recipe branch that treats slot 0 as a non-discardable preserve-content attachment and therefore assigns `RDD::ATTACHMENT_LOAD_OP_LOAD`, while the carried Tonemap pipeline packet still points at the compatible-but-different pipeline-side render-pass recipe whose slot 0 remains `CLEAR`. REF-07 was updated with the exact runtime lines and conclusion.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
@@ -2639,12 +2762,14 @@ Start the next session from this plan plus `REF-07`, then execute in this order:
 
 ### Landing-the-plane handoff
 
-**Stopping point:** The live failing seam is now reduced to the carried Tonemap packet’s **render-pass attachment exact-recipe `load_op`** before `L88` first pipeline rebind.
+**Stopping point:** The live failing seam is now pinned to the **Tonemap RDG active-scope recipe** that makes slot 0 non-discardable and therefore assigns `load_op=LOAD`, while the carried Tonemap pipeline packet still keeps slot 0 at `CLEAR` across the zero-gap handoff into `L88`.
 
-**Best current one-line read:** same carried pipeline packet, same compatibility-level render-pass family, but a different exact attachment recipe narrowed all the way down to `load_op`.
+**Best current one-line read:** the carried packet is not the first source of the `LOAD` divergence; the earliest concrete cause is Tonemap’s RDG `non_discardable_default_load_contract`, and `L88` just reuses that already-live compatible scope.
 
-**Best next move:** continue from Task 104’s result and classify the smallest carried attachment `load_op` contract on the same locked repro lane.
+**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-active-scope-rebuild-recipe-vulkan-sourcebuild-20260520-223754/`
+
+**Best next move:** stay on the same locked repro lane and split the Tonemap RDG active-scope contract one step deeper: determine whether the smallest honest next seam is why slot 0 is classified as `non_discardable`, or why the default non-discardable branch chooses `LOAD` for this Tonemap attachment.
 
 ---
 
-*Updated on 2026-05-20 (partial; stopping point narrowed from broad Tonemap-vs-L88 interaction to carried attachment exact-recipe `load_op` before `L88` first pipeline rebind at failing `submit_serial=9`)*
+*Updated on 2026-05-20 (partial; stopping point advanced from an unattributed carried-vs-active `load_op` mismatch to the Tonemap RDG non-discardable default-load contract as the first attributable source of slot-0 `LOAD` before failing `submit_serial=9`)*
