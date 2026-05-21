@@ -2752,6 +2752,32 @@ What actually happened vs. the Task 109 question:
 
 ---
 
+### Task 111: Classify the upstream render-target color contract that leaves Tonemap slot-0 texture non-discardable before the active-scope rebuild at failing `submit_serial=9`
+
+**Bead ID:** `oc-h3g`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-h3g` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: Tonemap slot 0 becomes non-discardable because root texture creation materializes an upstream render-target color usage/creation contract with `TextureFormat.is_discardable=false`; this is earlier than Tonemap-local logic and earlier than any extra pre-RDG seed rule. Implement the smallest honest diagnostic needed to classify **which upstream render-target color contract choice** leaves `is_discardable=false` here — for example whether it is inherent to `render_target_get_color_usage_bits(false)`, a texture-format creation default, a usage-flag family decision, or another exact render-target creation rule on this lane. Prefer texture-storage / render-target creation / RDG ownership evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-h3g` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest upstream-contract diagnostic in `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp` and reran the same source-built host-Vulkan `projection_only__disabled` repro on the failing `submit_serial=9` lane. Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-contract-vulkan-sourcebuild-20260521-0945/`. The new runtime line proved that `TextureStorage::_update_render_target()` prepares the non-MSAA render-target color attachment with `usage_bits=0x8b` and `is_discardable=false` under `discardable_contract="texture_format_default_false_unset"`, i.e. this path leaves `RD::TextureFormat::is_discardable` at the struct default rather than explicitly setting it. The same run still reports the Tonemap slot-0 tracker as `discardable_provenance="root_texture_create"` with `discardable_seed_contract="texture_format_is_discardable_flag"`, which locks the exact classification: the upstream contract is the non-MSAA render-target color creation rule leaving `TextureFormat::is_discardable` untouched/default-false; `render_target_get_color_usage_bits(false)` explains the matching `0x8b` usage family but is not itself the non-discardable seed rule. Updated `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the exact evidence and conclusion. Bead outcome: `bd update`/`bd close` worked.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

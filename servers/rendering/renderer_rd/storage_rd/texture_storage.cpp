@@ -4286,6 +4286,10 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 		}
 	}
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	print_line(vformat("[gdgs-ts] render_target_color_format scope=non_msaa_color create_path=TextureStorage::_update_render_target usage_bits=0x%x is_discardable=%s discardable_contract=\"texture_format_default_false_unset\" discardable_basis=\"TextureFormat::is_discardable default remains false on non_msaa_color_path\" resolve_buffer=%s msaa=%d", rd_color_attachment_format.usage_bits, rd_color_attachment_format.is_discardable ? "true" : "false", rd_color_attachment_format.is_resolve_buffer ? "true" : "false", (int)rt->msaa));
+#endif
+
 	// TODO see if we can lazy create this once we actually use it as we may not need to create this if we have an overridden color buffer...
 	rt->color = RD::get_singleton()->texture_create(rd_color_attachment_format, rd_view);
 	ERR_FAIL_COND(rt->color.is_null());
@@ -4305,6 +4309,9 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 		RD::TextureView rd_view_multisample;
 		rd_color_multisample_format.is_resolve_buffer = false;
 		rd_color_multisample_format.is_discardable = true;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		print_line(vformat("[gdgs-ts] render_target_color_format scope=msaa_color create_path=TextureStorage::_update_render_target usage_bits=0x%x is_discardable=%s discardable_contract=\"explicit_msaa_color_override\" discardable_basis=\"msaa_color_path_sets_TextureFormat_is_discardable_true\" resolve_buffer=%s msaa=%d", rd_color_multisample_format.usage_bits, rd_color_multisample_format.is_discardable ? "true" : "false", rd_color_multisample_format.is_resolve_buffer ? "true" : "false", (int)rt->msaa));
+#endif
 		rt->color_multisample = RD::get_singleton()->texture_create(rd_color_multisample_format, rd_view_multisample);
 		ERR_FAIL_COND(rt->color_multisample.is_null());
 		RD::get_singleton()->set_resource_name(rt->color_multisample, "Render Target Color MSAA");

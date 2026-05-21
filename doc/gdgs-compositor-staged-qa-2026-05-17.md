@@ -4576,3 +4576,56 @@ The Tonemap slot-0 root tracker is **not** being flipped non-discardable by a la
 3. the tracker therefore reaches Tonemap already classified as non-discardable, which is why the later active-scope rebuild falls into the unconditional non-discardable default-`LOAD` branch
 
 So the seed is best described as **root texture creation materializing an upstream render-target contract**, not a later Tonemap-local or extra pre-RDG seed rule.
+
+## 2026-05-21 — Task 111 follow-up: classify the exact upstream render-target color contract behind Tonemap slot-0 `is_discardable=false`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-contract-vulkan-sourcebuild-20260521-0945/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-contract-vulkan-sourcebuild-20260521-0945/exact_command.txt`
+- stdout: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-contract-vulkan-sourcebuild-20260521-0945/stdout.log`
+- stderr: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-contract-vulkan-sourcebuild-20260521-0945/stderr.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-contract-vulkan-sourcebuild-20260521-0945/exit_status.txt`
+
+### Diagnostic added
+
+One narrow debug-only breadcrumb was added in the owning Godot source tree:
+
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+
+It prints the exact render-target color `RD::TextureFormat` contract at the point where `TextureStorage::_update_render_target()` prepares the non-MSAA color attachment, including the usage bits and whether `is_discardable` was left at the struct default versus explicitly overridden.
+
+### Relevant runtime lines
+
+From `stdout.log` on the same failing source-built host-Vulkan `projection_only__disabled` lane:
+
+- `[gdgs-ts] render_target_color_format scope=non_msaa_color create_path=TextureStorage::_update_render_target usage_bits=0x8b is_discardable=false discardable_contract="texture_format_default_false_unset" discardable_basis="TextureFormat::is_discardable default remains false on non_msaa_color_path" resolve_buffer=false msaa=0`
+- `[gdgs-rdg] draw_list_render_pass_create key=0x0 render_pass_id=0x7f9fa26b32e8 framebuffer_id=0x5789dc583ff0 label="Tonemap" breadcrumb=0 attachments=[{index=0,load_op=0,store_op=0,source="non_discardable_default_load_contract",tracker_discardable=false,tracker_has_parent=false,tracker_write_index=132,parent_write_index=-1,texture_usage=0x8b,tracker_name="RID:8783208120351",discardable_provenance="root_texture_create",discardable_seed=false,discardable_seed_contract="texture_format_is_discardable_flag",non_discardable_basis="tracker_is_non_discardable",default_non_discardable_policy="always_load_without_extra_per_attachment_split"}]`
+- later failure remains the same lane: `fence_wait_error submit_serial=9 wait_result=-4`
+
+### What this proves
+
+This answers the remaining upstream-contract question narrowly and directly:
+
+- the decisive choice is **not** hidden inside `render_target_get_color_usage_bits(false)` itself
+- the decisive choice is **not** a later usage-family reinterpretation of `0x8b`
+- the decisive choice is the **non-MSAA render-target color creation rule in `TextureStorage::_update_render_target()` leaving `RD::TextureFormat::is_discardable` untouched**, so the field stays at its struct default `false`
+- root texture creation then honestly materializes that untouched `false` into the tracker via `discardable_seed_contract="texture_format_is_discardable_flag"`
+
+The contrast inside the same function is useful and exact: the MSAA sibling path explicitly sets `rd_color_multisample_format.is_discardable = true`, but the non-MSAA color attachment path does not set `is_discardable` at all.
+
+### Updated conclusion
+
+The upstream contract behind Tonemap slot-0 non-discardability on this lane is now classified as:
+
+**`TextureStorage::_update_render_target()` non-MSAA render-target color creation leaves `RD::TextureFormat::is_discardable` at the `TextureFormat` default `false`; `render_target_get_color_usage_bits(false)` only explains the matching `0x8b` usage family, not the non-discardable seed.**
+
+So the earliest honest seam is now fully pinned:
+
+1. non-MSAA render-target color creation builds a format with usage bits `0x8b`
+2. that path leaves `TextureFormat::is_discardable` unset, so it remains default `false`
+3. root texture creation copies that `false` into the tracker
+4. Tonemap later inherits the already-non-discardable root tracker and therefore falls into the unconditional non-discardable default-`LOAD` branch
