@@ -2227,12 +2227,32 @@ RID TextureStorage::texture_get_rd_texture(RID p_texture, bool p_srgb) const {
 		return RID();
 	}
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (tex->render_target) {
+		if (p_srgb) {
+			tex->render_target->debug_render_target_texture_rd_srgb_requests++;
+		} else {
+			tex->render_target->debug_render_target_texture_rd_requests++;
+		}
+	}
+#endif
+
 	return (p_srgb && tex->rd_texture_srgb.is_valid()) ? tex->rd_texture_srgb : tex->rd_texture;
 }
 
 uint64_t TextureStorage::texture_get_native_handle(RID p_texture, bool p_srgb) const {
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, 0);
+
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (tex->render_target) {
+		if (p_srgb) {
+			tex->render_target->debug_render_target_texture_native_handle_srgb_requests++;
+		} else {
+			tex->render_target->debug_render_target_texture_native_handle_requests++;
+		}
+	}
+#endif
 
 	if (p_srgb && tex->rd_texture_srgb.is_valid()) {
 		return RD::get_singleton()->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE, tex->rd_texture_srgb);
@@ -4337,6 +4357,10 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 		tex->render_target = rt;
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		rt->debug_render_target_texture_requests = 0;
+		rt->debug_render_target_texture_rd_requests = 0;
+		rt->debug_render_target_texture_rd_srgb_requests = 0;
+		rt->debug_render_target_texture_native_handle_requests = 0;
+		rt->debug_render_target_texture_native_handle_srgb_requests = 0;
 		rt->debug_rd_root_texture_requests = 0;
 		rt->debug_rd_root_texture_slice_requests = 0;
 		rt->debug_rd_framebuffer_requests = 0;
@@ -4763,15 +4787,16 @@ String TextureStorage::render_target_debug_describe_tonemap_lane(RID p_render_ta
 	}
 
 	const uint64_t direct_root_access_count = rt->debug_rd_framebuffer_requests + rt->debug_rd_root_texture_requests + rt->debug_rd_root_texture_slice_requests + rt->debug_rd_msaa_texture_requests;
-	const bool shared_view_required_or_observed = rt->is_transparent || rt->debug_render_target_texture_requests > 0;
+	const uint64_t shared_view_entrypoint_count = rt->debug_render_target_texture_requests + rt->debug_render_target_texture_rd_requests + rt->debug_render_target_texture_rd_srgb_requests + rt->debug_render_target_texture_native_handle_requests + rt->debug_render_target_texture_native_handle_srgb_requests;
+	const bool shared_view_required_or_observed = rt->is_transparent || shared_view_entrypoint_count > 0;
 	String requirement_class = shared_view_required_or_observed ? "required_or_observed" : "eager_rule_without_observed_consumer";
 	String invariant_classifier = "insufficient_observed_lane_access";
 	if (shared_view_required_or_observed) {
-		invariant_classifier = "shared_view_required_or_observed";
+		invariant_classifier = shared_view_entrypoint_count > 0 ? "broader_pre_failure_shared_view_consumer_observed" : "shared_view_required_or_observed";
 	} else if (direct_root_access_count > 0) {
-		invariant_classifier = "no_observed_tonemap_lane_shared_view_invariant";
+		invariant_classifier = "lazy_on_demand_shared_view_candidate";
 	}
-	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,msaa=%d,view_count=%d,override_active=%s,shared_view_requirement={transparent_bg=%s,viewport_texture_requests=%s,requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
+	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,msaa=%d,view_count=%d,override_active=%s,shared_view_requirement={transparent_bg=%s,shared_view_entrypoints={viewport_texture_requests=%s,texture_rd={base=%s,srgb=%s,total=%s},native_handle={base=%s,srgb=%s,total=%s},total=%s},requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests), String::num_uint64(rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests + rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests + rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(shared_view_entrypoint_count), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
 }
 
 RID TextureStorage::render_target_get_rd_texture(RID p_render_target) {

@@ -4960,3 +4960,49 @@ For the failing host-Vulkan `projection_only__disabled` Tonemap lane at `submit_
 - **yes:** the eager shared-view creation at `render_target_set_size()` remains the surviving broader ownership seam for this lane
 
 Important scope boundary: this does **not** prove the engine can globally delete eager shared-view creation without consequences. It proves the narrower thing we needed here: on this failing Tonemap lane, the shared view is created eagerly by policy, but the observed Tonemap path itself still runs through the direct root framebuffer path and shows no actual shared-view consumer before the unchanged failure.
+
+## 2026-05-21 — Task 118 follow-up: classify lazy/on-demand shared-view fix shape vs an unobserved broader pre-failure consumer
+
+Artifact root:
+`/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-classifier-vulkan-sourcebuild-20260521-134232/`
+
+### What changed
+
+I kept the diagnostic as narrow as possible inside `TextureStorage` and only added counters for **actual render-target texture-RID consumers** that could use the eagerly-created shared aliases without going back through the already-measured `render_target_get_texture()` request path:
+
+- `texture_get_rd_texture()` now counts base-vs-sRGB requests when the queried texture belongs to a render target
+- `texture_get_native_handle()` now counts base-vs-sRGB native-handle requests for render-target textures
+- the existing Tonemap lane summary now reports these as `shared_view_entrypoints`
+
+This keeps the fork honest: **if some broader pre-failure consumer already holds the render-target texture RID and asks for its RD/shared alias before the failing submit, we should now see it even when `viewport_texture_requests=0`.**
+
+### Runtime result
+
+The rebuilt source editor reproduced the same failing lane and printed:
+
+- `[gdgs-ts] tonemap_render_target_lane ... lane={path_class=persistent_root_direct,lane_owner=rt->color,lane_policy=persistent_root_sampled_shared,... shared_view_requirement={transparent_bg=false,shared_view_entrypoints={viewport_texture_requests=0,texture_rd={base=0,srgb=0,total=0},native_handle={base=0,srgb=0,total=0},total=0},requirement_class=eager_rule_without_observed_consumer,invariant_classifier=lazy_on_demand_shared_view_candidate,direct_root_accesses={framebuffer=1,rd_texture=0,rd_texture_slice=0,rd_texture_msaa=0,total=1}} ...}`
+- the same run still ends at `fence_wait_error submit_serial=9 wait_result=-4` and later `BLIT_PASS`
+
+### What this proves
+
+For the locked failing Tonemap lane, the newly-added pre-failure consumer checks stayed completely dark:
+
+- no `render_target_get_texture()` requests before failure (`viewport_texture_requests=0`)
+- no render-target texture RID → RD alias requests before failure (`texture_rd={base=0,srgb=0,total=0}`)
+- no render-target texture native-handle requests before failure (`native_handle={base=0,srgb=0,total=0}`)
+- Tonemap still reaches the failure through the direct root framebuffer path (`framebuffer=1`, other direct-root counters `0`)
+
+So the evidence now favors the narrower fix shape:
+
+- **yes:** this lane looks like a `lazy/on-demand shared-view creation` candidate
+- **no observed evidence:** of a broader pre-failure shared-view consumer outside Tonemap on this repro before the unchanged `submit_serial=9` failure
+
+### Updated conclusion
+
+For this exact host-Vulkan `projection_only__disabled` repro lane, the most honest current classification is:
+
+- the broader ownership seam is still the eager shared-view creation policy in `render_target_set_size()` / `_update_render_target()`
+- but after also checking render-target texture RID → RD/native-handle entrypoints, there is still **no observed pre-failure consumer** forcing those shared aliases to exist before Tonemap reaches the unchanged crash
+- therefore the fix shape for **this lane** now looks more like **lazy/on-demand shared-view creation** than "some broader pre-failure consumer exists but we just have not seen it yet"
+
+Scope boundary: this is still a lane-local classification, not a proof that all eager shared-view creation can be removed engine-wide.

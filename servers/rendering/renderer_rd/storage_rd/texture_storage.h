@@ -489,6 +489,10 @@ private:
 		bool was_used;
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		uint64_t debug_render_target_texture_requests = 0;
+		uint64_t debug_render_target_texture_rd_requests = 0;
+		uint64_t debug_render_target_texture_rd_srgb_requests = 0;
+		uint64_t debug_render_target_texture_native_handle_requests = 0;
+		uint64_t debug_render_target_texture_native_handle_srgb_requests = 0;
 		uint64_t debug_rd_root_texture_requests = 0;
 		uint64_t debug_rd_root_texture_slice_requests = 0;
 		uint64_t debug_rd_framebuffer_requests = 0;

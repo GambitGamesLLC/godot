@@ -2933,6 +2933,30 @@ What actually happened vs. the Task 109 question:
 
 ---
 
+### Task 118: Classify whether this Tonemap lane needs lazy/on-demand shared-view creation or has an unobserved broader pre-failure consumer at failing `submit_serial=9`
+
+**Bead ID:** `oc-5xw`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-5xw` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: eager shared-view creation at `render_target_set_size()` remains the broader ownership seam, and this failing Tonemap lane itself does not show a real shared-view consumer/invariant before the unchanged `submit_serial=9` failure (`viewport_texture_requests=0`, direct root access only). Implement the smallest honest diagnostic needed to classify the next exact fork: **does the fix shape for this lane look like lazy/on-demand shared-view creation, or is there some broader pre-failure shared-view consumer outside Tonemap that still exists but has not yet been observed?** Prefer texture-storage / render-target ownership / usage-flow evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-5xw` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest pre-failure shared-view-consumer diagnostic by extending `TextureStorage` debug counters for render-target-backed textures: besides the already-tracked `render_target_get_texture()` requests, the source build now counts `texture_get_rd_texture()` and `texture_get_native_handle()` requests against render-target textures, split base vs sRGB, and surfaces them in the existing `tonemap_render_target_lane` summary as `shared_view_entrypoints`. Rebuilt the source editor and reran the locked host-Vulkan `projection_only__disabled` repro, saving artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-classifier-vulkan-sourcebuild-20260521-134232/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `exit_status.txt`). Exact runtime result: the Tonemap lane still reports `path_class=persistent_root_direct`, `lane_owner=rt->color`, and reaches the unchanged `fence_wait_error submit_serial=9 wait_result=-4`, but now the full pre-failure shared-view entrypoint set stays dark: `shared_view_entrypoints={viewport_texture_requests=0,texture_rd={base=0,srgb=0,total=0},native_handle={base=0,srgb=0,total=0},total=0}` with `invariant_classifier=lazy_on_demand_shared_view_candidate`, while direct-root access remains `framebuffer=1` and other direct-root counters `0`. Conclusion: on this exact failing Tonemap lane, the evidence favors a lazy/on-demand shared-view creation fix shape; after checking the known render-target texture RID → RD/native-handle entrypoints, there is still no observed broader pre-failure shared-view consumer outside Tonemap before the unchanged submit-9 failure. Updated `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the new artifact root and classification. `bd update oc-5xw --status in_progress --json` worked; close-out recorded at task completion.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
