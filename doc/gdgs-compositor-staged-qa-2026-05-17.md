@@ -4629,3 +4629,219 @@ So the earliest honest seam is now fully pinned:
 2. that path leaves `TextureFormat::is_discardable` unset, so it remains default `false`
 3. root texture creation copies that `false` into the tracker
 4. Tonemap later inherits the already-non-discardable root tracker and therefore falls into the unconditional non-discardable default-`LOAD` branch
+
+## 2026-05-21 — Task 112 follow-up: classify whether the non-MSAA render-target `is_discardable=false` contract is intentional or the surviving Tonemap bug seam
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-policy-vulkan-sourcebuild-20260521-0956/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-policy-vulkan-sourcebuild-20260521-0956/exact_command.txt`
+- stdout: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-policy-vulkan-sourcebuild-20260521-0956/stdout.log`
+- stderr: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-render-target-policy-vulkan-sourcebuild-20260521-0956/stderr.log`
+
+### Diagnostic added
+
+One additional debug-only ownership breadcrumb was added in the owning Godot source tree:
+
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+
+It does not widen the repro lane. It only prints the exact policy/ownership split that already exists in `TextureStorage::_update_render_target()`:
+
+- non-MSAA `rt->color` is later shared back out through `texture_create_shared(...)` to the render-target root texture / optional sRGB view
+- MSAA `rt->color_multisample` is an intermediate resolve source that resolves into `rt->color`
+
+### Relevant runtime lines
+
+From `stdout.log` on the same failing source-built host-Vulkan `projection_only__disabled` lane:
+
+- `[gdgs-ts] render_target_color_format scope=non_msaa_color create_path=TextureStorage::_update_render_target usage_bits=0x8b is_discardable=false discardable_contract="texture_format_default_false_unset" discardable_basis="TextureFormat::is_discardable default remains false on non_msaa_color_path" resolve_buffer=false msaa=0`
+- `[gdgs-ts] render_target_color_policy scope=non_msaa_color owner=persistent_root_color policy_class=sampled_shared_root sampled_by_root_texture=true shared_to_render_target_texture=true shared_to_srgb_texture=true resolve_buffer=false msaa=0`
+- `[gdgs-rdg] draw_list_render_pass_create ... label="Tonemap" ... source="non_discardable_default_load_contract" ... discardable_provenance="root_texture_create" discardable_seed=false discardable_seed_contract="texture_format_is_discardable_flag" ...`
+- later failure remains the same lane: `fence_wait_error submit_serial=9 wait_result=-4`
+
+The MSAA breadcrumb does not appear in this runtime because this locked repro lane is `msaa=0`, but the same source branch is still explicit in code:
+
+- `// Render into our MSAA buffer and resolve into our color buffer.`
+- `rd_color_multisample_format.is_discardable = true;`
+- `[gdgs-ts] render_target_color_policy scope=msaa_color owner=msaa_intermediate policy_class=transient_resolve_source sampled_by_root_texture=false shared_to_render_target_texture=false resolve_destination=rt->color ...`
+
+### What this proves
+
+This narrows the intent question enough to classify the contract honestly:
+
+- the non-MSAA path is **not** behaving like an orphaned transient attachment that Tonemap accidentally inherited
+- on this lane, the non-MSAA color texture is the **persistent render-target root resource**: it is created first as `rt->color`, then reused as the backing store for `tex->rd_texture` / `tex->rd_texture_srgb` via `texture_create_shared(...)`
+- the MSAA sibling path is the intentionally transient one: it only exists when `rt->msaa != VIEWPORT_MSAA_DISABLED`, is tagged `is_discardable=true`, and is documented in-code as the source that resolves into the persistent `rt->color`
+
+So the exact condition split is:
+
+1. **`msaa == disabled`** → only `rt->color` exists; it is the sampled/shared root render-target color texture, so the default `is_discardable=false` persists into the root tracker
+2. **`msaa != disabled`** → `rt->color` still exists as the persistent resolve destination/root texture, while `rt->color_multisample` is the explicit transient MSAA intermediate and therefore gets `is_discardable=true`
+
+### Updated conclusion
+
+For this locked `submit_serial=9` lane, the non-MSAA `is_discardable=false` contract reads as an **intentional render-target ownership rule**, not as a newly isolated Tonemap-local bug seam by itself.
+
+The surviving bug seam is narrower than “non-MSAA should have been discardable”: Tonemap is consuming a render-target root texture whose upstream creation policy intentionally treats it as persistent/shared root state. That persistent-root contract is what later drives the Tonemap slot-0 tracker into the default non-discardable `LOAD` branch.
+
+## 2026-05-21 — Task 113 follow-up: classify wrong persistent-root lane vs wrong persistent-root policy for Tonemap at failing `submit_serial=9`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-persistent-root-lane-vulkan-sourcebuild-20260521-100508/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-persistent-root-lane-vulkan-sourcebuild-20260521-100508/exact_command.txt`
+- stdout: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-persistent-root-lane-vulkan-sourcebuild-20260521-100508/stdout.log`
+- stderr: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-persistent-root-lane-vulkan-sourcebuild-20260521-100508/stderr.log`
+
+### Diagnostic added
+
+A minimal debug-only Tonemap-lane breadcrumb was added in the owning Godot source tree:
+
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.{h,cpp}`
+- `servers/rendering/renderer_rd/renderer_scene_render_rd.cpp`
+
+It only classifies which render-target lane Tonemap actually binds for the already-locked repro shape (`direct render-target`, `intermediate/scaling`, `MSAA resolve`, or `override`), without reopening demoted packet or post-rebind lanes.
+
+### Relevant runtime lines
+
+From `stdout.log` on the same failing source-built host-Vulkan `projection_only__disabled` lane:
+
+- `[gdgs-ts] render_target_color_policy scope=non_msaa_color owner=persistent_root_color policy_class=sampled_shared_root sampled_by_root_texture=true shared_to_render_target_texture=true shared_to_srgb_texture=true resolve_buffer=false msaa=0`
+- `[gdgs-ts] tonemap_render_target_lane submit_focus=submit_serial_9 path=tonemapper tonemap_dest={dest_is_msaa_2d=false,using_scaling_pass=false,use_smaa=false,can_use_storage=true} lane={path_class=persistent_root_direct,lane_owner=rt->color,lane_policy=persistent_root_sampled_shared,lane_rationale=tonemap_direct_to_render_target_framebuffer,msaa=0,view_count=1,override_active=false,...}`
+- the same run still fails on the same lane: `fence_wait_error submit_serial=9 wait_result=-4`
+
+The already-locked pre-rebind seam evidence still matches the same run too:
+
+- `pre_rebind_carried_packet_contract={... minimum_distinguishing_hazard="attachment_exact_recipe", ... attachment_exact_recipe={... minimum_distinguishing_field="load_op", ... active_load_ops=["0:LOAD"], pipeline_load_ops=["0:CLEAR"] ...}}`
+
+### What this proves
+
+This closes the lane-vs-policy fork cleanly for the current failing lane:
+
+- Tonemap is **not** accidentally bound to a side lane, intermediate, override chain, or the MSAA transient lane here
+- with `dest_is_msaa_2d=false`, `using_scaling_pass=false`, and `use_smaa=false`, Tonemap writes **directly** to the render-target framebuffer backed by the persistent non-MSAA root color (`rt->color`)
+- that means the “wrong lane” hypothesis fails on this exact repro: Tonemap is on the same persistent-root direct lane that the owning render-target policy intentionally provides for the non-MSAA root texture
+- the surviving mismatch therefore remains the **policy/contract** attached to that lane for this specific usage, not Tonemap choosing the wrong destination object
+
+### Updated conclusion
+
+For the locked failing `submit_serial=9` source-built host-Vulkan `projection_only__disabled` lane, Tonemap is bound to the **intended persistent-root direct render-target lane** (`rt->color`), so the surviving fork resolves to **persistent-root policy wrong for this specific Tonemap usage**, not “Tonemap picked the wrong persistent-root lane.”
+
+More precisely: the lane binding is correct, but the active-scope recipe rebuilt for that lane still ends up with slot-0 `LOAD` while the carried Tonemap packet keeps slot-0 `CLEAR`, so the bug seam stays attached to the persistent-root lane’s exact attachment/load-op policy for this usage.
+
+## 2026-05-21 — Task 114 follow-up: classify the exact cause of Tonemap’s persistent sampled/shared-root policy at failing `submit_serial=9`
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-persistent-root-policy-cause-vulkan-sourcebuild-20260521-101345/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-persistent-root-policy-cause-vulkan-sourcebuild-20260521-101345/exact_command.txt`
+- stdout: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-persistent-root-policy-cause-vulkan-sourcebuild-20260521-101345/stdout.log`
+- stderr: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-persistent-root-policy-cause-vulkan-sourcebuild-20260521-101345/stderr.log`
+
+### Diagnostic added
+
+One extra debug-only policy-classification line was added in the owning Godot source tree:
+
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+
+It stays on the already-locked lane and only prints the exact root-policy causes already visible in `TextureStorage::_update_render_target()`:
+
+- whether the root color is immediately aliased into the render-target texture / sRGB shared view
+- the exact non-MSAA usage-bit family on that root texture
+- whether any explicit discardable override exists on the root lane
+
+### Relevant runtime lines
+
+From `stdout.log` on the same failing source-built host-Vulkan `projection_only__disabled` lane:
+
+- `[gdgs-ts] render_target_color_policy scope=non_msaa_color owner=persistent_root_color policy_class=sampled_shared_root sampled_by_root_texture=true shared_to_render_target_texture=true shared_to_srgb_texture=true resolve_buffer=false msaa=0`
+- `[gdgs-ts] render_target_policy_cause scope=non_msaa_color owner=persistent_root_color primary_cause=render_target_texture_shared_view_rule specific_sampled_consumer_registration=false render_target_texture_shared_view=true srgb_shared_view=true shareable_formats={base=true,srgb=true} usage_bits=0x8b usage_family={sampling=true,color_attachment=true,copy_from=true,storage=true} discardable_override_on_root=false policy_contract="rt->color is the canonical backing store for eager shared viewport/render-target texture views; only the MSAA intermediate branch is explicitly discardable" creation_note="shared root texture is created so transparent can be supported"`
+- `[gdgs-ts] tonemap_render_target_lane ... lane={path_class=persistent_root_direct,lane_owner=rt->color,lane_policy=persistent_root_sampled_shared,...}`
+- `[gdgs-rdg] draw_list_render_pass_create ... label="Tonemap" ... source="non_discardable_default_load_contract" ... texture_usage=0x8b ... discardable_provenance="root_texture_create" discardable_seed=false ...`
+- later failure remains unchanged on the same lane: `fence_wait_error submit_serial=9 wait_result=-4`
+
+### What this proves
+
+This resolves the requested fork narrowly and honestly:
+
+- the policy is **not** being driven by a one-off downstream sampled-consumer registration discovered later in the graph
+- the primary driver on this lane is the **render-target texture sharing/view ownership rule** in `_update_render_target()`: `rt->color` is created as the canonical non-MSAA root color, then immediately aliased into `tex->rd_texture` and optional `tex->rd_texture_srgb` via `texture_create_shared(...)`
+- the code comment right on that path states why the aliasing exists: `create shared textures to the color buffer, so transparent can be supported`
+- the non-MSAA root also carries the broad usage-bit family `0x8b` (`sampling + color_attachment + can_copy_from + storage`), which is consistent with that shared-root role, but those bits are **supporting capability requirements**, not the direct discardable switch
+- the discardable split remains explicit elsewhere: only the MSAA sibling path (`rt->color_multisample`) gets `is_discardable=true`
+
+So the best exact classification for this failing lane is:
+
+1. **Primary cause:** render-target texture shared-view/root-ownership rule (`rt->color` must persist because it backs the render-target texture aliases)
+2. **Secondary supporting requirement:** the non-MSAA root is provisioned with the broad sampled/storage/copy usage-bit family needed for that reusable root role
+3. **Not the cause:** a late-discovered specific sampled/shared consumer registration
+
+### Updated conclusion
+
+For the locked failing Tonemap lane, the persistent sampled/shared-root treatment is driven primarily by **root render-target ownership plus eager shared texture/view aliasing**, not by a late consumer registration and not merely by usage bits in isolation.
+
+In plain terms: Tonemap writes into `rt->color`, and `rt->color` is intentionally the persistent backing store for the render-target texture views Godot exposes and reuses. Because that root texture is not the transient MSAA intermediate, it never gets the explicit discardable override, so Tonemap inherits the root texture’s default non-discardable `LOAD` contract on this lane.
+
+## 2026-05-21 — Task 115 follow-up: classify whether the transparent-support shared-view ownership is actually required on the failing Tonemap lane
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-transparent-shared-view-necessity-vulkan-sourcebuild-20260521-104055/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-transparent-shared-view-necessity-vulkan-sourcebuild-20260521-104055/exact_command.txt`
+- stdout: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-transparent-shared-view-necessity-vulkan-sourcebuild-20260521-104055/stdout.log`
+- stderr: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-transparent-shared-view-necessity-vulkan-sourcebuild-20260521-104055/stderr.log`
+
+### Diagnostic added
+
+A tiny debug-only usage-flow counter was added on the owning render target:
+
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+
+It does only three things:
+
+- counts `render_target_get_texture()` requests on the owning `RenderTarget`
+- prints that count in the existing `render_target_policy_cause` line
+- prints the same count plus `transparent_bg` in the existing Tonemap lane summary
+
+This stays exactly on the narrow fork in question: was the eager shared-view ownership needed here because of transparent support or an observed viewport/render-target texture consumer, or was it broader than the failing lane actually used?
+
+### Relevant runtime lines
+
+From `stdout.log` on the same failing source-built host-Vulkan `projection_only__disabled` lane:
+
+- `[gdgs-ts] render_target_policy_cause ... transparent_bg=false viewport_texture_requests=0 ... creation_note="shared root texture is created so transparent can be supported"`
+- `[gdgs-ts] tonemap_render_target_lane ... lane={path_class=persistent_root_direct,lane_owner=rt->color,lane_policy=persistent_root_sampled_shared,...,shared_view_requirement={transparent_bg=false,viewport_texture_requests=0,requirement_class=eager_rule_without_observed_consumer},attachments={color=RID:...,render_target_texture=RID:...}}`
+- later failure is still the same locked one: `fence_wait_error submit_serial=9 wait_result=-4`
+
+### What this proves
+
+This classifies the fork directly:
+
+- on the failing Tonemap lane, the owning render target is **not** transparent (`transparent_bg=false`)
+- up to the failing `submit_serial=9` Tonemap lane, there were **zero observed `render_target_get_texture()` requests** (`viewport_texture_requests=0`)
+- yet the root is still forced into the sampled/shared-root policy because the shared render-target texture view is created eagerly in `_update_render_target()`
+
+So for this exact repro lane, the transparent-support/shared-view ownership rule is **too broad for the observed usage**.
+
+More precisely:
+
+- the eager shared-view rule still explains why `rt->color` stays persistent/non-discardable
+- but the failing Tonemap lane did **not** demonstrate an actual transparent-background requirement
+- and it also did **not** demonstrate an observed viewport/render-target texture consumer before the failure
+
+### Updated conclusion
+
+For the locked failing `submit_serial=9` Tonemap lane, transparent-support shared-view ownership is **not shown to be required by this repro’s actual usage flow**. The current rule is broader: it eagerly upgrades the root to a persistent sampled/shared owner even when this lane is non-transparent and has no observed render-target texture requests before the crash.

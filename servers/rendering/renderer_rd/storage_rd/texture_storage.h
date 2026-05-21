@@ -487,6 +487,9 @@ private:
 		//texture generated for this owner (nor RD).
 		RID texture;
 		bool was_used;
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		uint64_t debug_render_target_texture_requests = 0;
+#endif
 
 		//clear request
 		bool clear_requested;
@@ -919,6 +922,7 @@ public:
 	virtual Size2i render_target_get_velocity_target_size(RID p_render_target) const override { return Size2i(0, 0); }
 
 	RID render_target_get_rd_framebuffer(RID p_render_target);
+	String render_target_debug_describe_tonemap_lane(RID p_render_target, bool p_dest_is_msaa_2d, bool p_using_scaling_pass, bool p_use_smaa);
 	RID render_target_get_rd_texture(RID p_render_target);
 	RID render_target_get_rd_texture_slice(RID p_render_target, uint32_t p_layer);
 	RID render_target_get_rd_texture_msaa(RID p_render_target);
