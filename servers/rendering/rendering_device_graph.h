@@ -223,6 +223,8 @@ public:
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		uint8_t debug_discardable_provenance = DEBUG_DISCARDABLE_PROVENANCE_UNKNOWN;
 		bool debug_discardable_seed_value = false;
+		String debug_discardable_seed_contract;
+		String debug_resource_name;
 #endif
 
 		_FORCE_INLINE_ void reset_if_outdated(int64_t new_command_frame) {

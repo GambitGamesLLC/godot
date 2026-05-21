@@ -4534,3 +4534,45 @@ The smallest honest current statement is now:
   - **policy seam:** the non-discardable default branch is unconditional `LOAD`, with no narrower Tonemap-local sub-branch left to split here
 
 So the best next question, if the lane continues, is no longer “why does default non-discardable choose `LOAD`?” The better question is: **who/what made this Tonemap attachment root tracker non-discardable in the first place?**
+
+## Follow-up coder pass for bead `oc-7za` — trace the Tonemap root-tracker non-discardable seed before the `L88` scope rebuild
+
+### Artifact roots
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-seed-vulkan-sourcebuild-20260521-0914/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-seed-vulkan-sourcebuild-20260521-0920/`
+
+### What changed
+
+The coder pass added one narrow RDG breadcrumb at root-tracker creation / reporting time:
+
+- `tracker_name`
+- `discardable_seed_contract`
+
+It also tried a tiny runtime name assignment for render-target color attachments so the attachment owner would print as a name instead of a raw RID where possible.
+
+### Locked result
+
+On the same failing source-built host-Vulkan `projection_only__disabled` lane, the Tonemap render-pass attachment still reports:
+
+- `tracker_has_parent=false`
+- `discardable_provenance="root_texture_create"`
+- `discardable_seed=false`
+- `discardable_seed_contract="texture_format_is_discardable_flag"`
+- `texture_usage=0x8b`
+
+The runtime name did not resolve past `tracker_name="RID:8783208120351"` on this lane, but the usage bits do resolve the ownership seam statically and honestly:
+
+- `0x8b = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_CAN_COPY_FROM_BIT`
+- that exactly matches `TextureStorage::render_target_get_color_usage_bits(false)` in `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- that render-target color contract is the upstream texture-creation contract applied before Tonemap’s active-scope render-pass recipe is rebuilt
+
+### Conclusion
+
+The Tonemap slot-0 root tracker is **not** being flipped non-discardable by a later pre-RDG rule. The earliest honest seam is:
+
+1. an upstream render-target color usage/creation contract leaves `TextureFormat.is_discardable=false`
+2. the root texture creation path copies that flag into the root tracker (`discardable_seed_contract="texture_format_is_discardable_flag"`)
+3. the tracker therefore reaches Tonemap already classified as non-discardable, which is why the later active-scope rebuild falls into the unconditional non-discardable default-`LOAD` branch
+
+So the seed is best described as **root texture creation materializing an upstream render-target contract**, not a later Tonemap-local or extra pre-RDG seed rule.

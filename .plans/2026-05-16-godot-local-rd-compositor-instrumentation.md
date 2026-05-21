@@ -2686,10 +2686,10 @@ What actually happened vs. the task question:
 
 ### Task 109: Split the Tonemap RDG active-scope slot-0 `LOAD` decision into `non_discardable` attribution vs default-load policy
 
-**Bead ID:** `Pending`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-nxv`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. The current stopping point is locked: the first attributable source of slot-0 `LOAD` is the Tonemap RDG active-scope recipe branch `source="non_discardable_default_load_contract"` with `tracker_discardable=false`, and `L88` only reuses that already-live compatible scope. Add the smallest honest diagnostic that splits this branch one step deeper: determine whether the surviving seam is best explained by **why slot 0 is classified as non-discardable**, or by **why the default non-discardable branch chooses `LOAD`** for this Tonemap attachment. Prefer render-pass / RDG recipe / command-buffer ownership evidence over widening back into demoted lanes. If `bd` is healthy, create/claim the next bead on start; if the local bead CLI remains wedged, proceed on this exact task and record the bead blockage clearly in your results. Save durable notes/artifact references, update this plan with what actually happened, and close the bead if one exists.
 
 **Folders Created/Deleted/Modified:**
@@ -2710,7 +2710,7 @@ What actually happened vs. the task question:
 
 **Status:** ✅ Complete
 
-**Results:** Tried to create the next bead at task start, but the local `bd` CLI remained unhealthy/wedged again, so I did **not** burn more time fighting it and proceeded on the locked Task 109 scope with that blockage recorded here.
+**Results:** The bead create path was noisy because the local `bd` CLI lock handling was unhealthy in the parent session, but the create did in fact land as `oc-nxv` and was later reconciled/closed cleanly. I did **not** burn more time fighting Beads during the implementation slice itself and proceeded on the locked Task 109 scope while recording the transient bead blockage.
 
 Implemented the smallest honest follow-up in `rendering_device_graph.*` plus `rendering_device.cpp`: the Tonemap draw-list attachment debug payload now records **discardable provenance** (`root_texture_create`, `shared_fallback_create`, `slice_tracker_create`, or explicit `texture_set_discardable_*`) and annotates the `non_discardable_default_load_contract` branch itself as `default_non_discardable_policy="always_load_without_extra_per_attachment_split"`. That split is intentionally narrow: it does not reopen broader render-pass, pipeline, or post-rebind lanes; it only distinguishes whether the remaining seam lives in the attachment’s non-discardable attribution or in a narrower Tonemap-local policy branch under default non-discardable handling.
 
@@ -2724,6 +2724,31 @@ What actually happened vs. the Task 109 question:
 - In this locked lane, the Tonemap slot-0 tracker is already a **root texture tracker** with `discardable_seed=false` and `tracker_has_parent=false`; there is no slice/parent/shared-fallback nuance carrying the seam.
 - Once the code reaches `non_discardable_default_load_contract`, there is **no additional per-attachment policy split left** here: the default policy is simply unconditional `LOAD`.
 - So the next honest seam, if this lane continues, is upstream of the default-load rule: **who/what seeded this Tonemap attachment’s root tracker as non-discardable in the first place?**
+
+---
+
+### Task 110: Classify the Tonemap root-tracker non-discardable seed on slot 0 before the `L88` pre-rebind scope rebuild at failing `submit_serial=9`
+
+**Bead ID:** `oc-7za`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-7za` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the carried Tonemap packet keeps slot-0 `load_op=CLEAR`, the first attributable divergence appears when the active compatible scope is rebuilt, and the deeper split says that divergence is best explained by Tonemap slot 0 already being classified as `non_discardable`, not by any narrower default-load policy branch. Implement the smallest ownership-focused diagnostic needed to trace **who/what seeds that root tracker as non-discardable** for Tonemap slot 0 (`discardable_provenance="root_texture_create"`, `discardable_seed=false`, `tracker_has_parent=false`) and determine whether the earliest honest seam is the root texture creation path itself, an upstream usage/registration contract, or another pre-RDG seed rule that marks the tracker non-discardable before Tonemap’s active-scope recipe is built. Prefer RDG / texture-tracker / render-pass ownership evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-7za` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest root-seed breadcrumb on the RDG tracker path (`tracker_name`, `discardable_seed_contract`) plus a tiny render-target color naming attempt, rebuilt the source-built editor, and reran the same host-Vulkan `projection_only__disabled` repro twice. Fresh artifact roots: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-seed-vulkan-sourcebuild-20260521-0914/` and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-seed-vulkan-sourcebuild-20260521-0920/`. Locked result: Tonemap slot 0 still arrives as `tracker_has_parent=false`, `discardable_provenance="root_texture_create"`, `discardable_seed=false`, and now also `discardable_seed_contract="texture_format_is_discardable_flag"`. The tracked attachment remains unnamed at runtime (`tracker_name="RID:8783208120351"`), but its `texture_usage=0x8b` exactly matches `TextureStorage::render_target_get_color_usage_bits(false)` (`sampling|color_attachment|storage|can_copy_from`), which is the render-target color contract used before Tonemap’s active-scope recipe is rebuilt. No later `texture_set_discardable` override appears on this lane. Conclusion: the earliest honest seed is not another pre-RDG rule; it is the root texture creation path applying an upstream render-target usage/creation contract that leaves `TextureFormat.is_discardable=false` by default, so the tracker is already non-discardable before Tonemap builds its active compatible scope. `bd` worked for claim and closure.
 
 ---
 

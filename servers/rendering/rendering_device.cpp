@@ -1828,6 +1828,7 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		tracker->debug_discardable_provenance = RDG::DEBUG_DISCARDABLE_PROVENANCE_SHARED_FALLBACK_CREATE;
 		tracker->debug_discardable_seed_value = texture.is_discardable;
+		tracker->debug_discardable_seed_contract = "texture_format_is_discardable_flag";
 #endif
 		tracker->reference_count = 1;
 		texture.shared_fallback->texture_tracker = tracker;
@@ -2012,6 +2013,7 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		tracker->debug_discardable_provenance = RDG::DEBUG_DISCARDABLE_PROVENANCE_SHARED_FALLBACK_CREATE;
 		tracker->debug_discardable_seed_value = slice_format.is_discardable;
+		tracker->debug_discardable_seed_contract = "texture_format_is_discardable_flag";
 #endif
 		tracker->reference_count = 1;
 		texture.shared_fallback->texture_tracker = tracker;
@@ -3111,6 +3113,7 @@ void RenderingDevice::texture_set_discardable(RID p_texture, bool p_discardable)
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		texture->draw_tracker->debug_discardable_provenance = p_discardable ? RDG::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_TRUE : RDG::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_FALSE;
 		texture->draw_tracker->debug_discardable_seed_value = p_discardable;
+		texture->draw_tracker->debug_discardable_seed_contract = "texture_set_discardable_override";
 #endif
 	}
 
@@ -3119,6 +3122,7 @@ void RenderingDevice::texture_set_discardable(RID p_texture, bool p_discardable)
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		texture->shared_fallback->texture_tracker->debug_discardable_provenance = p_discardable ? RDG::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_TRUE : RDG::DEBUG_DISCARDABLE_PROVENANCE_TEXTURE_SET_DISCARDABLE_FALSE;
 		texture->shared_fallback->texture_tracker->debug_discardable_seed_value = p_discardable;
+		texture->shared_fallback->texture_tracker->debug_discardable_seed_contract = "texture_set_discardable_override";
 #endif
 	}
 }
@@ -7476,6 +7480,7 @@ bool RenderingDevice::_texture_make_mutable(Texture *p_texture, RID p_texture_id
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 						draw_tracker->debug_discardable_provenance = RDG::DEBUG_DISCARDABLE_PROVENANCE_SLICE_TRACKER_CREATE;
 						draw_tracker->debug_discardable_seed_value = draw_tracker->is_discardable;
+						draw_tracker->debug_discardable_seed_contract = "slice_tracker_inherits_parent_discardable";
 #endif
 						(*owner_texture->slice_trackers)[p_texture->slice_rect] = draw_tracker;
 					}
@@ -7502,6 +7507,7 @@ bool RenderingDevice::_texture_make_mutable(Texture *p_texture, RID p_texture_id
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 			p_texture->draw_tracker->debug_discardable_provenance = RDG::DEBUG_DISCARDABLE_PROVENANCE_ROOT_TEXTURE_CREATE;
 			p_texture->draw_tracker->debug_discardable_seed_value = p_texture->is_discardable;
+			p_texture->draw_tracker->debug_discardable_seed_contract = "texture_format_is_discardable_flag";
 #endif
 			p_texture->draw_tracker->reference_count = 1;
 
@@ -7831,6 +7837,17 @@ void RenderingDevice::set_resource_name(RID p_id, const String &p_name) {
 	}
 #ifdef DEV_ENABLED
 	resource_names[p_id] = p_name;
+	if (texture_owner.owns(p_id)) {
+		Texture *texture = texture_owner.get_or_null(p_id);
+		if (texture != nullptr) {
+			if (texture->draw_tracker != nullptr) {
+				texture->draw_tracker->debug_resource_name = p_name;
+			}
+			if (texture->shared_fallback != nullptr && texture->shared_fallback->texture_tracker != nullptr) {
+				texture->shared_fallback->texture_tracker->debug_resource_name = p_name;
+			}
+		}
+	}
 #endif
 }
 
