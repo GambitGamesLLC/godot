@@ -2909,6 +2909,30 @@ What actually happened vs. the Task 109 question:
 
 ---
 
+### Task 117: Classify whether eager shared-view creation at `render_target_set_size()` is the surviving bug seam or a required invariant for the Tonemap lane at failing `submit_serial=9`
+
+**Bead ID:** `oc-kug`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-kug` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: eager shared-view ownership is triggered by the ordinary `render_target_set_size()` -> `_update_render_target()` path, even with `transparent_bg=false` and `viewport_texture_requests=0`, and that eager shared-view creation pushes Tonemap onto the persistent-root sampled/shared lane that later reaches the non-discardable `LOAD` path. Implement the smallest honest diagnostic needed to classify the next fork: **is that eager shared-view creation at `render_target_set_size()` itself the surviving bug seam for this Tonemap lane, or is there a real invariant that still requires it to stay eager even on this failing repro?** Prefer texture-storage / render-target ownership / usage-flow evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-kug` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest access-path classifier in `servers/rendering/renderer_rd/storage_rd/texture_storage.{h,cpp}` by counting, per owning `RenderTarget`, whether the user-facing shared render-target texture was ever requested (`render_target_get_texture()`) versus whether Tonemap / late render code only touched the direct root attachment path (`render_target_get_rd_framebuffer()`, `render_target_get_rd_texture()`, `render_target_get_rd_texture_slice()`, `render_target_get_rd_texture_msaa()`). Rebuilt the source editor and reran the same host-Vulkan `projection_only__disabled` repro lane, saving artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-invariant-vulkan-sourcebuild-20260521-124956/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `exit_status.txt`). The decisive runtime line is the updated `tonemap_render_target_lane` summary: `path_class=persistent_root_direct`, `lane_owner=rt->color`, `viewport_texture_requests=0`, `direct_root_accesses={framebuffer=1,rd_texture=0,rd_texture_slice=0,rd_texture_msaa=0,total=1}`, and `invariant_classifier=no_observed_tonemap_lane_shared_view_invariant`, before the unchanged `fence_wait_error submit_serial=9 wait_result=-4`. Conclusion: on this failing Tonemap lane, eager shared-view creation at `render_target_set_size()` is still the surviving broader ownership seam, but the observed Tonemap path itself does not show a real shared-view invariant; it uses the direct root framebuffer path and reaches the same failure without any observed shared render-target texture consumer. Updated `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the artifact root and exact classification. `bd` claim succeeded; close-out recorded at task completion.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

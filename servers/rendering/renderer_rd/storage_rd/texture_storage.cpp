@@ -4337,6 +4337,10 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 		tex->render_target = rt;
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		rt->debug_render_target_texture_requests = 0;
+		rt->debug_rd_root_texture_requests = 0;
+		rt->debug_rd_root_texture_slice_requests = 0;
+		rt->debug_rd_framebuffer_requests = 0;
+		rt->debug_rd_msaa_texture_requests = 0;
 #endif
 
 		//create shared textures to the color buffer,
@@ -4716,6 +4720,9 @@ RID TextureStorage::render_target_get_rd_framebuffer(RID p_render_target) {
 	RenderTarget *rt = render_target_owner.get_or_null(p_render_target);
 	ERR_FAIL_NULL_V(rt, RID());
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	rt->debug_rd_framebuffer_requests++;
+#endif
 	return rt->get_framebuffer();
 }
 
@@ -4754,13 +4761,26 @@ String TextureStorage::render_target_debug_describe_tonemap_lane(RID p_render_ta
 	if (rt->texture.is_valid()) {
 		attachment_rid_summary += ",render_target_texture=" + rid_debug_name(rt->texture);
 	}
-	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,msaa=%d,view_count=%d,override_active=%s,shared_view_requirement={transparent_bg=%s,viewport_texture_requests=%s,requirement_class=%s},attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), (rt->is_transparent || rt->debug_render_target_texture_requests > 0) ? "required_or_observed" : "eager_rule_without_observed_consumer", attachment_rid_summary);
+
+	const uint64_t direct_root_access_count = rt->debug_rd_framebuffer_requests + rt->debug_rd_root_texture_requests + rt->debug_rd_root_texture_slice_requests + rt->debug_rd_msaa_texture_requests;
+	const bool shared_view_required_or_observed = rt->is_transparent || rt->debug_render_target_texture_requests > 0;
+	String requirement_class = shared_view_required_or_observed ? "required_or_observed" : "eager_rule_without_observed_consumer";
+	String invariant_classifier = "insufficient_observed_lane_access";
+	if (shared_view_required_or_observed) {
+		invariant_classifier = "shared_view_required_or_observed";
+	} else if (direct_root_access_count > 0) {
+		invariant_classifier = "no_observed_tonemap_lane_shared_view_invariant";
+	}
+	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,msaa=%d,view_count=%d,override_active=%s,shared_view_requirement={transparent_bg=%s,viewport_texture_requests=%s,requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
 }
 
 RID TextureStorage::render_target_get_rd_texture(RID p_render_target) {
 	RenderTarget *rt = render_target_owner.get_or_null(p_render_target);
 	ERR_FAIL_NULL_V(rt, RID());
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	rt->debug_rd_root_texture_requests++;
+#endif
 	if (rt->overridden.color.is_valid()) {
 		return rt->overridden.color;
 	} else {
@@ -4772,6 +4792,9 @@ RID TextureStorage::render_target_get_rd_texture_slice(RID p_render_target, uint
 	RenderTarget *rt = render_target_owner.get_or_null(p_render_target);
 	ERR_FAIL_NULL_V(rt, RID());
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	rt->debug_rd_root_texture_slice_requests++;
+#endif
 	if (rt->view_count == 1) {
 		return rt->color;
 	} else {
@@ -4790,6 +4813,9 @@ RID TextureStorage::render_target_get_rd_texture_msaa(RID p_render_target) {
 	RenderTarget *rt = render_target_owner.get_or_null(p_render_target);
 	ERR_FAIL_NULL_V(rt, RID());
 
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	rt->debug_rd_msaa_texture_requests++;
+#endif
 	return rt->color_multisample;
 }
 

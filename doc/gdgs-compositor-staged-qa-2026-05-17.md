@@ -4901,3 +4901,62 @@ So the correct classification for this failing lane is:
 ### Updated conclusion
 
 For the locked failing `submit_serial=9` Tonemap lane, the exact eager-enable condition is the first non-zero-size render-target allocation/update path. In practice, `RendererViewport::_viewport_set_size()` calls `render_target_set_size()`, which calls `_update_render_target()`, which unconditionally creates the shared render-target texture views from `rt->color` on that path. That is why Tonemap still lands on `lane_policy=persistent_root_sampled_shared` even though this repro shows `transparent_bg=false` and `viewport_texture_requests=0` before the crash.
+
+## 2026-05-21 — Task 117 follow-up: classify whether eager shared-view creation is the surviving seam or a required Tonemap invariant
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-invariant-vulkan-sourcebuild-20260521-124956/`
+
+Key files:
+
+- command: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-invariant-vulkan-sourcebuild-20260521-124956/exact_command.txt`
+- stdout: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-invariant-vulkan-sourcebuild-20260521-124956/stdout.log`
+- stderr: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-invariant-vulkan-sourcebuild-20260521-124956/stderr.log`
+- exit status: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-eager-shared-view-invariant-vulkan-sourcebuild-20260521-124956/exit_status.txt`
+
+### Diagnostic added
+
+A tiny debug-only access-counter extension was added on the owning render target:
+
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+
+It records only the narrow ownership question needed for this fork:
+
+- how many times the user-facing shared render-target texture was requested (`render_target_get_texture()`)
+- how many times Tonemap / late render code accessed the direct root attachments instead (`render_target_get_rd_framebuffer()`, `render_target_get_rd_texture()`, `render_target_get_rd_texture_slice()`, `render_target_get_rd_texture_msaa()`)
+- a lane-local classifier printed in the existing `tonemap_render_target_lane` line
+
+This keeps the fork honest: **does the failing Tonemap lane itself require the eager shared view, or does it actually run against the root attachment path while the shared view stays unobserved?**
+
+### Relevant runtime lines
+
+From `stdout.log` on the same failing source-built host-Vulkan `projection_only__disabled` lane:
+
+- `[gdgs-ts] render_target_policy_cause ... trigger_reason=render_target_set_size ... transparent_bg=false viewport_texture_requests=0 ...`
+- `[gdgs-ts] tonemap_render_target_lane ... lane={path_class=persistent_root_direct,lane_owner=rt->color,lane_policy=persistent_root_sampled_shared,... shared_view_requirement={transparent_bg=false,viewport_texture_requests=0,requirement_class=eager_rule_without_observed_consumer,invariant_classifier=no_observed_tonemap_lane_shared_view_invariant,direct_root_accesses={framebuffer=1,rd_texture=0,rd_texture_slice=0,rd_texture_msaa=0,total=1}} ...}`
+- the same run still ends at `fence_wait_error submit_serial=9 wait_result=-4` and later `BLIT_PASS`
+
+### What this proves
+
+For this locked Tonemap repro lane, the eager shared-view creation does **not** look like a required Tonemap invariant:
+
+- the render target still reaches Tonemap as `path_class=persistent_root_direct` with `lane_owner=rt->color`
+- before the failure, the lane records one direct root-framebuffer access (`framebuffer=1`) and **zero** observed shared render-target texture requests (`viewport_texture_requests=0`)
+- the new lane classifier therefore lands on `invariant_classifier=no_observed_tonemap_lane_shared_view_invariant`
+
+That means the surviving fact pattern is:
+
+- eager shared-view creation still happens earlier at `render_target_set_size()`
+- the broader engine rule still keeps `rt->color` persistent/non-discardable because the shared aliases are created eagerly
+- but on this exact failing Tonemap lane, the observed execution path uses the root attachment/framebuffer directly and never shows a Tonemap-local need for the shared render-target texture alias before the crash
+
+### Updated conclusion
+
+For the failing host-Vulkan `projection_only__disabled` Tonemap lane at `submit_serial=9`, the smallest honest classification is:
+
+- **not** a proven Tonemap-local invariant requiring eager shared-view creation
+- **yes:** the eager shared-view creation at `render_target_set_size()` remains the surviving broader ownership seam for this lane
+
+Important scope boundary: this does **not** prove the engine can globally delete eager shared-view creation without consequences. It proves the narrower thing we needed here: on this failing Tonemap lane, the shared view is created eagerly by policy, but the observed Tonemap path itself still runs through the direct root framebuffer path and shows no actual shared-view consumer before the unchanged failure.
