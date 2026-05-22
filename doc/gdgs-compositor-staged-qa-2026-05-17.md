@@ -156,6 +156,35 @@ Interpretation:
 - But because the exact surviving difference is still only one slot with a matching non-`load_op` family hash and no same-recipe sibling slots, the new classifier still **cannot honestly attribute slot-0 `load_op` ownership farther** than a carried-vs-active slot-local mismatch.
 - So the best current explanation is **not** `carried_packet_owned_slot_0_contract` and **not** `active_pre_rebind_scope_owned_slot_0_contract`; it is the narrower `carried_vs_active_slot_local_mismatch` bucket.
 
+## 2026-05-21 source-build follow-up — Task 120 (`oc-246`)
+
+Instead of widening instrumentation again, this follow-up compared the already-locked Task 119 control vs. lazy-shared-view experiment artifacts directly, because those runs already contained the Tonemap/L88 pre-rebind payload needed to answer the narrower question.
+
+Artifact roots:
+
+- control: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-control-vulkan-sourcebuild-20260521-1411/`
+- experiment: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-on-vulkan-sourcebuild-20260521-1410/`
+
+What changed across those runs was only the shared-view policy/materialization lane contract:
+
+- control: `lane_policy=persistent_root_sampled_shared`, `shared_view_materialized=true`
+- experiment: `lane_policy=persistent_root_direct_lazy_shared_view`, `shared_view_materialized=false`
+
+What stayed unchanged on the failing seam — and therefore remains the stronger crash-trigger candidate — was the Tonemap -> `L88` pre-rebind attachment/state contract:
+
+- `boundary_state_handoff_classifier="carried_pipeline_packet_then_l88_reestablishes_scope_rebinds_and_adds_vertex_index"`
+- `pre_rebind_carried_packet_contract="exact_pipeline_packet_with_compatible_only_render_pass_lineage"`
+- surviving minimum hazard still narrows to `attachment_exact_recipe`, then to slot-0 `load_op`
+- carried Tonemap packet still preserves `CLEAR` through `tonemap_end_load_op`, `l88_begin_load_op`, and `pre_rebind_pipeline_load_op`
+- rebuilt active pre-rebind scope still flips that same slot to `pre_rebind_active_load_op="LOAD"`
+- `ownership_side_classifier="boundary_crossing_interaction"` stays locked with `first_live_owner="tonemap_local_packet"`, `first_amplifier_owner="l88_local_packet"`, `first_meaningful_expansion="l88_label"`, and `full_four_bucket_interaction_locked=true`
+
+Interpretation:
+
+- The lazy/on-demand shared-view experiment successfully removed eager shared-view materialization from this lane without changing the submit-9 crash.
+- That means shared-view materialization policy is no longer the leading trigger candidate on this locked repro lane.
+- The stronger unchanged candidate is still the zero-gap Tonemap/L88 handoff where an exact carried Tonemap pipeline packet survives, `L88` re-establishes an active compatible-only render-pass scope, and the surviving exact recipe mismatch remains a single-slot `load_op` flip (`pipeline=CLEAR`, rebuilt active scope=`LOAD`) before the unchanged `fence_wait_error submit_serial=9 wait_result=-4` and later `BLIT_PASS`.
+
 ## Interpretation
 
 This QA pass materially reduces the suspect set.
@@ -5061,3 +5090,62 @@ So for this exact repro lane:
 - **no:** changing that contract alone did **not** change the failing `submit_serial=9` / `BLIT_PASS` envelope
 
 Updated conclusion: eager shared-view creation is now demoted from an active suspect on this locked lane. It was a real policy mismatch worth testing, but the device-loss trigger survives even after the lane is forced onto the narrower direct-root/no-materialized-shared-view contract.
+
+## 2026-05-21 — Task 121: why the rebuilt active scope still insists on slot-0 `LOAD` after shared-view demotion
+
+Artifact roots:
+- reused comparison roots:
+  - control: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-control-vulkan-sourcebuild-20260521-1411/`
+  - experiment: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-on-vulkan-sourcebuild-20260521-1410/`
+- fresh serial-mapping rerun (env on): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-active-scope-load-cause-vulkan-sourcebuild-20260521-2037/`
+
+### Smallest added diagnostic
+
+I added one tiny Vulkan-side creation log:
+
+- `[gdgs-vk] render_pass_create create_serial=... render_pass_id=... vk_render_pass=... attachment_load_ops=...`
+
+That bridges the existing RDG `draw_list_render_pass_create` evidence to the later backend `active_render_pass_create_serial=13` / `begin_render_pass_scope` evidence, so the active scope can be traced back to its exact graph-side render-pass recipe.
+
+### Fresh runtime result
+
+The new env-on rerun ties the whole chain together directly:
+
+- RDG still creates the Tonemap render pass as:
+  - `label="Tonemap"`
+  - `source="non_discardable_default_load_contract"`
+  - `tracker_discardable=false`
+  - `tracker_has_parent=false`
+  - `discardable_provenance="root_texture_create"`
+  - `discardable_seed=false`
+  - `discardable_seed_contract="texture_format_is_discardable_flag"`
+  - `default_non_discardable_policy="always_load_without_extra_per_attachment_split"`
+  - `load_op=LOAD`
+- the new Vulkan creation bridge shows that same RDG object becoming:
+  - `render_pass_create create_serial=13 render_pass_id=0x7ae3d2e30828 ... attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72 compatibility_hash=0x425f4d3d`
+- Tonemap then begins on that same object:
+  - `begin_render_pass_scope create_serial=13 render_pass_id=0x7ae3d2e30828 ... owner_label="Tonemap (L87) (Draw)" ... attachment_load_ops=[0:LOAD]`
+- and `L88` immediately reuses that exact active scope:
+  - `begin_render_pass_scope create_serial=13 render_pass_id=0x7ae3d2e30828 ... owner_label="Command Graph (L88) (Draw)" ... attachment_load_ops=[0:LOAD]`
+
+The pre-rebind classifier is still unchanged in the same run:
+
+- active scope `create_serial=13` / `active_load_ops=["0:LOAD"]`
+- carried Tonemap pipeline packet `create_serial=9` / `pipeline_load_ops=["0:CLEAR"]`
+- `load_op_attribution_split.classification="active_scope_rebuild_first_attributable_step"`
+
+### Exact conclusion
+
+Shared-view demotion did **not** remove the input that actually forces slot-0 `LOAD`.
+
+The unchanged forcing contract is still the **Tonemap RDG active-scope render-pass recipe itself**:
+
+- the attachment is still a **root, non-parented, non-discardable** tracker
+- that non-discardability still comes from **root texture creation inheriting `TextureFormat.is_discardable=false`**
+- once the tracker reaches RDG in that state, the draw-list render-pass recipe still takes the unchanged branch:
+  - `source="non_discardable_default_load_contract"`
+  - `default_non_discardable_policy="always_load_without_extra_per_attachment_split"`
+- that branch creates the actual live active render pass (`create_serial=13`) with slot 0 already set to `LOAD`
+- `L88` does not newly decide `LOAD`; it only re-enters the already-created Tonemap/L88-compatible active scope
+
+So the rebuilt active scope still insists on slot-0 `LOAD` because the **graph-side non-discardable root attachment contract survived the shared-view experiment unchanged**. The experiment changed the lane-policy surface, but not the root tracker discardability contract that RDG uses when constructing the live Tonemap/L88-compatible render pass.

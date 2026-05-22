@@ -5890,6 +5890,9 @@ RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Att
 	for (uint32_t i = 0; i < p_subpasses.size(); i++) {
 		render_pass->debug_subpass_compatibility_hashes[i] = _debug_hash_render_pass_subpass_compatibility(p_attachments, p_subpasses[i]);
 	}
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	print_line(vformat("[gdgs-vk] render_pass_create create_serial=%d render_pass_id=0x%s vk_render_pass=0x%s attachments=%d subpasses=%d dependencies=%d view_count=%d uses_fragment_density_map=%s attachment_load_ops=%s attachment_exact_hash=0x%s compatibility_hash=0x%s", render_pass->debug_create_serial, String::num_uint64(RenderPassID(render_pass).id, 16), String::num_uint64((uint64_t)vk_render_pass, 16), render_pass->debug_attachment_count, render_pass->debug_subpass_count, render_pass->debug_dependency_count, render_pass->debug_view_count, render_pass->uses_fragment_density_map ? "true" : "false", debug_attachment_load_ops_summary(render_pass->debug_attachment_load_ops), String::num_uint64(render_pass->debug_attachment_exact_hash, 16), String::num_uint64(render_pass->debug_compatibility_hash, 16)));
+#endif
 	return RenderPassID(render_pass);
 }
 

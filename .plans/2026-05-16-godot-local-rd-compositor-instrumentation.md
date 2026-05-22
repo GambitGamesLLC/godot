@@ -2855,10 +2855,10 @@ What actually happened vs. the Task 109 question:
 
 ### Task 115: Classify whether transparent-support shared-view ownership is actually required for this Tonemap lane or too broad at failing `submit_serial=9`
 
-**Bead ID:** `oc-83p`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-83p`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-83p` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: Tonemap’s correct lane is treated as persistent sampled/shared root primarily because the non-MSAA render-target backing store `rt->color` is immediately aliased into shared render-target texture views (`texture_create_shared(...)`) so transparent support can be provided. Implement the smallest honest diagnostic needed to classify the next fork: **is that transparent-support/shared-view ownership actually required for this Tonemap lane on the failing repro, or is the shared-root ownership rule too broad here?** Prefer texture-storage / render-target ownership / usage-flow evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-83p` with a clear reason when the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -2883,10 +2883,10 @@ What actually happened vs. the Task 109 question:
 
 ### Task 116: Classify the exact eager shared-view enable condition for the Tonemap render target despite no observed need at failing `submit_serial=9`
 
-**Bead ID:** `oc-tas`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-tas`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-tas` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: on this failing lane the transparent-support/shared-view ownership rule is too broad for the observed usage (`transparent_bg=false`, `viewport_texture_requests=0`), yet Tonemap still lands on `lane_policy=persistent_root_sampled_shared` and later hits the non-discardable `LOAD` path. Implement the smallest honest diagnostic needed to classify **what exact condition eagerly enables shared-view ownership anyway** for this render target on this lane — e.g. a creation-time rule, a default render-target capability assumption, an unconditional shared-view allocation path, or another exact ownership trigger. Prefer texture-storage / render-target ownership / usage-flow evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-tas` with a clear reason when the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -2911,10 +2911,10 @@ What actually happened vs. the Task 109 question:
 
 ### Task 117: Classify whether eager shared-view creation at `render_target_set_size()` is the surviving bug seam or a required invariant for the Tonemap lane at failing `submit_serial=9`
 
-**Bead ID:** `oc-kug`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-kug`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-kug` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: eager shared-view ownership is triggered by the ordinary `render_target_set_size()` -> `_update_render_target()` path, even with `transparent_bg=false` and `viewport_texture_requests=0`, and that eager shared-view creation pushes Tonemap onto the persistent-root sampled/shared lane that later reaches the non-discardable `LOAD` path. Implement the smallest honest diagnostic needed to classify the next fork: **is that eager shared-view creation at `render_target_set_size()` itself the surviving bug seam for this Tonemap lane, or is there a real invariant that still requires it to stay eager even on this failing repro?** Prefer texture-storage / render-target ownership / usage-flow evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-kug` with a clear reason when the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -2935,10 +2935,10 @@ What actually happened vs. the Task 109 question:
 
 ### Task 118: Classify whether this Tonemap lane needs lazy/on-demand shared-view creation or has an unobserved broader pre-failure consumer at failing `submit_serial=9`
 
-**Bead ID:** `oc-5xw`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-5xw`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-5xw` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: eager shared-view creation at `render_target_set_size()` remains the broader ownership seam, and this failing Tonemap lane itself does not show a real shared-view consumer/invariant before the unchanged `submit_serial=9` failure (`viewport_texture_requests=0`, direct root access only). Implement the smallest honest diagnostic needed to classify the next exact fork: **does the fix shape for this lane look like lazy/on-demand shared-view creation, or is there some broader pre-failure shared-view consumer outside Tonemap that still exists but has not yet been observed?** Prefer texture-storage / render-target ownership / usage-flow evidence over widening back into demoted packet or post-rebind lanes. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-5xw` with a clear reason when the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -2992,6 +2992,78 @@ Exact contract change observed:
 - no `render_target_shared_view_create` line appeared in the experiment run, so no deferred shared-view materialization was demanded before the crash
 
 Exact failure result: the contract changed, but the failure envelope did not. Both runs still exited `134`, still hit the same `fence_wait_error submit_serial=9 wait_result=-4`, and still later collapsed to `BLIT_PASS`. Conclusion: this lane really is a valid lazy/on-demand shared-view candidate and the eager shared-view policy was removable on the locked repro lane without any observed pre-failure consumer, but that policy is not the submit-9 device-loss trigger. Updated `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md` with the control + experiment artifact roots and the new conclusion. `bd update oc-zz7 --status in_progress --json` worked at start; bead closure still pending final wrap-up/commit.
+
+---
+
+### Task 120: Classify the unchanged failing contract between the control and lazy-shared-view Tonemap runs at failing `submit_serial=9`
+
+**Bead ID:** `oc-246`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-246` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the lazy/on-demand shared-view experiment changed Tonemap’s lane/policy contract exactly as intended, but the failure envelope did not change at all (`exit 134`, `fence_wait_error submit_serial=9 wait_result=-4`, later `BLIT_PASS`). Implement the smallest honest comparison diagnostic needed to classify **what contract/state remained unchanged between the control and experiment runs on the failing lane** and therefore remains the stronger crash-trigger candidate. Prefer Tonemap/L88 pre-rebind attachment/state/ownership evidence that stayed identical across both runs over reopening already-demoted shared-view policy questions. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-246` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the locked control + lazy-shared-view experiment artifacts directly instead of widening the instrumentation again, because the current Tonemap/L88 comparison payload already exposes the exact pre-rebind contract that mattered. Compared the Task 119 control root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-control-vulkan-sourcebuild-20260521-1411/` against the experiment root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-lazy-shared-view-experiment-on-vulkan-sourcebuild-20260521-1410/` and classified the unchanged failing seam.
+
+Exact unchanged contract/state that survived the shared-view policy flip on the failing lane:
+
+- `boundary_state_handoff_classifier` stayed `carried_pipeline_packet_then_l88_reestablishes_scope_rebinds_and_adds_vertex_index`
+- `pre_rebind_carried_packet_contract` stayed `exact_pipeline_packet_with_compatible_only_render_pass_lineage`
+- the surviving minimum hazard stayed `attachment_exact_recipe`, narrowed further to attachment slot 0 `load_op`
+- carried packet and pre-rebind pipeline still both reported `CLEAR`, while the rebuilt active pre-rebind scope still reported `LOAD` (`tonemap_end_load_op=CLEAR`, `l88_begin_load_op=CLEAR`, `pre_rebind_pipeline_load_op=CLEAR`, `pre_rebind_active_load_op=LOAD`)
+- `ownership_side_classifier` stayed `boundary_crossing_interaction` with `first_live_owner=tonemap_local_packet`, `first_amplifier_owner=l88_local_packet`, `first_meaningful_expansion=l88_label`, and `full_four_bucket_interaction_locked=true`
+- the zero-gap Tonemap -> L88 handoff still preserved only the carried Tonemap pipeline packet before L88 rebuilt scope and added vertex/index state
+- both runs still ended at the same crash envelope: `fence_wait_error submit_serial=9 wait_result=-4`, then later `BLIT_PASS`
+
+Conclusion: the shared-view lane/policy contract really changed, but the stronger unchanged crash-trigger candidate did not. The surviving suspect is still the Tonemap/L88 pre-rebind attachment/state seam: an exact carried Tonemap pipeline packet crosses the zero-gap boundary, then L88 reconstructs an active compatible-only render-pass scope whose exact attachment recipe differs only by slot-0 `load_op` (`Tonemap/pipeline=CLEAR` vs rebuilt active scope=`LOAD`) before the unchanged submit-9 failure. Updated `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md` with the same classification and artifact roots. `bd update oc-246 --status in_progress --json` worked at start; close-out recorded at task completion.
+
+---
+
+### Task 121: Classify why the rebuilt active scope still insists on slot-0 `LOAD` after shared-view demotion at failing `submit_serial=9`
+
+**Bead ID:** `oc-by6`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-by6` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the lazy/on-demand shared-view experiment changed Tonemap’s lane policy but did not move the failure, and the unchanged leading crash-trigger candidate is still the zero-gap Tonemap → `L88` pre-rebind seam where the carried Tonemap packet / pre-rebind pipeline remain `CLEAR` while the rebuilt active scope remains `LOAD` on attachment slot 0. Implement the smallest honest diagnostic needed to classify **why the rebuilt active scope still insists on slot-0 `LOAD`** after shared-view demotion — i.e. which active-scope rebuild input/contract remains unchanged and still forces `LOAD` on this lane. Prefer Tonemap/`L88` pre-rebind attachment/state/ownership evidence over reopening already-demoted shared-view policy questions. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-by6` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest cross-layer diagnostic needed for this narrower question: one debug/dev-only Vulkan `render_pass_create` line in `drivers/vulkan/rendering_device_driver_vulkan.cpp` that prints `create_serial`, `render_pass_id`, `vk_render_pass`, `attachment_load_ops`, and the attachment/compatibility hashes. That bridges the existing RDG `draw_list_render_pass_create` evidence to the later backend `active_render_pass_create_serial=13` / `begin_render_pass_scope` evidence without reopening already-demoted lanes.
+
+Validation stayed on the same source-built host-Vulkan `projection_only__disabled` repro lane. I rebuilt the editor with `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64` and reran the env-on shared-view-demotion case into `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-active-scope-load-cause-vulkan-sourcebuild-20260521-2037/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `exit_status.txt`). The fresh runtime chain is decisive:
+
+- RDG still creates the Tonemap pass as `label="Tonemap"` with `source="non_discardable_default_load_contract"`, `tracker_discardable=false`, `tracker_has_parent=false`, `discardable_provenance="root_texture_create"`, `discardable_seed=false`, `discardable_seed_contract="texture_format_is_discardable_flag"`, and `default_non_discardable_policy="always_load_without_extra_per_attachment_split"`.
+- The new Vulkan bridge shows that same RDG object becoming the live active scope: `render_pass_create create_serial=13 render_pass_id=0x7ae3d2e30828 ... attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72 compatibility_hash=0x425f4d3d`.
+- Tonemap begins on that exact object (`owner_label="Tonemap (L87) (Draw)"`) and `Command Graph (L88) (Draw)` immediately reuses the same `create_serial=13` / `render_pass_id=0x7ae3d2e30828` scope with `attachment_load_ops=[0:LOAD]`.
+- In the same run, the carried Tonemap pipeline packet remains `create_serial=9` with `pipeline_load_ops=["0:CLEAR"]`, while the pre-rebind classifier still says `load_op_attribution_split.classification="active_scope_rebuild_first_attributable_step"`.
+
+Exact conclusion: shared-view demotion changed the lane-policy surface but **did not change the input that actually forces slot-0 `LOAD`**. The unchanged forcing contract is still the graph-side Tonemap active-scope recipe branch `source="non_discardable_default_load_contract"`, which is reached because the slot-0 attachment still arrives as a root, non-parented, non-discardable tracker (`root_texture_create` inheriting `TextureFormat.is_discardable=false`). That branch creates the actual live active render pass (`create_serial=13`) with slot 0 already set to `LOAD`; `L88` does not newly decide `LOAD`, it only re-enters the already-created Tonemap/L88-compatible active scope. Updated `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the exact artifact roots, bridge line, and conclusion. `bd update oc-by6 --status in_progress --json` worked at start; closure recorded when the bead close completed.
 
 ---
 
