@@ -4006,15 +4006,113 @@ QA instructions for the next pass:
    - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate_result={matched=...,skipped=...}`
 5. Use the existing Vulkan-side submit/L88 diagnostics only as corroboration: check whether the familiar `submit_serial=9` / `BLIT_PASS` failure signature and any L88 draw-count evidence move with the reduced matching-batch count.
 
+### Task 151: QA the clipped preserve-color rect ordinal gate on the source-built failing lane
+
+**Bead ID:** `oc-9yz`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-9yz` on start and stay on the narrowed clipped preserve-color rect seam. Reuse the same source-built host-Vulkan `projection_only__disabled` staged repro lane, sweep `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, `=2`, `=5`, and unset/full control in that order, and capture for each run whether the crash survives, whether the new gate activation/result logs appear, and whether the `submit_serial=9` / `L88` signature moves with the reduced matching-batch count. Only run the split `ONLY_FIRST` / `SKIP_FIRST` checks if and only if `cap=1` survives while a higher cap fails. Update this plan with concise durable results and close the bead if the QA package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-clipped-preserve-rect-cap-sweep-vulkan-sourcebuild-rerun-20260522-193020/`
+
+**Status:** ✅ Complete
+
+**Results:** The first attempted sweep reused the right staged repro lane but revealed a stale source-built editor binary: all four runs still showed the old ten-batch `L88` signature and emitted no `temp_diag_clipped_preserve_rect_gate` strings. I then rebuilt the source-built editor in-place with `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`, verified the binary now contained the new gate strings, and reran the ordered sweep on the same failing host-Vulkan command line with `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1`.
+
+Valid artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-clipped-preserve-rect-cap-sweep-vulkan-sourcebuild-rerun-20260522-193020/`
+
+Observed sweep results:
+- `cap=1` (`cap1/`): crash still reproduces (`exit_status=134`), gate logs appear with `temp_diag_clipped_preserve_rect_gate={cap=1,only_first=false,skip_first=false}` and `temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}`, the failure still lands at `fence_wait_error submit_serial=9 wait_result=-4`, and the surviving `Tonemap -> L88` contrast shrinks to a single kept matching batch (`draw_indexed_calls=1`, `uniform_binds=1`, `vertex_buffer_binds=1`).
+- `cap=2` (`cap2/`): crash still reproduces (`exit_status=134`), gate logs appear with `matched=10,skipped=8`, the failure still lands at `submit_serial=9`, and the same `L88` corroboration grows exactly to two kept matching batches (`draw_indexed_calls=2`, `uniform_binds=2`, `vertex_buffer_binds=2`).
+- `cap=5` (`cap5/`): crash still reproduces (`exit_status=134`), gate logs appear with `matched=10,skipped=5`, the failure still lands at `submit_serial=9`, and the `L88` corroboration grows again with the kept batch count (`draw_indexed_calls=5`, `uniform_binds=5`, `vertex_buffer_binds=5`).
+- unset control (`control/`): crash still reproduces (`exit_status=134`), no gate logs appear as expected, the failure remains `submit_serial=9`, and the uncapped `L88` signature stays at the original full-chain shape (`draw_indexed_calls=10`, `uniform_binds=10`, `vertex_buffer_binds=10`).
+
+Exact conclusion: the new ordinal gate is working and the `L88` tail tracks the reduced clipped preserve-color rect batch count one-for-one, but the host-Vulkan device-loss crash does **not** clear even when only the first matching clipped preserve-color rect batch is left alive. Because `cap=1` still fails, the requested `ONLY_FIRST` / `SKIP_FIRST` split checks were intentionally **not** run. This pass therefore rules out any theory that requires a later matching batch or the full ten-batch chain to trigger the crash. The toxic subfamily is only narrowed to “already present within the first kept matching clipped preserve-color rect batch or in earlier prerequisite work that still survives when later matching batches are removed.”
+
+### Task 152: Audit the clipped preserve-color rect ordinal gate and cap-sweep evidence
+
+**Bead ID:** `oc-xyh`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-xyh` on start and stay on the clipped preserve-color rect seam only. Audit commit `9cb53238` plus the QA artifact package under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-clipped-preserve-rect-cap-sweep-vulkan-sourcebuild-rerun-20260522-193020/`. Confirm the gate predicate is the intended narrow rect-like + clipped + preserve-destination-color selector, confirm the controls are default-off and diagnostic-only, verify the QA lane/artifacts really used the rebuilt source-built Vulkan `projection_only__disabled` repro package, and confirm the reported `matched/skipped`, `draw_indexed_calls`, and `submit_serial=9` crash signature agree with the produced logs. If the evidence holds, state whether the next honest seam is the first kept matching batch itself, prerequisite state immediately before that first draw, or both, then update this plan and close the bead.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Audit passed with no contradictions found.
+- Commit `9cb53238` matches the intended narrow diagnostic design in `RendererCanvasRenderRD::_render_batch_items()`: the gate only matches rect-like batches (`TYPE_RECT` / `TYPE_NINEPATCH`) that are clipped (`current_batch->clip != nullptr`) and use a blend mode that requires preserved destination color (`gdgs_canvas_blend_mode_uses_prior_color(batch_blend_mode)`). The controls are fully opt-in (`CAP`, `ONLY_FIRST`, `SKIP_FIRST`), default-off when unset, and only emit the `temp_diag_clipped_preserve_rect_gate{...}` / `_result{...}` summaries when activated.
+- QA used the intended rebuilt source-built host-Vulkan `projection_only__disabled` lane. The audited artifact commands under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-clipped-preserve-rect-cap-sweep-vulkan-sourcebuild-rerun-20260522-193020/` invoke `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` with the staged checkpoint harness and the expected `projection_only__disabled ... no_present compositor projection_only disabled 120` arguments. The rebuilt binary also contains the new gate strings.
+- The reported counts match the logs exactly: `cap=1` logged `matched=10,skipped=9` with `tonemap_to_l88_delta={draw_indexed_calls=1,uniform_binds=1,vertex_buffer_binds=1}`; `cap=2` logged `matched=10,skipped=8` with `draw_indexed_calls=2,uniform_binds=2,vertex_buffer_binds=2`; `cap=5` logged `matched=10,skipped=5` with `draw_indexed_calls=5,uniform_binds=5,vertex_buffer_binds=5`; the control run emitted no gate logs and kept the uncapped `draw_indexed_calls=10,uniform_binds=10,vertex_buffer_binds=10` signature. All four runs still failed with `exit_status=134` and `fence_wait_error submit_serial=9 wait_result=-4`.
+- The QA conclusion is valid: later matching clipped preserve-color rect batches and the full ten-batch chain are not required. The narrowest honest next seam is **both** the first kept matching batch metadata and the prerequisite state it reuses/reestablishes immediately before that first `L88` draw, because `cap=1` still preserves the crash while removing all later matching siblings.
+
+### Task 153: Instrument the first kept clipped preserve-color rect batch and its immediate pre-draw prerequisite state
+
+**Bead ID:** `oc-tv8`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-tv8` on start and stay tightly scoped to `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`. Reuse/extend the existing temporary env-gated clipped preserve-color rect instrumentation so the next QA pass can inspect the **first kept matching batch itself** and the **immediate prerequisite state reestablished just before that first `L88` draw** without changing default behavior. Capture enough exact batch metadata and pre-draw setup state to separate toxic first-batch content/parameters from toxic prerequisite state, keep the slice reversible, run repo-local validation, update this plan with exact QA instructions, commit/push the change, and close the bead when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added one more reversible env-gated slice directly inside `RendererCanvasRenderRD::_render_batch_items()` / `_render_batch()` without reopening demoted Tonemap/render-pass theories. New opt-in knob: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE=1`. When enabled, the existing clipped preserve-color rect matcher now logs exactly two new high-signal markers for the **first kept** matching batch family on that pass:
+- `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_batch={...}` — first kept batch metadata, including batch ordinal/index, rect-vs-ninepatch identity, clip rect, material/texture RID, blend mode, shader/render primitive, instance span, texel size, and command-specific rect/ninepatch parameters.
+- `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_prereq={...}` — the immediate pre-draw prerequisite state right before that first kept `L88` draw records, including whether scissor had to be reestablished, the active scissor rect, material uniform-set RID, batch texture uniform-set RID, selected pipeline RID/key traits, push-constant payload summary, and the exact instance/index buffer bindings that feed the draw.
+
+This keeps the separator honest:
+- **toxic content / parameters** now live in `temp_diag_first_clipped_preserve_rect_batch`
+- **toxic prerequisite state setup** now lives in `temp_diag_first_clipped_preserve_rect_prereq`
+
+The trace is default-off, piggybacks on the already-audited clipped preserve-color rect family selector, and only latches the first kept matching batch after any active `CAP` / `ONLY_FIRST` / `SKIP_FIRST` filtering.
+
+Validation run for this coder pass:
+- `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `git diff --check -- servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/renderer_rd/renderer_canvas_render_rd.linuxbsd.editor.dev.x86_64.o`
+
+QA recipe for the next pass:
+1. Reuse the same rebuilt source-built host-Vulkan `projection_only__disabled` staged repro lane from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-clipped-preserve-rect-cap-sweep-vulkan-sourcebuild-rerun-20260522-193020/`.
+2. Enable:
+   - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE=1`
+   - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`
+3. Keep the existing corroboration logs on (`GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` plus whatever Vulkan-side compare envs the current lane already uses).
+4. In the resulting logs, capture and compare these exact markers:
+   - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={...first_trace=true...}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_batch={...}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_prereq={...}`
+   - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}`
+5. Use the existing Vulkan-side `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` corroboration only to confirm the crash stayed on the same one-batch lane while these new canvas-side markers identify whether the first kept batch metadata or its immediate pre-draw setup looks like the sharper discriminator.
+
 ### Landing-the-plane handoff
 
-**Stopping point:** The live failing seam is now the failing-only `multi_rect_preserve_clip_batch_chain` feeding the heavy `L88` payload on the frame-1 non-present `submit_serial=9` path. The prior plan tail that still centered on Tonemap overwrite/load-op lineage is stale and no longer matches the current repo or head commit.
+**Stopping point:** The live failing seam is now the first surviving member of the failing-only `multi_rect_preserve_clip_batch_chain` (or prerequisite work that remains when only that first member is kept), still feeding the `submit_serial=9` / `Command Graph (L88) (Draw)` failure path. The broader chain-length hypothesis is now demoted.
 
-**Best current one-line read:** healthy control survives with one preserve-color rect batch; failing repro dies with a ten-batch clipped preserve-color rect chain, so the next honest fork is ordinal toxicity inside that chain, not another pass-level render-pass theory.
+**Best current one-line read:** the ordinal gate proved that `L88` scales one-for-one with the clipped preserve-color rect batch count, but the crash still survives at `cap=1`, so later clipped rects and the full ten-batch chain are not required for the device-loss signature.
 
-**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-failing-vulkan-sourcebuild-20260522-1840/`
+**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-clipped-preserve-rect-cap-sweep-vulkan-sourcebuild-rerun-20260522-193020/`
 
-**Best next move:** instrument `RendererCanvasRenderRD::_render_batch_items()` with a reversible ordinal cap/selector for the already-classified clipped preserve-color rect family, sweep `N=1/2/5/full`, then if needed split “first matching batch only” versus “all but first.” Keep `drivers/vulkan/rendering_device_driver_vulkan.cpp` as corroboration only to confirm whether `L88` draw count and the `submit_serial=9` crash signature move with the cap.
+**Best next move:** keep the investigation on the same clipped preserve-color rect seam, but stop treating ordinal chain length as the likely trigger. The next coder/audit slice should instrument the **first surviving kept matching batch itself** (or the immediate prerequisite state it depends on before `L88` records that first kept draw) rather than spending more QA time on later-batch selectors.
 
 ---
 
