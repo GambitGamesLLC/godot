@@ -10655,6 +10655,21 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 					entry.descendant_secondary_label_count == 0 &&
 					entry.descendant_secondary_draw_label_count == 0;
 		};
+		const DebugCommandStateSnapshot &tonemap_runtime_scope_snapshot = tonemap_label_entry.first_pipeline_bind_after_state;
+		const DebugCommandStateSnapshot &l88_pre_rebind_runtime_scope_snapshot = l88_label_entry.first_pipeline_bind_before_state;
+		const bool runtime_load_scope_shared_before_l88_rebind =
+				tonemap_runtime_scope_snapshot.active_render_pass_create_serial != 0 &&
+				l88_pre_rebind_runtime_scope_snapshot.active_render_pass_create_serial != 0 &&
+				tonemap_runtime_scope_snapshot.active_render_pass_create_serial == l88_pre_rebind_runtime_scope_snapshot.active_render_pass_create_serial &&
+				tonemap_runtime_scope_snapshot.active_render_pass_attachment_exact_hash == l88_pre_rebind_runtime_scope_snapshot.active_render_pass_attachment_exact_hash &&
+				tonemap_runtime_scope_snapshot.active_render_pass_attachment_load_op_hash == l88_pre_rebind_runtime_scope_snapshot.active_render_pass_attachment_load_op_hash &&
+				tonemap_runtime_scope_snapshot.subpass_index == l88_pre_rebind_runtime_scope_snapshot.subpass_index;
+		String runtime_load_scope_classification = "runtime_scope_differs_before_l88_rebind";
+		String runtime_load_scope_basis = "Tonemap_and_L88_do_not_share_the_same_live_active_render_pass_recipe_before_L88_pipeline_rebind";
+		if (runtime_load_scope_shared_before_l88_rebind) {
+			runtime_load_scope_classification = "same_runtime_load_scope_reused_before_l88_rebind";
+			runtime_load_scope_basis = "Tonemap_and_L88_share_the_same_live_active_render_pass_create_serial_attachment_recipe_and_subpass_before_L88_pipeline_rebind";
+		}
 		text += "{status=ok";
 		text += ",scope_distance=" + itos(l88_scope_index - target_scope_index);
 		text += ",next_meaningful_scope_is_l88=" + String(next_meaningful_scope_index == l88_scope_index ? "true" : "false");
@@ -10692,6 +10707,58 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			first_expansion_site = "ui_pass_breadcrumb";
 		}
 		text += ",first_meaningful_expansion=\"" + first_expansion_site + "\"}";
+		text += ",runtime_load_reuse_path={classification=\"" + runtime_load_scope_classification + "\"";
+		text += ",basis=\"" + runtime_load_scope_basis + "\"";
+		text += ",active_render_pass_create_serial=" + debug_uint64_or_none(tonemap_runtime_scope_snapshot.active_render_pass_create_serial);
+		text += ",active_render_pass_attachment_exact_hash=" + debug_uint64_or_none(tonemap_runtime_scope_snapshot.active_render_pass_attachment_exact_hash);
+		text += ",active_render_pass_load_op_hash=" + debug_uint64_or_none(tonemap_runtime_scope_snapshot.active_render_pass_attachment_load_op_hash);
+		text += ",subpass=" + itos(tonemap_runtime_scope_snapshot.subpass_index);
+		text += ",tonemap_label={index=" + itos(tonemap_label_entry.label_index);
+		text += ",level=" + itos(tonemap_label_entry.level);
+		text += ",draw_calls=" + itos(tonemap_label_entry.draw_count);
+		text += ",pipeline_binds=" + itos(tonemap_label_entry.render_pipeline_bind_count);
+		text += ",uniform_binds=" + itos(tonemap_label_entry.render_uniform_bind_count);
+		text += ",vertex_buffer_binds=" + itos(tonemap_label_entry.vertex_buffer_bind_count);
+		text += ",vertex_buffer_binding_total=" + itos(tonemap_label_entry.vertex_buffer_binding_total);
+		text += ",index_buffer_binds=" + itos(tonemap_label_entry.index_buffer_bind_count);
+		text += ",secondary_command_buffers=" + itos(tonemap_label_entry.secondary_command_buffer_count);
+		text += ",secondary_draw_labels=" + itos(tonemap_label_entry.secondary_draw_label_count) + "}";
+		text += ",l88_label={index=" + itos(l88_label_entry.label_index);
+		text += ",level=" + itos(l88_label_entry.level);
+		text += ",draw_calls=" + itos(l88_label_entry.draw_count);
+		text += ",descendant_draw_calls=" + itos(l88_label_entry.descendant_draw_count);
+		text += ",pipeline_binds=" + itos(l88_label_entry.render_pipeline_bind_count);
+		text += ",descendant_pipeline_binds=" + itos(l88_label_entry.descendant_render_pipeline_bind_count);
+		text += ",uniform_binds=" + itos(l88_label_entry.render_uniform_bind_count);
+		text += ",descendant_uniform_binds=" + itos(l88_label_entry.descendant_render_uniform_bind_count);
+		text += ",vertex_buffer_binds=" + itos(l88_label_entry.vertex_buffer_bind_count);
+		text += ",descendant_vertex_buffer_binds=" + itos(l88_label_entry.descendant_vertex_buffer_bind_count);
+		text += ",vertex_buffer_binding_total=" + itos(l88_label_entry.vertex_buffer_binding_total);
+		text += ",descendant_vertex_buffer_binding_total=" + itos(l88_label_entry.descendant_vertex_buffer_binding_total);
+		text += ",index_buffer_binds=" + itos(l88_label_entry.index_buffer_bind_count);
+		text += ",descendant_index_buffer_binds=" + itos(l88_label_entry.descendant_index_buffer_bind_count);
+		text += ",secondary_command_buffers=" + itos(l88_label_entry.secondary_command_buffer_count);
+		text += ",descendant_secondary_command_buffers=" + itos(l88_label_entry.descendant_secondary_command_buffer_count);
+		text += ",secondary_draw_labels=" + itos(l88_label_entry.secondary_draw_label_count);
+		text += ",descendant_secondary_draw_labels=" + itos(l88_label_entry.descendant_secondary_draw_label_count) + "}";
+		text += ",l88_scope={draw_calls=" + itos(l88_scope.draw_count);
+		text += ",pipeline_binds=" + itos(l88_scope.render_pipeline_bind_count);
+		text += ",uniform_binds=" + itos(l88_scope.render_uniform_bind_count);
+		text += ",vertex_buffer_binds=" + itos(l88_scope.vertex_buffer_bind_count);
+		text += ",vertex_buffer_binding_total=" + itos(l88_scope.vertex_buffer_binding_total);
+		text += ",index_buffer_binds=" + itos(l88_scope.index_buffer_bind_count);
+		text += ",secondary_command_buffers=" + itos(l88_scope.secondary_command_buffer_count);
+		text += ",secondary_draw_labels=" + itos(l88_scope.secondary_draw_label_count) + "}";
+		text += ",tonemap_to_l88_scope_delta={label_index_delta=" + itos(l88_label_entry.label_index - tonemap_label_entry.label_index);
+		text += ",level_delta=" + itos(l88_label_entry.level - tonemap_label_entry.level);
+		text += ",draw_calls_delta=" + itos(int64_t(l88_scope.draw_count) - int64_t(tonemap_label_entry.draw_count));
+		text += ",pipeline_binds_delta=" + itos(int64_t(l88_scope.render_pipeline_bind_count) - int64_t(tonemap_label_entry.render_pipeline_bind_count));
+		text += ",uniform_binds_delta=" + itos(int64_t(l88_scope.render_uniform_bind_count) - int64_t(tonemap_label_entry.render_uniform_bind_count));
+		text += ",vertex_buffer_binds_delta=" + itos(int64_t(l88_scope.vertex_buffer_bind_count) - int64_t(tonemap_label_entry.vertex_buffer_bind_count));
+		text += ",vertex_buffer_binding_total_delta=" + itos(int64_t(l88_scope.vertex_buffer_binding_total) - int64_t(tonemap_label_entry.vertex_buffer_binding_total));
+		text += ",index_buffer_binds_delta=" + itos(int64_t(l88_scope.index_buffer_bind_count) - int64_t(tonemap_label_entry.index_buffer_bind_count));
+		text += ",secondary_command_buffers_delta=" + itos(int64_t(l88_scope.secondary_command_buffer_count) - int64_t(tonemap_label_entry.secondary_command_buffer_count));
+		text += ",secondary_draw_labels_delta=" + itos(int64_t(l88_scope.secondary_draw_label_count) - int64_t(tonemap_label_entry.secondary_draw_label_count)) + "}}";
 		text += ",l88_scope_summary=" + scope_summary(l88_scope);
 		text += ",l88_local_attachment={label_index=" + itos(l88_label_entry.label_index);
 		text += ",entry_index=" + itos(l88_label_entry_index);
@@ -10951,6 +11018,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		String carried_load_op_contract_scope = "not_applicable";
 		String carried_load_op_slot_classifier = "not_applicable";
 		String carried_load_op_minimum_contract_hazard = "not_applicable";
+		String carried_load_op_minimum_subfield_classification = "not_applicable";
+		String carried_load_op_minimum_subfield_basis = "load_op_minimum_field_not_selected";
+		String carried_load_op_minimum_subfield_first_field = "not_applicable";
 		String carried_load_op_ownership_classification = "not_applicable";
 		String carried_load_op_ownership_basis = "load_op_minimum_field_not_selected";
 		String carried_load_op_ownership_best_explanation = "not_applicable";
@@ -10972,6 +11042,14 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		bool carried_load_op_attribution_boundary_packet_exact = false;
 		bool carried_load_op_attribution_pre_rebind_packet_exact = false;
 		bool carried_load_op_attribution_active_scope_available = false;
+		String carried_load_op_runtime_role_classification = "not_applicable";
+		String carried_load_op_runtime_role_basis = "load_op_minimum_field_not_selected";
+		RDD::AttachmentLoadOp carried_load_op_runtime_role_tonemap_active_value = RDD::ATTACHMENT_LOAD_OP_LOAD;
+		RDD::AttachmentLoadOp carried_load_op_runtime_role_tonemap_pipeline_value = RDD::ATTACHMENT_LOAD_OP_LOAD;
+		bool carried_load_op_runtime_role_tonemap_active_scope_available = false;
+		bool carried_load_op_runtime_role_tonemap_pipeline_available = false;
+		bool carried_load_op_runtime_role_tonemap_active_matches_l88_pre_rebind = false;
+		bool carried_load_op_runtime_role_tonemap_pipeline_matches_carried_packet = false;
 		PackedStringArray carried_load_op_mismatch_slots;
 		PackedStringArray active_load_op_slots;
 		PackedStringArray pipeline_load_op_slots;
@@ -11023,6 +11101,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 				carried_load_op_slot_classifier = "no_load_op_slot_mismatch";
 				carried_load_op_contract_scope = "none";
 				carried_load_op_minimum_contract_hazard = "none";
+				carried_load_op_minimum_subfield_classification = "no_attachment_subfield_difference";
+				carried_load_op_minimum_subfield_basis = "attachment_exact_recipe_selected_load_op_but_no_per_slot_load_op_difference_survived";
+				carried_load_op_minimum_subfield_first_field = "none";
 			} else {
 				if (mismatch_slot_indices.size() == 1) {
 					carried_load_op_slot_classifier = "single_attachment_slot";
@@ -11089,24 +11170,45 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 				if (!mismatch_family_hash_consistent) {
 					carried_load_op_contract_scope = "non_load_recipe_context_not_stable_enough";
 					carried_load_op_minimum_contract_hazard = "load_op_plus_non_load_recipe_context";
+					carried_load_op_minimum_subfield_classification = "load_op_plus_non_load_recipe_context";
+					carried_load_op_minimum_subfield_basis = "the first surviving slot difference includes load_op but its non-load recipe context is not exact across carried and active attachments";
+					carried_load_op_minimum_subfield_first_field = "load_op";
 				} else if (family_slot_count <= 1) {
 					carried_load_op_contract_scope = "single_slot_without_same_recipe_siblings";
 					carried_load_op_minimum_contract_hazard = "single_slot_load_op_flip";
+					carried_load_op_minimum_subfield_classification = "single_slot_single_field_difference";
+					carried_load_op_minimum_subfield_basis = "the attachment exact recipe differs only on load_op and only slot 0 changes while the non-load recipe hash stays exact";
+					carried_load_op_minimum_subfield_first_field = "load_op";
 				} else if (family_mismatch_count == family_slot_count && active_family_load_ops.size() == 1 && pipeline_family_load_ops.size() == 1) {
 					carried_load_op_contract_scope = "cohort_wide_between_carried_and_active";
 					carried_load_op_minimum_contract_hazard = "attachment_family_load_op_flip";
+					carried_load_op_minimum_subfield_classification = "attachment_family_single_field_difference";
+					carried_load_op_minimum_subfield_basis = "the first surviving field is still load_op, but it flips coherently across a same-recipe attachment cohort instead of a single slot";
+					carried_load_op_minimum_subfield_first_field = "load_op";
 				} else if (active_family_load_ops.size() > pipeline_family_load_ops.size() && pipeline_family_load_ops.size() == 1) {
 					carried_load_op_contract_scope = "isolated_to_active_pre_rebind_scope";
 					carried_load_op_minimum_contract_hazard = "active_scope_load_op_override_inside_attachment_family";
+					carried_load_op_minimum_subfield_classification = "active_scope_attachment_family_load_op_override";
+					carried_load_op_minimum_subfield_basis = "the first surviving field is load_op and the extra differing values appear only on the rebuilt active-side attachment family";
+					carried_load_op_minimum_subfield_first_field = "load_op";
 				} else if (pipeline_family_load_ops.size() > active_family_load_ops.size() && active_family_load_ops.size() == 1) {
 					carried_load_op_contract_scope = "isolated_to_carried_tonemap_packet";
 					carried_load_op_minimum_contract_hazard = "carried_packet_load_op_override_inside_attachment_family";
+					carried_load_op_minimum_subfield_classification = "carried_packet_attachment_family_load_op_override";
+					carried_load_op_minimum_subfield_basis = "the first surviving field is load_op and the extra differing values appear only on the carried Tonemap-side attachment family";
+					carried_load_op_minimum_subfield_first_field = "load_op";
 				} else if (family_mismatch_count < family_slot_count) {
 					carried_load_op_contract_scope = "subset_of_attachment_family_slots";
 					carried_load_op_minimum_contract_hazard = "partial_attachment_family_load_op_flip";
+					carried_load_op_minimum_subfield_classification = "attachment_family_partial_load_op_difference";
+					carried_load_op_minimum_subfield_basis = "the first surviving field is load_op but only a subset of same-recipe attachment slots flips";
+					carried_load_op_minimum_subfield_first_field = "load_op";
 				} else {
 					carried_load_op_contract_scope = "mixed_on_both_sides";
 					carried_load_op_minimum_contract_hazard = "load_op_relation_requires_both_sides";
+					carried_load_op_minimum_subfield_classification = "mixed_load_op_relation";
+					carried_load_op_minimum_subfield_basis = "the first surviving field is load_op but the exact carried-vs-active relation still requires both sides together";
+					carried_load_op_minimum_subfield_first_field = "load_op";
 				}
 
 				if (carried_load_op_contract_scope == "isolated_to_carried_tonemap_packet") {
@@ -11163,6 +11265,53 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 					carried_load_op_attribution_classification = "narrower_slot_local_mismatch_only";
 					carried_load_op_attribution_basis = "the_locked_slot_0_load_op_flip_is_visible_pre_rebind_but_the_state_timeline_does_not_make_one_side_the_first_new_divergence_event";
 					carried_load_op_attribution_first_step = "unresolved";
+				}
+
+				const DebugCommandStateSnapshot &tonemap_first_bind_scope = tonemap_label_entry.first_pipeline_bind_after_state;
+				carried_load_op_runtime_role_tonemap_active_scope_available =
+						tonemap_first_bind_scope.active_render_pass &&
+						tonemap_first_bind_scope.active_render_pass_attachment_load_ops.size() > first_mismatch_index;
+				carried_load_op_runtime_role_tonemap_pipeline_available =
+						tonemap_first_bind_scope.render_pipeline_provenance.render_pass_attachment_load_ops.size() > first_mismatch_index;
+				if (carried_load_op_runtime_role_tonemap_active_scope_available) {
+					carried_load_op_runtime_role_tonemap_active_value = (RDD::AttachmentLoadOp)tonemap_first_bind_scope.active_render_pass_attachment_load_ops[first_mismatch_index];
+				}
+				if (carried_load_op_runtime_role_tonemap_pipeline_available) {
+					carried_load_op_runtime_role_tonemap_pipeline_value = (RDD::AttachmentLoadOp)tonemap_first_bind_scope.render_pipeline_provenance.render_pass_attachment_load_ops[first_mismatch_index];
+				}
+				carried_load_op_runtime_role_tonemap_active_matches_l88_pre_rebind =
+						carried_load_op_runtime_role_tonemap_active_scope_available &&
+						carried_load_op_runtime_role_tonemap_active_value == carried_load_op_attribution_pre_rebind_active_value &&
+						tonemap_first_bind_scope.active_render_pass_compatibility_hash == l88_pre_rebind_scope.active_render_pass_compatibility_hash &&
+						tonemap_first_bind_scope.active_render_subpass_compatibility_hash == l88_pre_rebind_scope.active_render_subpass_compatibility_hash &&
+						tonemap_first_bind_scope.active_render_pass_attachment_exact_hash == l88_pre_rebind_scope.active_render_pass_attachment_exact_hash &&
+						tonemap_first_bind_scope.subpass_index == l88_pre_rebind_scope.subpass_index;
+				carried_load_op_runtime_role_tonemap_pipeline_matches_carried_packet =
+						carried_load_op_runtime_role_tonemap_pipeline_available &&
+						carried_load_op_runtime_role_tonemap_pipeline_value == carried_load_op_attribution_pre_rebind_pipeline_value &&
+						tonemap_first_bind_scope.render_pipeline_provenance.render_pass_compatibility_hash == carried_pipeline_packet.render_pass_compatibility_hash &&
+						tonemap_first_bind_scope.render_pipeline_provenance.render_subpass_compatibility_hash == carried_pipeline_packet.render_subpass_compatibility_hash &&
+						tonemap_first_bind_scope.render_pipeline_provenance.render_pass_attachment_load_op_hash == carried_pipeline_packet.render_pass_attachment_load_op_hash &&
+						tonemap_first_bind_scope.render_pipeline_provenance.render_subpass == carried_pipeline_packet.render_subpass;
+				if (carried_load_op_runtime_role_tonemap_active_scope_available &&
+						carried_load_op_runtime_role_tonemap_pipeline_available &&
+						carried_load_op_runtime_role_tonemap_active_value != carried_load_op_runtime_role_tonemap_pipeline_value &&
+						carried_load_op_runtime_role_tonemap_active_matches_l88_pre_rebind &&
+						carried_load_op_runtime_role_tonemap_pipeline_matches_carried_packet &&
+						carried_load_op_attribution_classification == "active_scope_rebuild_first_attributable_step") {
+					carried_load_op_runtime_role_classification = "pipeline_placeholder_clear_is_benign_metadata";
+					carried_load_op_runtime_role_basis = "Tonemap_already_executes_inside_the_runtime_LOAD_render_pass_while_its_bound_pipeline_provenance_still_carries_placeholder_CLEAR_and_L88_reenters_that_same_runtime_scope_before_its_own_rebind";
+				} else if (carried_load_op_runtime_role_tonemap_active_scope_available &&
+						carried_load_op_runtime_role_tonemap_pipeline_available &&
+						carried_load_op_runtime_role_tonemap_active_value == carried_load_op_runtime_role_tonemap_pipeline_value &&
+						carried_load_op_attribution_pre_rebind_active_value != carried_load_op_attribution_pre_rebind_pipeline_value) {
+					carried_load_op_runtime_role_classification = "placeholder_clear_becomes_runtime_hazard_after_tonemap";
+					carried_load_op_runtime_role_basis = "Tonemap_first_bind_does_not_yet_show_a_runtime_active_vs_pipeline_load_op_split_but_L88_pre_rebind_does";
+				} else if (carried_load_op_runtime_role_tonemap_active_scope_available &&
+						carried_load_op_runtime_role_tonemap_pipeline_available &&
+						carried_load_op_runtime_role_tonemap_active_value != carried_load_op_runtime_role_tonemap_pipeline_value) {
+					carried_load_op_runtime_role_classification = "placeholder_clear_already_diverges_inside_tonemap";
+					carried_load_op_runtime_role_basis = "Tonemap_first_bind_already_shows_a_runtime_active_vs_pipeline_load_op_split_before_L88_reenters";
 				}
 			}
 		}
@@ -11297,6 +11446,14 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		} else {
 			text += "[\"" + String("\",\"").join(carried_load_op_mismatch_slots) + "\"]";
 		}
+		text += ",minimum_attachment_subfield_diff={classification=\"" + carried_load_op_minimum_subfield_classification + "\"";
+		text += ",basis=\"" + carried_load_op_minimum_subfield_basis + "\"";
+		text += ",first_differing_field=\"" + carried_load_op_minimum_subfield_first_field + "\"";
+		text += ",slot_index=" + itos(carried_load_op_ownership_slot_index);
+		text += String(",active_value=\"") + (carried_load_op_ownership_slot_index >= 0 ? _debug_attachment_load_op_to_string(carried_load_op_ownership_active_value) : String("not_applicable")) + "\"";
+		text += String(",pipeline_value=\"") + (carried_load_op_ownership_slot_index >= 0 ? _debug_attachment_load_op_to_string(carried_load_op_ownership_pipeline_value) : String("not_applicable")) + "\"";
+		text += ",active_family_hash=" + debug_uint64_or_none(carried_load_op_ownership_active_family_hash);
+		text += ",pipeline_family_hash=" + debug_uint64_or_none(carried_load_op_ownership_pipeline_family_hash) + "}";
 		text += ",load_op_ownership_classifier={classification=\"" + carried_load_op_ownership_classification + "\"";
 		text += ",best_explanation=\"" + carried_load_op_ownership_best_explanation + "\"";
 		text += ",basis=\"" + carried_load_op_ownership_basis + "\"";
@@ -11320,6 +11477,19 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += String(",l88_begin_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_attribution_l88_begin_value) + "\"";
 		text += String(",pre_rebind_pipeline_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_attribution_pre_rebind_pipeline_value) + "\"";
 		text += String(",pre_rebind_active_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_attribution_pre_rebind_active_value) + "\"";
+		text += ",slot_index=" + itos(carried_load_op_ownership_slot_index) + "}";
+		text += ",load_op_runtime_role={classification=\"" + carried_load_op_runtime_role_classification + "\"";
+		text += ",basis=\"" + carried_load_op_runtime_role_basis + "\"";
+		text += ",tonemap_active_scope_available=" + String(carried_load_op_runtime_role_tonemap_active_scope_available ? "true" : "false");
+		text += ",tonemap_pipeline_available=" + String(carried_load_op_runtime_role_tonemap_pipeline_available ? "true" : "false");
+		text += ",tonemap_active_matches_l88_pre_rebind=" + String(carried_load_op_runtime_role_tonemap_active_matches_l88_pre_rebind ? "true" : "false");
+		text += ",tonemap_pipeline_matches_carried_packet=" + String(carried_load_op_runtime_role_tonemap_pipeline_matches_carried_packet ? "true" : "false");
+		text += String(",tonemap_active_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_runtime_role_tonemap_active_value) + "\"";
+		text += String(",tonemap_pipeline_load_op=\"") + _debug_attachment_load_op_to_string(carried_load_op_runtime_role_tonemap_pipeline_value) + "\"";
+		text += ",tonemap_active_render_pass_create_serial=" + debug_uint64_or_none(tonemap_label_entry.first_pipeline_bind_after_state.active_render_pass_create_serial);
+		text += ",tonemap_pipeline_render_pass_create_serial=" + debug_uint64_or_none(tonemap_label_entry.first_pipeline_bind_after_state.render_pipeline_provenance.render_pass_create_serial);
+		text += ",l88_pre_rebind_active_render_pass_create_serial=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_create_serial);
+		text += ",carried_pipeline_render_pass_create_serial=" + debug_uint64_or_none(carried_pipeline_packet.render_pass_create_serial);
 		text += ",slot_index=" + itos(carried_load_op_ownership_slot_index) + "}";
 		text += ",active_format_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_format_hash);
 		text += ",active_samples_hash=" + debug_uint64_or_none(l88_pre_rebind_scope.active_render_pass_attachment_samples_hash);

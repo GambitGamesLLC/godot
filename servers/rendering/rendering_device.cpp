@@ -5544,6 +5544,11 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin_for_screen(DisplayS
 	clear_value.color = p_clear_color;
 
 	RDD::RenderPassID render_pass = driver->swap_chain_get_render_pass(sc_it->value);
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (OS::get_singleton()->has_environment("GODOT_GDGS_DEBUG_UI_PASS_ORIGIN")) {
+		print_line(vformat("[gdgs-rd] draw_list_begin_for_screen frame=%d screen=%d swap_chain_id=%d framebuffer_id=%d split_swapchain_cmd_buffer=%s viewport=%s", frame, (int64_t)p_screen, (uint64_t)sc_it->value.id, (uint64_t)fb_it->value.id, split_swapchain_into_its_own_cmd_buffer ? "true" : "false", viewport));
+	}
+#endif
 	draw_graph.add_draw_list_begin(render_pass, fb_it->value, viewport, RDG::ATTACHMENT_OPERATION_CLEAR, clear_value, RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::BreadcrumbMarker::BLIT_PASS, split_swapchain_into_its_own_cmd_buffer);
 
 	draw_graph.add_draw_list_set_viewport(viewport);
@@ -7907,6 +7912,12 @@ String RenderingDevice::get_device_pipeline_cache_uuid() const {
 
 void RenderingDevice::swap_buffers(bool p_present) {
 	ERR_RENDER_THREAD_GUARD();
+
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (OS::get_singleton()->has_environment("GODOT_GDGS_DEBUG_UI_PASS_ORIGIN")) {
+		print_line(vformat("[gdgs-rd] swap_buffers_begin frame=%d present_requested=%s pending_swap_chains=%d wait_semaphores=%d", frame, p_present ? "true" : "false", frames[frame].swap_chains_to_present.size(), frames[frame].semaphores_to_wait_on.size()));
+	}
+#endif
 
 	GodotProfileZoneGroupedFirst(_profile_zone, "_end_frame");
 	_end_frame();

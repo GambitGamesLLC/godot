@@ -36,12 +36,63 @@
 #include "core/math/math_defs.h"
 #include "core/math/math_funcs.h"
 #include "core/math/transform_interpolator.h"
+#include "core/os/os.h"
 #include "core/templates/fixed_vector.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_server_default.h"
+
+namespace {
+bool gdgs_debug_ui_pass_origin_enabled() {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (!OS::get_singleton()->has_environment("GODOT_GDGS_DEBUG_UI_PASS_ORIGIN")) {
+		return false;
+	}
+	const String value = OS::get_singleton()->get_environment("GODOT_GDGS_DEBUG_UI_PASS_ORIGIN").strip_edges().to_lower();
+	return !(value.is_empty() || value == "0" || value == "false" || value == "off" || value == "no");
+#else
+	return false;
+#endif
+}
+
+const char *gdgs_canvas_blend_mode_name(int p_blend_mode) {
+	switch (RendererRD::MaterialStorage::ShaderData::BlendMode(p_blend_mode)) {
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_MIX:
+			return "mix";
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_ADD:
+			return "add";
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_SUB:
+			return "sub";
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_MUL:
+			return "mul";
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_ALPHA_TO_COVERAGE:
+			return "alpha_to_coverage";
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_PREMULTIPLIED_ALPHA:
+			return "premul_alpha";
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED:
+			return "disabled";
+		default:
+			return "unknown";
+	}
+}
+
+bool gdgs_canvas_blend_mode_uses_prior_color(int p_blend_mode) {
+	switch (RendererRD::MaterialStorage::ShaderData::BlendMode(p_blend_mode)) {
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_MIX:
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_ADD:
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_SUB:
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_MUL:
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_ALPHA_TO_COVERAGE:
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_PREMULTIPLIED_ALPHA:
+			return true;
+		case RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED:
+		default:
+			return false;
+	}
+}
+} // namespace
 
 void RendererCanvasRenderRD::_update_transform_2d_to_mat4(const Transform2D &p_transform, float *p_mat4) {
 	p_mat4[0] = p_transform.columns[0][0];
@@ -2293,7 +2344,74 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 
 	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(framebuffer);
 
-	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(framebuffer, clear ? RD::DRAW_CLEAR_COLOR_0 : RD::DRAW_DEFAULT_ALL, clear_color, 1.0f, 0, Rect2(), RDD::BreadcrumbMarker::UI_PASS);
+	const bool gdgs_ui_pass_origin_log = gdgs_debug_ui_pass_origin_enabled();
+	const BitField<RD::DrawFlags> ui_draw_flags = clear ? BitField<RD::DrawFlags>(RD::DRAW_CLEAR_COLOR_0) : BitField<RD::DrawFlags>(RD::DRAW_DEFAULT_ALL);
+	if (gdgs_ui_pass_origin_log && !p_to_backbuffer) {
+		int rendered_batch_count = 0;
+		int clip_batch_count = 0;
+		int destination_color_batch_count = 0;
+		int lcd_blend_batch_count = 0;
+		int blend_disabled_batch_count = 0;
+		int rect_like_batch_count = 0;
+		int polygon_batch_count = 0;
+		int primitive_batch_count = 0;
+		String first_batch_blend_mode = "none";
+		String first_destination_color_batch_blend_mode = "none";
+
+		for (uint32_t i = 0; i <= state.current_batch_index; i++) {
+			const Batch *batch = &state.canvas_instance_batches[i];
+			if (batch->instance_count == 0) {
+				continue;
+			}
+			rendered_batch_count++;
+			if (batch->clip != nullptr) {
+				clip_batch_count++;
+			}
+			if (batch->has_blend) {
+				lcd_blend_batch_count++;
+			}
+
+			const CanvasShaderData *batch_shader_data = batch->material_data && batch->material_data->shader_data && batch->material_data->shader_data->version.is_valid() && batch->material_data->shader_data->is_valid() ? batch->material_data->shader_data : shader.default_version_data;
+			const int batch_blend_mode = batch_shader_data ? batch_shader_data->blend_mode : RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
+			const char *batch_blend_mode_name = gdgs_canvas_blend_mode_name(batch_blend_mode);
+			if (first_batch_blend_mode == "none") {
+				first_batch_blend_mode = batch_blend_mode_name;
+			}
+			if (gdgs_canvas_blend_mode_uses_prior_color(batch_blend_mode)) {
+				destination_color_batch_count++;
+				if (first_destination_color_batch_blend_mode == "none") {
+					first_destination_color_batch_blend_mode = batch_blend_mode_name;
+				}
+			} else {
+				blend_disabled_batch_count++;
+			}
+
+			switch (batch->command_type) {
+				case Item::Command::TYPE_RECT:
+				case Item::Command::TYPE_NINEPATCH:
+					rect_like_batch_count++;
+					break;
+				case Item::Command::TYPE_POLYGON:
+					polygon_batch_count++;
+					break;
+				case Item::Command::TYPE_PRIMITIVE:
+					primitive_batch_count++;
+					break;
+				default:
+					break;
+			}
+		}
+
+		const bool preserve_required = !clear && (destination_color_batch_count > 0 || lcd_blend_batch_count > 0 || clip_batch_count > 0 || rendered_batch_count > 1);
+		const char *overwrite_classifier = clear ? "explicit_clear_overwrite" : (preserve_required ? "preserve_prior_root_contents" : "not_proven_full_overwrite");
+		const bool all_rendered_batches_are_rect_like = rendered_batch_count > 0 && rect_like_batch_count == rendered_batch_count && polygon_batch_count == 0 && primitive_batch_count == 0;
+		const bool all_rendered_batches_need_preserved_color = rendered_batch_count > 0 && destination_color_batch_count == rendered_batch_count;
+		const bool all_rendered_batches_are_clipped = rendered_batch_count > 0 && clip_batch_count == rendered_batch_count;
+		const char *graph_build_classifier = rendered_batch_count <= 0 ? "empty_ui_pass" : (rendered_batch_count == 1 && all_rendered_batches_are_rect_like && all_rendered_batches_need_preserved_color && !all_rendered_batches_are_clipped ? "single_rect_preserve_batch" : (all_rendered_batches_are_rect_like && all_rendered_batches_need_preserved_color && all_rendered_batches_are_clipped ? "multi_rect_preserve_clip_batch_chain" : (all_rendered_batches_are_rect_like && all_rendered_batches_need_preserved_color ? "multi_rect_preserve_batch_chain" : "mixed_ui_batch_chain")));
+		print_line(vformat("[gdgs-canvas] ui_pass_origin={codepath=\"RendererCanvasRenderRD::_render_batch_items\",framebuffer_source=\"render_target_get_rd_framebuffer\",breadcrumb=%d,draw_list_begin_flags=%s,clear_requested=%s,msaa_resolve_disabled_before_ui=true,label_state=\"none_without_draw_command_begin_label\",batch_summary={rendered=%d,rect_like=%d,polygon=%d,primitive=%d,clipped=%d,lcd_blend=%d,destination_color=%d,blend_disabled=%d,first_blend_mode=\"%s\",first_destination_color_blend_mode=\"%s\"},graph_build_condition={classifier=\"%s\",expected_draw_calls_from_rendered_batches=%d,all_rendered_batches_are_rect_like=%s,all_rendered_batches_need_preserved_color=%s,all_rendered_batches_are_clipped=%s},overwrite_classifier=\"%s\",overwrite_classifier_basis=\"blend_or_clip_or_multi_batch_requires_prior_contents\"}", (int)RDD::BreadcrumbMarker::UI_PASS, clear ? "RD::DRAW_CLEAR_COLOR_0" : "RD::DRAW_DEFAULT_ALL", clear ? "true" : "false", rendered_batch_count, rect_like_batch_count, polygon_batch_count, primitive_batch_count, clip_batch_count, lcd_blend_batch_count, destination_color_batch_count, blend_disabled_batch_count, first_batch_blend_mode, first_destination_color_batch_blend_mode, graph_build_classifier, rendered_batch_count, all_rendered_batches_are_rect_like ? "true" : "false", all_rendered_batches_need_preserved_color ? "true" : "false", all_rendered_batches_are_clipped ? "true" : "false", overwrite_classifier));
+	}
+
+	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(framebuffer, ui_draw_flags, clear_color, 1.0f, 0, Rect2(), RDD::BreadcrumbMarker::UI_PASS);
 
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, fb_uniform_set, BASE_UNIFORM_SET);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, state.default_transforms_uniform_set, TRANSFORMS_UNIFORM_SET);

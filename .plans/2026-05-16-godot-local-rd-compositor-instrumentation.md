@@ -3069,10 +3069,10 @@ Exact conclusion: shared-view demotion changed the lane-policy surface but **did
 
 ### Task 122: Classify the unchanged RDG attachment/tracker input still feeding `non_discardable_default_load_contract` after shared-view demotion at failing `submit_serial=9`
 
-**Bead ID:** `oc-ae2`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-ae2`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ae2` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the rebuilt active scope still insists on slot-0 `LOAD` because the Tonemap RDG active-scope render-pass recipe itself is still born from `source="non_discardable_default_load_contract"` using a root, non-parented, non-discardable tracker; `L88` only re-enters that already-created compatible live scope. Implement the smallest honest diagnostic needed to classify **which unchanged RDG-side attachment/tracker input still feeds that `non_discardable_default_load_contract` path** after the shared-view demotions — e.g. the exact tracker field, attachment metadata, or recipe input that remains unchanged and still forces the root non-discardable branch on this lane. Prefer Tonemap/`L88` pre-rebind RDG attachment/state/ownership evidence over reopening already-demoted shared-view policy questions. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-ae2` with a clear reason when the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -3114,10 +3114,10 @@ Exact conclusion: the unchanged RDG-side input still feeding `non_discardable_de
 
 ### Task 123: Classify whether the root texture `is_discardable=false` contract is the true bug seam for the Tonemap lane at failing `submit_serial=9`
 
-**Bead ID:** `oc-0v8`  
-**SubAgent:** `primary` (for `coder`)  
-**Role:** `coder`  
-**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Bead ID:** `oc-0v8`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-0v8` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the unchanged RDG-side forcing input is `resource_tracker->is_discardable=false_after_clear_ignore_checks`, with upstream source `root_texture_create<-texture_format_is_discardable_flag:false`, and that still feeds `non_discardable_default_load_contract`, which births the live Tonemap/L88-compatible scope as slot-0 `LOAD`. Implement the smallest honest diagnostic needed to classify the next fork: **is this root texture `is_discardable=false` contract itself the true bug seam for this Tonemap lane, or does it still look like a correct rule with some deeper surviving assumption underneath it?** Prefer root-texture / texture-format / Tonemap-L88 pre-rebind ownership evidence over reopening already-demoted shared-view policy questions. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-0v8` with a clear reason when the evidence package is complete.
 
 **Folders Created/Deleted/Modified:**
@@ -3142,6 +3142,724 @@ Paired with the same run’s unchanged RDG line:
 Exact conclusion: the root texture `is_discardable=false` contract still reads as the **correct persistent-root ownership rule** for `rt->color`, not the isolated bug seam by itself. The deeper surviving assumption is that this Tonemap lane takes the **direct-root path** and therefore bypasses the already-existing explicit discardable intermediate paths, while RDG still only sees a write to a persistent non-discardable root attachment and rebuilds the live Tonemap/L88-compatible scope with the generic slot-0 `LOAD` contract. Updated `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the exact artifact root and conclusion. `bd update oc-0v8 --status in_progress --json` worked at start and `bd close oc-0v8 --reason "Classified whether root texture is_discardable=false is the true Tonemap lane bug seam" --json` succeeded at finish. No commit was made because this remains investigation-only instrumentation on the active debug branch.
 
 ---
+
+### Task 124: Classify why Tonemap takes the direct persistent-root path on the locked repro lane
+
+**Bead ID:** `oc-l98`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-l98` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen already-demoted families unless fresh evidence forces it. Start from the current stopping-point artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/` and classify the exact reason Tonemap is taking the **direct persistent-root path** instead of the existing discardable Tonemapper-destination path on this repro. The current locked truth is that the root texture `is_discardable=false` rule still looks correct, while RDG still sees a root non-discardable attachment and births the live Tonemap/L88-compatible scope as slot-0 `LOAD`. Implement the smallest honest diagnostic needed to answer the next fork: **is the path choice itself the bug seam, or is the path correct but still missing a narrower first-write/overwrite signal that RDG needs?** Prefer exact source-routing and ownership evidence over speculative fixes. Save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-l98` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Started from the locked artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/`, which already preserved the critical runtime facts for the same failing source-built host-Vulkan `projection_only + disabled` lane: `path_class=persistent_root_direct`, `lane_owner=rt->color`, `ownership_contract={class=persistent_root_non_discardable,...,contrast=direct_path_bypasses_discardable_tonemapper_destination}`, and RDG still selecting `source="non_discardable_default_load_contract"` before the live Tonemap/L88 scope appears with slot 0 as `LOAD`. I then added the smallest source-routed diagnostic inside `TextureStorage::render_target_debug_describe_tonemap_lane()` so the existing Tonemap lane payload now emits `route_gate={...}` plus `direct_write_contract={...}`. Those fields do not change behavior; they just make the route-vs-overwrite fork explicit at the same logging point.
+
+The new source-derived classification is narrow and decisive. On this repro, `RendererSceneRenderRD::render_buffers_post_process_and_tonemap()` takes the direct render-target branch because `using_scaling_pass=false`, `use_smaa=false`, and `dest_is_msaa_2d=false`, which selects `texture_storage->render_target_get_rd_framebuffer(render_target)`. The discardable alternatives remain on the other already-known branches only: scaling/SMAA allocate `Tonemapper.destination`, while the MSAA path routes through `rt->color_multisample`. At the same time, `ToneMapper::tonemapper()` / `tonemapper_mobile()` still begin the destination pass with plain `RD::draw_list_begin(p_dst_framebuffer)` and no `DRAW_CLEAR_*` / `DRAW_IGNORE_*` flags. That means the direct persistent-root path is being taken **because current routing says it should be**, but the path still carries no narrower per-pass overwrite/discard hint for RDG.
+
+So the answer to bead `oc-l98` is: **the surviving seam is not that Tonemap accidentally chose the wrong path; it is that the correct direct persistent-root path still presents itself to RDG as a normal write into a persistent non-discardable root attachment with no explicit first-write/overwrite contract.** Given that input, RDG remains internally consistent: root tracker stays non-discardable, the draw-list recipe stays `non_discardable_default_load_contract`, and the rebuilt Tonemap/L88-compatible scope is born as slot-0 `LOAD`. No new runtime artifact root was needed for that classification because the locked 2026-05-21 artifact already captured the runtime lane/LOAD outcome, and this coder pass only added the minimal source-side diagnostic that explains why that runtime result is structurally expected. No commit was made in this pass.
+
+---
+
+### Task 125: Classify whether the Tonemap direct-root write contract can express a narrower RDG overwrite hint on the locked repro lane
+
+**Bead ID:** `oc-lzm`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-lzm` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the current stopping-point artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/` and the newly locked source-routing conclusion that Tonemap is correctly on the direct persistent-root path for this repro. Implement the smallest honest diagnostic needed to answer the next fork: **can this direct-root Tonemap write path express a narrower per-attachment overwrite / first-write / safe-discard signal to RDG without violating the persistent-root ownership rule, or is RDG forced to keep the generic non-discardable slot-0 `LOAD` contract here?** Prefer exact source-routing, draw-list flag, render-pass attachment, and RDG contract evidence over speculative fixes. Save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-lzm` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Pending.
+
+---
+
+### Task 125: Classify whether the direct-root Tonemap path can express a narrower RDG overwrite hint on failing `submit_serial=9`
+
+**Bead ID:** `oc-lzm`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-lzm` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the current stopping-point artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/` and the newly locked source-routing conclusion that Tonemap is correctly on the direct persistent-root path for this repro. Implement the smallest honest diagnostic needed to answer the next fork: **can this direct-root Tonemap write path express a narrower per-attachment overwrite / first-write / safe-discard signal to RDG without violating the persistent-root ownership rule, or is RDG forced to keep the generic non-discardable slot-0 `LOAD` contract here?** Prefer exact source-routing, draw-list flag, render-pass attachment, and RDG contract evidence over speculative fixes. Save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-lzm` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `doc/`
+- `.plans/`
+- `servers/rendering/renderer_rd/storage_rd/`
+
+**Files Created/Deleted/Modified:**
+- `doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+
+**Status:** ✅ Complete
+
+**Results:** Started from the locked artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/` and kept the investigation on the same source-built host-Vulkan `projection_only + disabled` lane without reopening route selection. The smallest added diagnostic stayed inside `TextureStorage::render_target_debug_describe_tonemap_lane()`: the existing `direct_write_contract={...}` payload now also states `rdg_attachment_override_options=clear_or_ignore_only`, `rdg_non_discardable_default=load_and_store`, and `rdg_safe_discard_signal=unavailable_without_clear_ignore_or_discardable_tracker`. Durable notes were appended to `doc/gdgs-compositor-staged-qa-2026-05-17.md` using the same artifact root plus direct source evidence from `ToneMapper::tonemapper()`, `RenderingDevice::draw_list_begin()`, and `RenderingDeviceGraph::_run_draw_list_command()`. Exact classification: the direct persistent-root Tonemap path is still the correct route on this repro, but under the current API/contract it cannot express any narrower per-attachment overwrite / first-write / safe-discard hint to RDG without either setting `DRAW_CLEAR_*` / `DRAW_IGNORE_*`, changing tracker discardability, or rerouting onto one of the already-existing discardable intermediate paths. Because none of those are true on this lane, RDG is forced to keep the generic non-discardable slot-0 contract (`load_op=LOAD`, `store_op=STORE`, source branch `non_discardable_default_load_contract`). Validation for this coder pass stayed source-level and reversible; no new runtime artifact was needed beyond the locked root-classifier artifact because the answer came from the direct route/flag/RDG contract codepath itself. No commit was made.
+
+### Task 126: Classify whether the Tonemap direct-root pass is semantically a full overwrite and can honestly declare a narrower RDG contract
+
+**Bead ID:** `oc-11p`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-11p` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the current stopping-point artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/` and the locked conclusion that the direct-root Tonemap path currently gives RDG no narrower hint than the generic non-discardable default `LOAD` contract. Implement the smallest honest diagnostic needed to answer the next fork: **is this direct-root Tonemap pass semantically a full overwrite of slot 0 such that a narrower explicit overwrite/ignore contract would be truthful, or do source behavior / shader behavior / attachment usage show that preserving prior contents is actually required?** Prefer exact source behavior, shader/output coverage, draw-list flags, and attachment/RDG contract evidence over speculative fixes. Save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-11p` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Stayed on the same locked source-built host-Vulkan `projection_only + disabled` lane and reused the current artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/` rather than widening the repro. I answered the fork from exact source behavior and recorded the conclusion durably in `doc/gdgs-compositor-staged-qa-2026-05-17.md`: on this direct-root lane, Tonemap is semantically a full-screen overwrite of color attachment slot 0. The evidence is specific and narrow: `RendererSceneRenderRD::render_buffers_post_process_and_tonemap()` routes to the root framebuffer on this lane; `ToneMapper::tonemapper()` begins a draw list on that framebuffer with default full-frame region, binds a pipeline with blending disabled, and draws a 3-vertex fullscreen triangle; the Tonemap shader emits fullscreen-triangle vertices and always writes `frag_color` with no `discard` path. I did **not** find source behavior showing that Tonemap itself requires preserving prior slot-0 contents. That sharpens the next fork: the pass semantics are overwrite-like, but the currently encoded RDG contract is still the generic non-discardable default `LOAD`/`STORE` because the callsite does not currently express `DRAW_CLEAR_COLOR_*`, `DRAW_IGNORE_COLOR_*`, or a discardable route/tracker. No new runtime artifact was needed beyond the locked root-classifier artifact, and no commit was made.
+
+### Task 127: Experiment whether a truthful overwrite-style Tonemap contract changes the locked repro failure
+
+**Bead ID:** `oc-95k`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-95k` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the locked artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/` and the newly locked conclusion that the direct-root Tonemap pass is semantically a full overwrite even though RDG currently only sees the generic non-discardable default `LOAD` contract. Implement the smallest honest diagnostic experiment needed to test the next fork: **if this direct-root Tonemap pass is given a truthful explicit overwrite-style attachment contract, does the locked repro failure move, narrow, or stay unchanged?** Keep the change diagnostic and reversible, prefer the smallest possible contract expression over broad refactors, rerun only the same locked repro lane, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-95k` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/effects/tone_mapper.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/env.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/exit_status.txt`
+
+**Status:** ✅ Complete
+
+**Results:** Started from the locked artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/` and kept the experiment as small and reversible as possible. In `servers/rendering/renderer_rd/effects/tone_mapper.cpp` I added a debug-only env-gated contract toggle (`GODOT_GDGS_DEBUG_TONEMAP_OVERWRITE_CONTRACT=1`) so the direct-root Tonemap pass can truthfully switch just slot 0 from the default draw-list contract to `RD::DRAW_IGNORE_COLOR_0` without changing ownership routing or widening into broader refactors. In `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp` I mirrored that state into the existing Tonemap lane log so the artifact explicitly records `direct_write_contract={draw_list_begin_flags=RD::DRAW_IGNORE_COLOR_0,attachment_ignore=true,rdg_first_write_hint=explicit_ignore_slot0,...}` when the experiment is on.
+
+Validation stayed on the same source-built host-Vulkan `projection_only__disabled` repro lane and produced durable artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `context.txt`, `env.txt`, `exit_status.txt`). The experiment definitely took effect: `stdout.log` contains `[gdgs-ts] tonemap_overwrite_contract_experiment={enabled=true,draw_list_begin_flags=RD::DRAW_IGNORE_COLOR_0,attachment_overwrite_contract=explicit_ignore_slot0,fullscreen_draw=true}` and the Tonemap lane payload now reports `route_vs_overwrite_classifier=path_choice_matches_current_policy_with_explicit_overwrite_experiment` plus `draw_list_begin_flags=RD::DRAW_IGNORE_COLOR_0`.
+
+What actually happened vs. the task question:
+- The locked repro failure **stayed unchanged**. The run still aborts at `submit_serial=9` with `exit_status=134`, then later records the same `fence_wait_error submit_serial=9 wait_result=-4` collapse.
+- The surviving carried-vs-active attachment seam also **did not narrow or move**. The same pre-rebind payload still reports `active_load_ops=["0:LOAD"]`, `pipeline_load_ops=["0:CLEAR"]`, and `load_op_attribution_split={classification="active_scope_rebuild_first_attributable_step", ... pre_rebind_pipeline_load_op="CLEAR", pre_rebind_active_load_op="LOAD"}`.
+- So the truthful overwrite-style Tonemap contract was successfully expressed at the draw-list callsite, but on this locked lane it did **not** dislodge the unchanged active-scope rebuild vs carried-packet `LOAD`/`CLEAR` mismatch before `L88`, and it did not move the crash away from failing `submit_serial=9`.
+
+No commit was made.
+
+### Task 128: Classify why active-scope rebuild still resolves slot-0 `LOAD` after the explicit Tonemap overwrite experiment
+
+**Bead ID:** `oc-xkz`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-xkz` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the fresh overwrite-experiment artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/` and the locked conclusion that the explicit Tonemap overwrite-style contract took effect but did not move the failure. Implement the smallest honest diagnostic needed to answer the next fork: **why does active-scope rebuild still resolve slot 0 as `LOAD` after the explicit overwrite experiment, and what exact upstream signal is still forcing that resolution?** Prefer exact active-scope rebuild / attachment-op attribution evidence over speculative fixes. Keep the change diagnostic and reversible, rerun only the same locked repro lane if needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-xkz` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** No new engine code was needed for this slice because the fresh overwrite-experiment artifact already contained the exact attribution seam once cross-read against the existing RDG/Vulkan diagnostics. I stayed on the locked source-built host-Vulkan `projection_only__disabled` lane and started from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/` without reopening route selection or rerunning a broader family.
+
+The decisive artifact pair is now durable in `REF-07`:
+- Tonemap’s explicit overwrite experiment **did** take effect on the Tonemap draw-list itself: `stdout.log` records `label="Tonemap" ... load_op=2, store_op=0, source="attachment_operation_ignore"` for slot 0.
+- But the later active-scope rebuild that `L88` re-enters is a **different RDG draw-list render-pass creation** on the same tracker/write lane: `stdout.log` also records `label="none" breadcrumb=720896 attachments=[{index=0,load_op=0,store_op=0,source="non_discardable_default_load_contract", tracker_discardable=false, tracker_has_parent=false, tracker_write_index=132, ... tracker_name="Render Target Color", discardable_provenance="root_texture_create", discardable_seed=false, discardable_seed_contract="texture_format_is_discardable_flag", load_branch_decision_input="resource_tracker->is_discardable=false_after_clear_ignore_checks", load_branch_upstream_input="root_texture_create<-texture_format_is_discardable_flag:false"}]`.
+- The same artifact’s pre-rebind Vulkan payload still reports `load_op_attribution_split={classification="active_scope_rebuild_first_attributable_step", ... tonemap_end_load_op="CLEAR", l88_begin_load_op="CLEAR", pre_rebind_pipeline_load_op="CLEAR", pre_rebind_active_load_op="LOAD"}`.
+
+Exact conclusion: the explicit Tonemap overwrite contract only changed the Tonemap-local draw-list render-pass recipe. The later active-scope rebuild still resolves slot 0 as `LOAD` because it is rebuilt from a separate RDG/UI-pass draw-list recipe that continues to see the slot-0 attachment as a root, non-parented, non-discardable tracker (`write_index=132`, `Render Target Color`) and therefore falls back to `source="non_discardable_default_load_contract"`. The exact surviving upstream forcing signal is still `resource_tracker->is_discardable=false_after_clear_ignore_checks`, with upstream source `root_texture_create<-texture_format_is_discardable_flag:false`.
+
+Durable notes were appended to `REF-07`, this plan was updated with the actual artifact lines and conclusion, `bd update oc-xkz --status in_progress --json` succeeded at start, and `bd close oc-xkz --reason "Classified why active-scope rebuild still resolves slot-0 LOAD after the explicit Tonemap overwrite experiment" --json` was run at finish. No commit was made in this pass because the classification came from the already-landed diagnostics plus the fresh artifact, and no additional code change was required.
+
+### Task 129: Classify what creates the later `label="none"` active-scope rebuild on the root tracker before `L88`
+
+**Bead ID:** `oc-sq0`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-sq0` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the overwrite-experiment artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/` and the locked conclusion that Tonemap’s explicit overwrite hint stuck locally, but the later active scope that `L88` re-enters is rebuilt by a different draw-list render-pass creation on the same root non-discardable tracker lane. Implement the smallest honest diagnostic needed to answer the next fork: **what exact codepath creates that later `label="none"` / `breadcrumb=720896` active-scope rebuild on the same tracker before `L88`, and why does it inherit the generic non-discardable `LOAD` contract?** Prefer exact draw-list/render-pass creation attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the same locked repro lane if needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-sq0` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/env.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/exit_status.txt`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest source-side attribution seam instead of widening the RDG contract family again. `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` now exposes an env-gated `[gdgs-canvas] ui_pass_origin=...` line whenever the root render-target UI pass begins through `RendererCanvasRenderRD::_render_batch_items()`; it records the exact caller codepath, framebuffer source (`render_target_get_rd_framebuffer`), breadcrumb (`720896` / `UI_PASS`), draw-list begin flags, whether a clear request was active, and the fact that this path has no surrounding `draw_command_begin_label`.
+
+The locked rerun stayed on the same source-built host-Vulkan `projection_only__disabled` lane and produced durable artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/` (`exit_status=134`, same `submit_serial=9` fence failure). The new log line appears immediately before the existing unlabeled RDG render-pass creation and answers the fork directly:
+- `[gdgs-canvas] ui_pass_origin={codepath="RendererCanvasRenderRD::_render_batch_items",framebuffer_source="render_target_get_rd_framebuffer",breadcrumb=720896,draw_list_begin_flags=RD::DRAW_DEFAULT_ALL,clear_requested=false,msaa_resolve_disabled_before_ui=true,label_state="none_without_draw_command_begin_label"}`
+- followed by `[gdgs-rdg] draw_list_render_pass_create ... label="none" breadcrumb=720896 ... source="non_discardable_default_load_contract" ... tracker_name="Render Target Color" ... load_branch_decision_input="resource_tracker->is_discardable=false_after_clear_ignore_checks" ...`
+
+Exact conclusion: the later `label="none"` active-scope rebuild before `L88` is created by the canvas UI root draw-list begin in `RendererCanvasRenderRD::_render_batch_items()`, not by Tonemap and not by a hidden interstitial backend-only gap. It inherits the generic `LOAD` contract because that codepath enters `draw_list_begin()` with `RD::DRAW_DEFAULT_ALL` (no clear/ignore override), on the root render-target framebuffer, with `clear_requested=false`; RDG therefore sees the same root non-discardable `Render Target Color` tracker and falls straight into the default non-discardable branch (`resource_tracker->is_discardable=false_after_clear_ignore_checks` → `source="non_discardable_default_load_contract"`). No commit was made in this pass; the diagnostic remains narrow, reversible, and uncommitted.
+
+### Task 130: Classify whether the UI root pass before `L88` is semantically a full overwrite and can truthfully declare a narrower contract
+
+**Bead ID:** `oc-tu4`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-tu4` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the UI-pass origin artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/` and the locked conclusion that the later unlabeled active-scope rebuild before `L88` is created by `RendererCanvasRenderRD::_render_batch_items()` on the same root non-discardable tracker with `RD::DRAW_DEFAULT_ALL`. Implement the smallest honest diagnostic needed to answer the next fork: **is this UI root pass semantically a full overwrite of slot 0 such that a narrower explicit overwrite/ignore contract would be truthful, or does the UI path genuinely need prior root contents preserved?** Prefer exact source behavior, shader/output coverage, draw-list flags, and attachment/RDG contract evidence over speculative fixes. Keep the change diagnostic and reversible, rerun only the same locked repro lane if needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-tu4` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest UI-pass overwrite classifier directly at `RendererCanvasRenderRD::_render_batch_items()` in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`, keeping the diagnostic env-gated and reversible under the existing `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` lane. The new `[gdgs-canvas] ui_pass_origin=...` payload now records whether the live UI batch set can truthfully be treated as a slot-0 overwrite, using only observable source/runtime facts that matter to that fork: rendered batch count, rect/polygon/primitive mix, clip/scissor usage, destination-dependent blend usage, and the first live blend mode. After rebuilding the source-built Vulkan editor and rerunning the exact locked `projection_only__disabled` repro lane, the fresh artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-overwrite-classifier-vulkan-sourcebuild-20260522-100702/` classified the live UI root pass as `overwrite_classifier="preserve_prior_root_contents"` with `batch_summary={rendered=10,rect_like=10,polygon=0,primitive=0,clipped=10,lcd_blend=0,destination_color=10,blend_disabled=0,first_blend_mode="mix",first_destination_color_blend_mode="mix"}`. The same run kept the locked downstream evidence intact: the later active scope before `L88` is still the canvas/UI pass, still enters with `RD::DRAW_DEFAULT_ALL`, still rebuilds slot 0 as `LOAD`, and still dies at `fence_wait_error submit_serial=9 wait_result=-4`. Exact conclusion: on this locked lane the UI root pass is not a full overwrite; it truthfully behaves as a blended/clipped overlay that needs the prior tonemapped root contents preserved, so a blanket explicit overwrite/ignore contract for that pass would be dishonest. No commit was made in this pass.
+
+### Task 131: Classify the last valid writer and root attachment state immediately before the UI pass begins on the locked repro lane
+
+**Bead ID:** `oc-64s`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-64s` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the UI-pass overwrite-classifier artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-overwrite-classifier-vulkan-sourcebuild-20260522-100702/` and the locked conclusion that the UI pass is not a truthful overwrite candidate and genuinely preserves prior root contents. Implement the smallest honest diagnostic needed to answer the next fork: **what is the last valid writer and exact root attachment state immediately before the UI pass begins on this locked lane, and is that preserved pre-UI state already poisoned/invalid before UI ever re-enters it?** Prefer exact writer/state attribution, tracker lineage, and attachment-state evidence over speculative fixes. Keep the change diagnostic and reversible, rerun only the same locked repro lane if needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-64s` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this pass narrow and reversible: no new engine-side diagnostic was needed beyond the already-landed env-gated packet/scope instrumentation from Tasks 127-130, because the locked artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-overwrite-classifier-vulkan-sourcebuild-20260522-100702/` already exposed the exact tonemap→UI boundary contract. I wrote the durable classification into `doc/gdgs-compositor-staged-qa-2026-05-17.md` and tied it back to the earlier origin-attribution artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/` for the root tracker lineage. Exact conclusion on the locked `projection_only + disabled` host-Vulkan lane: the last valid writer before UI re-enters root is still `Tonemap (L87) (Draw)`; immediately before `L88` begins there is no active render pass/framebuffer, but the carried Tonemap pipeline packet remains exact across the zero-gap boundary (`tonemap_end_state == l88_begin_state`, `pipeline_identity.exact=true`, `l88_begin_load_op="CLEAR"`). The preserved pre-UI state is therefore not already poisoned before UI starts. The first attributable conflicting root attachment state appears only when UI rebuilds its own active scope (`load_op_attribution_split.first_attributable_step="active_pre_rebind_scope_reconstruction"`), which flips the active slot-0 load op to `LOAD` and changes the active attachment exact hash from the carried Tonemap-side lineage to the UI-side scope rebuild. I updated this plan and the durable QA notes; no rerun was needed, and no commit was made in this pass.
+
+### Task 132: Classify the minimum attachment subfield difference between Tonemap's carried packet and the UI rebuilt active scope before `L88`
+
+**Bead ID:** `oc-40v`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-40v` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the Task 131 conclusion and the existing artifact roots proving that `Tonemap (L87) (Draw)` is the last valid writer before UI re-enters root, that the carried pre-UI packet remains exact with slot-0 `CLEAR`, and that the first attributable divergence is the UI-side `active_pre_rebind_scope_reconstruction`. Implement the smallest honest diagnostic needed to answer the next fork: **what is the minimum attachment subfield difference between Tonemap’s carried exact packet/hash (`0x63c10583`) and the UI rebuilt active-scope attachment exact hash (`0x6529dc72`) immediately before `L88`, and which first differing field actually causes the `CLEAR` → `LOAD` flip?** Prefer exact attachment recipe/subfield attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the same locked repro lane if needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-40v` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest follow-up directly inside the existing carried-vs-active Vulkan attachment classifier: `drivers/vulkan/rendering_device_driver_vulkan.cpp` now emits `minimum_attachment_subfield_diff={...}` alongside `attachment_exact_recipe={...}` without widening the locked `projection_only__disabled` repro lane. The new block reports the minimum surviving attachment subfield difference already implied by the exact-recipe comparison: classification, first differing field, slot index, both side values, and whether the non-`load_op` family hash stayed exact.
+
+Validation stayed on the same source-built host-Vulkan lane and reran only the locked staged case, producing durable artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-attachment-subfield-vulkan-sourcebuild-20260522-105057/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `context.txt`, `exit_status.txt`). The repro still aborts at the same `submit_serial=9` fence wait (`wait_result=-4`, `exit_status=134`), but the new payload answers the fork exactly:
+
+- `attachment_exact_recipe={... minimum_distinguishing_field="load_op", mismatch_fields=["load_op"], format_match=true, samples_match=true, load_op_match=false, store_op_match=true, stencil_load_op_match=true, stencil_store_op_match=true, initial_layout_match=true, final_layout_match=true ...}`
+- `minimum_attachment_subfield_diff={classification="single_slot_single_field_difference", basis="the attachment exact recipe differs only on load_op and only slot 0 changes while the non-load recipe hash stays exact", first_differing_field="load_op", slot_index=0, active_value="LOAD", pipeline_value="CLEAR", active_family_hash="0x2a58ca8c", pipeline_family_hash="0x2a58ca8c"}`
+- `load_op_attribution_split={classification="active_scope_rebuild_first_attributable_step", first_attributable_step="active_pre_rebind_scope_reconstruction", tonemap_end_load_op="CLEAR", l88_begin_load_op="CLEAR", pre_rebind_pipeline_load_op="CLEAR", pre_rebind_active_load_op="LOAD", slot_index=0}`
+
+Exact conclusion: the minimum attachment subfield difference between Tonemap’s carried exact packet/hash (`0x63c10583`) and the rebuilt UI active-scope attachment exact hash (`0x6529dc72`) immediately before `L88` is **slot 0 / `load_op` only**. No non-`load_op` attachment subfield differs at that seam; the non-`load_op` family hash remains exact on both sides. The first differing field that actually causes the visible `CLEAR` → `LOAD` flip is therefore exactly `load_op`, and the first attributable step remains the UI-side `active_pre_rebind_scope_reconstruction`. No commit was made.
+
+### Task 133: Trace the exact decision branch that chooses slot-0 `LOAD` during UI active-scope reconstruction before `L88`
+
+**Bead ID:** `oc-uzv`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-uzv` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the Task 132 conclusion and artifact `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-attachment-subfield-vulkan-sourcebuild-20260522-105057/`, which proved that the minimum and only attachment subfield difference at the UI rebuilt active-scope seam before `L88` is slot-0 `load_op` (`pipeline=CLEAR`, `active=LOAD`). Implement the smallest honest diagnostic needed to answer the next fork: **what exact codepath / rule / branch chooses `active_value="LOAD"` for slot 0 during UI active-scope reconstruction on this lane, and why does it override or fail to preserve the carried Tonemap `CLEAR` contract?** Prefer exact branch-attribution and decision-chain evidence over speculative fixes. Keep the change diagnostic and reversible, rerun only the same locked repro lane if needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-uzv` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this pass narrow and reversible. No new engine-side diagnostic or rerun was needed because the locked artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-attachment-subfield-vulkan-sourcebuild-20260522-105057/` already contained the decisive runtime breadcrumb, and the remaining fork was exact source attribution. I wrote the durable conclusion into `doc/gdgs-compositor-staged-qa-2026-05-17.md` and tied it directly to the current source chain.
+
+Exact source/runtime attribution:
+- `RendererCanvasRenderRD::_render_batch_items()` (`servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`) is the rebuild entrypoint before `L88`. On this lane `clear=false`, so it sets `ui_draw_flags = RD::DRAW_DEFAULT_ALL` and calls `RD::draw_list_begin(..., RDD::BreadcrumbMarker::UI_PASS)`. That matches the saved runtime line `ui_pass_origin={... draw_list_begin_flags=RD::DRAW_DEFAULT_ALL, clear_requested=false, ... overwrite_classifier="preserve_prior_root_contents" ...}`.
+- `RenderingDevice::draw_list_begin()` (`servers/rendering/rendering_device.cpp`) does not preserve the carried Tonemap packet's slot-0 `load_op`; for color attachments it only changes the per-attachment operation on explicit `DRAW_CLEAR_COLOR_*` or `DRAW_IGNORE_COLOR_*`. With `RD::DRAW_DEFAULT_ALL`, slot 0 remains `RDG::ATTACHMENT_OPERATION_DEFAULT`.
+- `RenderingDeviceGraph` then makes the actual load-op choice when materializing the new draw-list command (`servers/rendering/rendering_device_graph.cpp`). The branch is exact: `ATTACHMENT_OPERATION_CLEAR => CLEAR`; `ATTACHMENT_OPERATION_IGNORE => DONT_CARE`; `resource_tracker->is_discardable => LOAD if modified else DONT_CARE`; otherwise unconditional `LOAD`.
+- The saved runtime artifact proves the UI draw-list takes that final branch on the root `Render Target Color` tracker: `draw_list_render_pass_create ... source="non_discardable_default_load_contract" ... tracker_discardable=false ... default_non_discardable_policy="always_load_without_extra_per_attachment_split" load_branch_decision_input="resource_tracker->is_discardable=false_after_clear_ignore_checks" load_branch_upstream_input="root_texture_create<-texture_format_is_discardable_flag:false"`, followed by `begin_render_pass_scope ... owner_label="Command Graph (L88) (Draw)" ... attachment_load_ops=[0:LOAD]`.
+
+Exact conclusion: the slot-0 `LOAD` before `L88` is chosen by the RDG **non-discardable default-load** branch during the UI draw-list's fresh active-scope reconstruction, not by preservation of the carried Tonemap packet. The carried Tonemap-side `CLEAR` contract fails to survive because the UI path creates a separate draw-list/render-pass recipe with `RD::DRAW_DEFAULT_ALL`, and RDG recomputes attachment ops from draw flags plus tracker discardability rather than using the carried Tonemap packet's exact render-pass recipe. No code change, rerun, or commit was needed for this attribution pass.
+
+### Task 134: Classify whether UI active-scope reconstruction is supposed to recompute from generic defaults or preserve the carried Tonemap packet on this lane
+
+**Bead ID:** `oc-2aw`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-2aw` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the Task 133 conclusion and the locked artifact roots showing that the UI path creates a fresh draw-list/render-pass with `RD::DRAW_DEFAULT_ALL`, leaving slot 0 at `RDG::ATTACHMENT_OPERATION_DEFAULT`, which then falls through the non-discardable default-load policy to `ATTACHMENT_LOAD_OP_LOAD`. Implement the smallest honest diagnostic needed to answer the next fork: **is this UI active-scope reconstruction on this lane supposed to recompute attachment ops from generic defaults, or is there an intended carry-forward/preserve mechanism for Tonemap’s carried exact packet that is missing or being bypassed here?** Prefer exact codepath/policy attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the same locked repro lane if needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-2aw` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this pass narrow and reversible. No new engine-side probe or repro rerun was needed because the locked artifact roots `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/` and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-attachment-subfield-vulkan-sourcebuild-20260522-105057/` already fixed the runtime seam: UI re-entry is a fresh `RendererCanvasRenderRD::_render_batch_items()` draw-list begin with `RD::DRAW_DEFAULT_ALL`, the carried Tonemap packet remains exact with slot 0 still `CLEAR`, and the first/only active-vs-carried attachment mismatch before `L88` is slot-0 `load_op`, introduced by `active_pre_rebind_scope_reconstruction`.
+
+I used the smallest honest diagnostic for the fork: exact source-chain attribution of whether any carry-forward/preserve mechanism exists on the UI draw-list path. Source inspection answered it directly. `RendererCanvasRenderRD::_render_batch_items()` starts a fresh UI draw list via `RD::draw_list_begin(framebuffer, ui_draw_flags, ... , RDD::BreadcrumbMarker::UI_PASS)` and, on this lane, `ui_draw_flags = RD::DRAW_DEFAULT_ALL`. `RenderingDevice::draw_list_begin()` then constructs a brand-new per-attachment `operations[]` array, seeds each attachment at `RDG::ATTACHMENT_OPERATION_DEFAULT`, only changes color attachments on explicit `DRAW_CLEAR_COLOR_*` / `DRAW_IGNORE_COLOR_*`, and passes just that freshly computed operations vector plus clear values/stage bits into `draw_graph.add_draw_list_begin(...)`. It does not seed from or preserve the carried Tonemap packet’s prior `load_op` / render-pass recipe. `RenderingDeviceGraph::_add_draw_list_begin()` / `_run_draw_list_command()` then materialize the new UI render pass from those fresh defaults, and the locked runtime artifact proves slot 0 falls through the non-discardable default-load branch (`source="non_discardable_default_load_contract"`) to `ATTACHMENT_LOAD_OP_LOAD`.
+
+Exact conclusion: on this locked UI lane, active-scope reconstruction is supposed to **recompute attachment ops from the new draw-list’s generic/default attachment operations**, not preserve the carried Tonemap packet automatically. There is no existing carry-forward/preserve mechanism on this path for Tonemap’s carried exact packet: no `draw_list_begin()` parameter for a prior attachment recipe, no code that seeds `operations[]` from the current live packet, and no graph-side branch that prefers a carried prior attachment recipe over the fresh `ATTACHMENT_OPERATION_DEFAULT` + tracker-discardability solve. So the UI-side `LOAD` is not a missing copy step inside an otherwise preserve-aware path; it is the intended result of fresh draw-list reconstruction under `RD::DRAW_DEFAULT_ALL` on a non-discardable root tracker. I recorded the durable classification in `doc/gdgs-compositor-staged-qa-2026-05-17.md`. No code behavior changed, no rerun was needed, and no commit was made.
+
+### Task 135: Classify whether the UI-root non-discardable default-load policy on this lane is normal or structurally unusual compared to comparable engine lanes
+
+**Bead ID:** `oc-8on`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-8on` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not reopen route-selection or already-demoted families unless fresh evidence forces it. Start from the Task 134 conclusion that the UI-side active-scope reconstruction intentionally recomputes attachment ops from fresh draw-list defaults and, on this lane, lands in the non-discardable default-load policy. Implement the smallest honest diagnostic needed to answer the next fork: **is this UI-root non-discardable default-load policy on the failing lane normal and structurally consistent with comparable engine lanes, or is this repro lane unusual in a way that makes the generic policy suspect?** Prefer exact comparable-lane/policy attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the same locked repro lane if needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-8on` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this pass narrow and reversible. No new engine-side probe or runtime rerun was needed because the locked artifact roots `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-overwrite-classifier-vulkan-sourcebuild-20260522-100702/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-attachment-subfield-vulkan-sourcebuild-20260522-105057/` already fixed the runtime seam: the UI pass begins as a fresh `RendererCanvasRenderRD::_render_batch_items()` draw list with `RD::DRAW_DEFAULT_ALL`, the carried Tonemap packet remains exact with slot 0 still `CLEAR`, and the rebuilt active scope is the only place that flips slot 0 to `LOAD`.
+
+I used the smallest honest diagnostic for the fork: exact comparable-lane / policy attribution from source. The comparison covered the UI root callsite in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`, the generic `RenderingDevice::draw_list_begin()` attachment-operation seeding in `servers/rendering/rendering_device.cpp`, the default non-discardable load resolution in `servers/rendering/rendering_device_graph.cpp`, and comparable preserve-content callers such as the clustered opaque color path in `servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp` (which also uses `RD::DRAW_DEFAULT_ALL` when `load_color` is true) plus other draw-list callers that rely on the same default path until they explicitly request clear/ignore.
+
+That comparison answers the fork cleanly: the UI-root non-discardable default-load policy on this failing lane looks **normal and structurally consistent** with comparable engine lanes, not unusual in a way that makes the generic policy itself suspect. On this lane the UI pass is a blended/clipped overlay whose own classifier already reads `overwrite_classifier="preserve_prior_root_contents"`, so entering `draw_list_begin()` with `RD::DRAW_DEFAULT_ALL` is truthful. From there, the generic RD path behaves exactly as designed: attachments start at `RDG::ATTACHMENT_OPERATION_DEFAULT`; explicit `DRAW_CLEAR_*` / `DRAW_IGNORE_*` flags are the only narrowing inputs at the draw-list boundary; and a non-discardable tracker naturally resolves through `source="non_discardable_default_load_contract"` to `ATTACHMENT_LOAD_OP_LOAD`. Comparable preserve-content engine lanes follow the same pattern rather than preserving a carried prior packet automatically.
+
+Exact conclusion: the repro lane is not unusual because the UI/root default-load policy is abnormally broad; it is unusual because this normal fresh-draw-list preserve-content policy is juxtaposed against the carried Tonemap packet’s slot-0 `CLEAR` contract at the zero-gap Tonemap -> UI boundary. So the surviving suspect seam stays with that boundary-specific `CLEAR` vs `LOAD` contrast, not with a claim that the generic UI-root non-discardable default-load policy is itself anomalous. I recorded the durable classification in `doc/gdgs-compositor-staged-qa-2026-05-17.md`. No code behavior changed, no rerun was needed, and no commit was made.
+
+### Task 136: Classify whether comparable normal Tonemap-to-UI handoffs also show the same `CLEAR`-to-`LOAD` contrast without crashing
+
+**Bead ID:** `oc-5sd`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-5sd` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 135 conclusion that the UI-root non-discardable default-`LOAD` policy is normal and structurally consistent with comparable engine lanes, while this repro still shows a sharp Tonemap-carried `CLEAR` versus UI-rebuilt `LOAD` contrast on the same root tracker before `L88`. Implement the smallest honest diagnostic needed to answer the next fork: **do comparable normal Tonemap-to-UI handoffs in non-failing lanes also show the same `CLEAR`-to-`LOAD` contrast without crashing, or is this failing repro lane uniquely bad at that boundary?** Prefer exact comparable-lane contrast attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum comparable lanes needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-5sd` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this pass narrow and reversible. I did not add a new engine-side probe or rerun the crashing GDGS staged lane. Instead, I ran the minimum comparable non-failing control on the same source-built Vulkan editor: a tiny vanilla Forward+ 3D scene with a blended `CanvasLayer` overlay that quits after a few dozen frames, launched with `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` so the existing scope/load-op breadcrumbs stayed directly comparable. Exact control artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-normal-tonemap-ui-compare-vulkan-sourcebuild-20260522-1335/` (`exit_status=0`).
+
+That single control lane answered the fork cleanly. In the non-failing lane, the UI pass still truthfully classifies as preserve-content (`overwrite_classifier="preserve_prior_root_contents"`) and still enters via the same generic fresh draw-list path. But unlike the failing repro, the normal Tonemap -> UI boundary does **not** show the sharp carried-`CLEAR` versus rebuilt-`LOAD` contrast. The late-pass scope lines stay aligned instead:
+- `owner_label="Tonemap (L5) (Draw)" ... attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72`
+- `owner_label="Command Graph (L6) (Draw)" breadcrumb=UI_PASS ... attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72`
+- the same `LOAD`/same-hash pairing also appears on the first warmup frame as `Tonemap (L7)` -> `Command Graph (L8)`
+- repeated frame stalls finish cleanly (`fence_wait_error=0`) and the process exits normally
+
+So the comparable normal lane still uses the same preserve-content UI policy, but it does **not** reproduce the failing repro's boundary-specific attachment contrast. The failing lane remains unusual at exactly that seam: its carried Tonemap packet still reaches UI with slot 0 `CLEAR`, while fresh UI scope reconstruction on the same root tracker flips to `LOAD`; the normal control instead arrives at Tonemap with the active/root recipe already on `LOAD`, and UI rebuild stays `LOAD` without crashing.
+
+Exact conclusion: comparable normal Tonemap-to-UI handoffs do **not** show the same `CLEAR`-to-`LOAD` contrast in this control. The generic UI/root non-discardable default-`LOAD` policy is still normal, but the sharp Tonemap-carried `CLEAR` versus UI-rebuilt `LOAD` juxtaposition remains specific to the failing repro lane rather than a routine engine-wide Tonemap->UI handoff pattern. I recorded the durable notes in `doc/gdgs-compositor-staged-qa-2026-05-17.md`. No repo code changed and no commit was made in this pass.
+
+### Task 137: Classify why the failing lane's Tonemap packet reaches the UI handoff as `CLEAR` while healthy comparable lanes reach it as `LOAD`
+
+**Bead ID:** `oc-9ey`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-9ey` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 136 conclusion and the new control artifact proving that healthy comparable Tonemap→UI handoffs do not show the failing lane’s sharp carried-`CLEAR` versus rebuilt-`LOAD` contrast. Implement the smallest honest diagnostic needed to answer the next fork: **why does the failing repro lane’s Tonemap packet still reach the UI handoff as slot-0 `CLEAR`, while healthy comparable lanes reach that same handoff as `LOAD`?** Prefer exact pre-UI Tonemap-side contract/routing/state attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-9ey` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the existing Tonemap/UI-origin diagnostics instead of widening the code surface, then ran one minimum extra healthy-control comparison with `GODOT_GDGS_DEBUG_TONEMAP_OVERWRITE_CONTRACT=1` to separate repro-lane-specific behavior from the Tonemap overwrite experiment itself. Artifact roots:
+- failing repro lane: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-attachment-subfield-vulkan-sourcebuild-20260522-105057/`
+- healthy comparable control (`overwrite` off): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-normal-tonemap-ui-compare-vulkan-sourcebuild-20260522-1335/`
+- healthy comparable control (`overwrite` on): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-normal-tonemap-ui-compare-overwrite-on-vulkan-sourcebuild-20260522-1402/`
+
+What actually happened:
+- The failing repro artifact already showed the decisive Tonemap-side attribution: the overwrite experiment was enabled (`tonemap_overwrite_contract_experiment enabled=true draw_flags=0x20`), Tonemap began on an ignore-family active scope (`attachment_load_ops=[0:DONT_CARE]`, `attachment_operation_source="attachment_operation_ignore"`), and the zero-gap Tonemap -> `L88` boundary carried only the Tonemap pipeline packet forward.
+- At that boundary, the carried packet still referenced a compatible-only Tonemap pipeline lineage whose exact attachment recipe kept slot 0 at `CLEAR`, while the UI pass rebuilt the active scope back to slot 0 `LOAD` (`pre_rebind_carried_packet_contract ... pipeline_load_ops=["0:CLEAR"] ... active_load_ops=["0:LOAD"] ... load_op_attribution_split={classification="active_scope_rebuild_first_attributable_step" ...}`).
+- The healthy comparable control from Task 136 stayed on the ordinary preserve/load contract (`Tonemap ... attachment_load_ops=[0:LOAD]` and `UI_PASS ... attachment_load_ops=[0:LOAD]`).
+- Re-enabling the same overwrite experiment on that healthy control flipped Tonemap onto the same ignore-family active contract (`tonemap_overwrite_contract_experiment enabled=true`, `attachment_load_ops=[0:DONT_CARE]`), which confirmed the Tonemap-side contract change is experiment-driven rather than uniquely caused by the crashing scene.
+
+Conclusion: the failing lane’s Tonemap packet still reaches the UI handoff as slot-0 `CLEAR` because the direct-root overwrite experiment leaves a Tonemap-owned carried pipeline packet live across the zero-gap boundary, and that packet’s compatible-only render-pass lineage still carries the older slot-0 `CLEAR` exact recipe. Healthy comparable lanes reach the same seam as `LOAD` when Tonemap stays on the default preserve/load contract instead of the overwrite experiment path. Durable notes were added to `doc/gdgs-compositor-staged-qa-2026-05-17.md`. No code change or commit was made for this bead.
+
+### Task 138: Re-measure the failing-vs-healthy Tonemap-to-UI handoff with the overwrite experiment disabled
+
+**Bead ID:** `oc-n5b`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-n5b` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 137 correction that the earlier Tonemap-side `CLEAR` seam evidence was contaminated by the active `GODOT_GDGS_DEBUG_TONEMAP_OVERWRITE_CONTRACT=1` experiment. Implement the smallest honest reset needed to answer the next fork: **with the overwrite experiment disabled, what does the Tonemap-to-UI handoff look like on the failing lane versus a healthy comparable lane, and does the sharp `CLEAR` vs `LOAD` contrast still survive cleanly?** Prefer exact failing/control handoff attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-n5b` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this pass narrow and reversible: no engine code changed, and I only reran the minimum two overwrite-**off** comparisons needed to correct Task 137 cleanly.
+
+Artifact roots:
+- failing repro lane (`overwrite` off): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-vulkan-sourcebuild-20260522-145814/`
+- healthy comparable control (`overwrite` off): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-control-vulkan-sourcebuild-20260522-145842/`
+
+Exact launches used:
+- failing repro: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW=1 GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- projection_only__disabled /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-vulkan-sourcebuild-20260522-145814 no_present compositor projection_only disabled 120` (`exit_status=134`)
+- healthy control: `DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/.temp/tonemap-ui-compare-20260522` (`exit_status=0`)
+
+What actually happened:
+- The overwrite experiment was truly disabled on the failing rerun: there are no `tonemap_overwrite_contract_experiment` lines in the failing artifact.
+- The healthy control stayed on the already-known preserve/load handoff (`ui_pass_origin ... overwrite_classifier="preserve_prior_root_contents"`; `Tonemap (L5)` `attachment_load_ops=[0:LOAD]`; `Command Graph (L6)` `attachment_load_ops=[0:LOAD]`; clean `fence_wait_error=0`).
+- With the overwrite experiment disabled, the failing lane's late Tonemap/UI scope pair also reads as preserve/load-aligned rather than `CLEAR` vs `LOAD`:
+  - `owner_label="Tonemap (L87) (Draw)" ... attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72`
+  - `owner_label="Command Graph (L88) (Draw)" breadcrumb=UI_PASS ... attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72`
+  - `ui_pass_origin={... overwrite_classifier="preserve_prior_root_contents" ...}`
+- The failing lane still keeps a narrower inner mismatch deeper inside the `L88` rebuild path, not on the outer scope pair itself:
+  - `load_op_attribution_split={classification="active_scope_rebuild_first_attributable_step", ... tonemap_end_load_op="CLEAR", l88_begin_load_op="CLEAR", pre_rebind_pipeline_load_op="CLEAR", pre_rebind_active_load_op="LOAD", slot_index=0}`
+  - `boundary_state_handoff_classifier={classification="carried_pipeline_packet_then_l88_reestablishes_scope_rebinds_and_adds_vertex_index", ... minimum_distinguishing_hazard="carried_pipeline_packet"}`
+- The crash envelope itself remains unchanged on the failing lane (`fence_wait_error submit_serial=9 wait_result=-4`, later `frame_stall_end frame=1 fence_wait_error=1`).
+
+Exact conclusion: once the overwrite experiment is honestly disabled, the **sharp outer Tonemap-to-UI `CLEAR` vs `LOAD` contrast does not survive cleanly**. The failing and healthy lanes now agree at the visible Tonemap/UI scope pair itself (`LOAD` -> `LOAD` with the same late-pass attachment hash `0x6529dc72`). The surviving failing-only evidence shifts inward to the internal `L88` active-scope reconstruction split (`tonemap_end_load_op="CLEAR"` / `pre_rebind_active_load_op="LOAD"`) rather than a clean outer Tonemap-scope-vs-UI-scope contrast. Durable notes and artifact references were appended to `doc/gdgs-compositor-staged-qa-2026-05-17.md`. No commit was made in this pass because no repo code changed.
+
+### Task 139: Classify the exact internal `L88` pre-rebind reconstruction step that flips `tonemap_end_load_op=CLEAR` to `pre_rebind_active_load_op=LOAD` on the failing lane
+
+**Bead ID:** `oc-60l`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-60l` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 138 clean reset: with the overwrite experiment disabled, the outer Tonemap→UI handoff matches on failing and healthy lanes (`LOAD` → `LOAD`), but the failing lane still contains a narrower internal `L88` rebuild split where `tonemap_end_load_op="CLEAR"` and `pre_rebind_active_load_op="LOAD"`. Implement the smallest honest diagnostic needed to answer the next fork: **what exact internal pre-rebind reconstruction step inside the failing lane’s `L88` path causes that `CLEAR` → `LOAD` flip, and how does that step differ from the healthy comparable lane?** Prefer exact internal `L88` rebuild-step attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-60l` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the clean Task 138 overwrite-off artifact pair rather than reopening the repro, because the already-captured boundary and pre-rebind diagnostics were sufficient to classify the step honestly without any new engine edits or reruns.
+
+Artifact roots reused:
+- failing repro lane (`overwrite` off): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-vulkan-sourcebuild-20260522-145814/`
+- healthy comparable control (`overwrite` off): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-control-vulkan-sourcebuild-20260522-145842/`
+
+What actually happened:
+- The failing artifact already proves the zero-gap Tonemap -> `L88` boundary carries only the Tonemap pipeline packet forward (`tonemap_end_snapshot` and `l88_begin_snapshot` both keep pipeline render-pass create-serial `9` / attachment hash `0x63c10583` while `render_pass_active=false`).
+- The first attributable `CLEAR` -> `LOAD` flip happens before `L88`'s own pipeline bind, when `L88` reactivates an active render-pass scope via `begin_render_pass` using the cached `LOAD` render-pass object (`l88_first_pipeline_bind_before_state.render_pass_create_serial=13`, `render_pass_attachment_exact_hash=0x6529dc72`, `breadcrumb="UI_PASS"`).
+- That cached `LOAD` object is the same non-discardable-default render-pass materialization already created on the root `Render Target Color` tracker (`draw_list_render_pass_create key=0x0 ... source="non_discardable_default_load_contract" ... tracker_write_index=132`).
+- The healthy comparable lane uses the same UI-side preserve-content policy and the same kind of cached non-discardable-default `LOAD` render-pass reactivation, but its Tonemap packet is already aligned to `LOAD`, so there is no internal `CLEAR` -> `LOAD` mismatch to expose.
+
+Exact conclusion: the exact internal pre-rebind reconstruction step is **`L88`'s `begin_render_pass` scope reactivation that reuses the cached non-discardable-default-`LOAD` render-pass object before the first `L88` pipeline bind**. The healthy control does not avoid that step; it simply reaches it with Tonemap already on the same `LOAD` recipe, whereas the failing lane still carries Tonemap pipeline lineage `create_serial=9` / attachment hash `0x63c10583` / slot-0 `CLEAR` into the same reactivation. Durable notes were appended to `doc/gdgs-compositor-staged-qa-2026-05-17.md`. No commit was made because no repo code changed in this pass.
+
+### Task 140: Classify why the failing lane's Tonemap path produces the `CLEAR`-side render-pass recipe instead of aligning to the cached UI-side `LOAD` recipe before `L88` reactivation
+
+**Bead ID:** `oc-lbx`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-lbx` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 139 conclusion: on the failing lane, the carried Tonemap packet reaches the zero-gap boundary with render-pass lineage `create_serial=9`, attachment hash `0x63c10583`, slot-0 `CLEAR`, and then `L88` pre-rebind `begin_render_pass` reactivates a cached UI-side render-pass lineage `create_serial=13`, attachment hash `0x6529dc72`, slot-0 `LOAD`; healthy lanes use the same reactivation shape but Tonemap is already aligned to the `LOAD` recipe there. Implement the smallest honest diagnostic needed to answer the next fork: **why does the failing lane’s Tonemap path still produce the `CLEAR`-side recipe instead of aligning to the cached UI-side `LOAD` recipe before `L88` reactivation, and what exact upstream Tonemap-side condition makes that recipe diverge from the healthy lane?** Prefer exact Tonemap-side recipe/routing/state attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-lbx` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/effects/tone_mapper.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the clean Task 139 overwrite-off artifact pair rather than reopening the repro, because the existing Tonemap lane diagnostics already exposed the exact upstream divergence honestly enough to answer this fork without another engine edit or rerun.
+
+Artifact roots reused:
+- failing repro lane (`overwrite` off, lazy shared-view debug gate still on): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-vulkan-sourcebuild-20260522-145814/`
+- healthy comparable control (`overwrite` off, lazy shared-view debug gate off): `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-control-vulkan-sourcebuild-20260522-145842/`
+
+What actually happened:
+- The failing overwrite-off lane was still running under the lazy shared-view debug gate: `render_target_policy_cause` reports `primary_cause=render_target_texture_shared_view_rule_lazy_debug_gate`, `lazy_shared_view_experiment=true`, and no materialized shared render-target view before failure (`render_target_texture_shared_view=false`, `shared_view_materialized=false`, zero shared-view entrypoints).
+- That same failing artifact's Tonemap lane summary reports `lane_policy=persistent_root_direct_lazy_shared_view` and `lane_rationale=tonemap_direct_to_render_target_framebuffer_without_materialized_shared_view`, meaning Tonemap stays on the direct-root lane instead of the eager sampled/shared-root lane used by the healthy control.
+- The healthy overwrite-off control reports the opposite upstream condition: `primary_cause=render_target_texture_shared_view_rule`, `lazy_shared_view_experiment=false`, `render_target_texture_shared_view=true`, `shared_view_materialized=true`, and Tonemap lane `lane_policy=persistent_root_sampled_shared`.
+- Task 139 already proved the failing zero-gap carry keeps Tonemap pipeline lineage `create_serial=9` / attachment hash `0x63c10583` / slot-0 `CLEAR`, while `L88` reactivates cached UI/root preserve-content lineage `create_serial=13` / attachment hash `0x6529dc72` / slot-0 `LOAD` before the first `L88` bind.
+- Putting those together answers the fork: the failing lane does not align to the cached UI-side `LOAD` recipe before `L88` because its Tonemap packet comes from the lazy-shared-view direct-root branch, where the live carried Tonemap pipeline lineage remains the earlier root-side `CLEAR` recipe; the healthy comparable lane differs exactly because that lazy shared-view condition is absent and Tonemap is already created under the eager shared preserve-content `LOAD` contract.
+
+Exact conclusion: the exact upstream Tonemap-side divergence is **the lazy shared-view debug gate on the failing overwrite-off lane (`GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW`) leaving Tonemap on `persistent_root_direct_lazy_shared_view` with no materialized shared view before failure**. That condition keeps the live carried Tonemap packet tied to the earlier root-side `CLEAR` render-pass lineage instead of the cached UI/root preserve-content `LOAD` lineage that `L88` later reactivates. Durable notes were appended to `doc/gdgs-compositor-staged-qa-2026-05-17.md`. No commit was made because this pass only added notes/plan updates and reused existing artifacts instead of changing engine code.
+
+### Task 141: Rerun the failing lane with the lazy shared-view debug gate disabled and compare the Tonemap-side recipe plus crash outcome
+
+**Bead ID:** `oc-mpj`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-mpj` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 140 conclusion that the failing overwrite-off lane is still diverging upstream because `GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW` remains active, keeping Tonemap on the direct-root lazy-shared-view route (`persistent_root_direct_lazy_shared_view`, `shared_view_materialized=false`) while the healthy control uses the eager shared preserve-content route (`persistent_root_sampled_shared`, `shared_view_materialized=true`). Implement the smallest honest rerun needed to answer the next fork: **with the lazy shared-view debug gate disabled on the failing lane, does the Tonemap-side recipe realign to the healthy `LOAD` path, and does the crash survive or move?** Prefer exact failing-lane recipe/crash attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing-lane comparison needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-mpj` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-no-lazy-gate-vulkan-sourcebuild-20260522-160300/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-no-lazy-gate-vulkan-sourcebuild-20260522-160300/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-no-lazy-gate-vulkan-sourcebuild-20260522-160300/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the Task 140 failing overwrite-off artifact (`/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-vulkan-sourcebuild-20260522-145814/`) plus the existing healthy overwrite-off control (`/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-control-vulkan-sourcebuild-20260522-145842/`), then ran the smallest exact failing-lane comparison with `GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW` removed and saved the new artifact under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-no-lazy-gate-vulkan-sourcebuild-20260522-160300/`. The Tonemap-side routing did realign: `render_target_policy_cause` dropped the lazy-debug-gate cause, `tonemap_render_target_lane` moved to `lane_policy=persistent_root_sampled_shared`, `shared_view_materialized=true`, and both `Tonemap (L87)` plus `Command Graph (L88)` used `attachment_load_ops=[0:LOAD]` / `attachment_exact_hash=0x6529dc72`, matching the healthy overwrite-off control instead of the earlier lazy-gated `CLEAR` lineage. The crash did **not** disappear or move: the rerun still hit `fence_wait_error submit_serial=9 wait_result=-4`, `frame_stall_end frame=1 fence_wait_error=1`, and exited `134`. Durable notes were appended to `doc/gdgs-compositor-staged-qa-2026-05-17.md`. No engine code changed and no commit was made.
+
+### Task 142: Classify what state or command-content differences still remain between the failing and healthy `submit_serial=9` paths after Tonemap/UI recipe alignment
+
+**Bead ID:** `oc-l7x`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-l7x` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 141 conclusion that disabling the lazy shared-view debug gate realigns the failing lane to the healthy Tonemap/UI preserve-content recipe (`attachment_load_ops=[0:LOAD]`, `attachment_exact_hash=0x6529dc72`), yet the `submit_serial=9` fence-wait crash survives unchanged. Implement the smallest honest diagnostic needed to answer the next fork: **after Tonemap/UI recipe alignment, what state, command-content, label/breadcrumb, or resource-usage differences still remain between the failing and healthy `submit_serial=9` paths, and which surviving difference is the best next crash seam?** Prefer exact failing-vs-healthy diff attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-l7x` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-submit-serial-9-lane-classification.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the two Task 141-era aligned artifacts instead of adding another engine patch or rerunning a wider matrix: failing source-built no-lazy-gate `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-no-lazy-gate-vulkan-sourcebuild-20260522-160300/` versus healthy overwrite-off control `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-control-vulkan-sourcebuild-20260522-145842/`. Durable repo notes were added at `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-submit-serial-9-lane-classification.md`.
+
+The exact surviving difference after Tonemap/UI recipe alignment is **not** another attachment/load-op mismatch inside the active UI preserve-content pass. With the lazy shared-view debug gate removed, the failing lane now matches the healthy UI-side recipe at `Tonemap (L87)` / `Command Graph (L88)` (`attachment_load_ops=[0:LOAD]`, `attachment_exact_hash=0x6529dc72`), yet the crash still occurs because the two runs are no longer doing the same kind of work on `submit_serial=9`.
+
+On the failing aligned run, `submit_serial=9` is still the heavy frame-1 draw submission that later dies at `fence_wait_error submit_serial=9 wait_result=-4`: `present_submission=false`, `swap_chains=0`, `labels=102`, `label_tail=... Tonemap (L87) (Draw) > Command Graph (L88) (Draw)`, and `last_breadcrumb="UI_PASS"`. On the healthy control, `submit_serial=9` is already the later present/blit-side lane (`BLIT_PASS`) rather than the matching Tonemap/UI draw packet; the healthy draw work completed on an earlier submit. That submission-content / queue-role divergence is now the smallest exact failing-vs-healthy diff that still survives after render-pass recipe alignment.
+
+Best next seam: stay off the already-demoted attachment-load-op lane and inspect **submission assembly / partitioning / handoff provenance** for the failing draw submit — i.e. why the source-built failing run still carries the heavy `Tonemap (L87)` -> `Command Graph (L88)` draw graph on `submit_serial=9`, while the healthy control has already advanced to the later `BLIT_PASS` / present-side work there. No engine code changed and no commit was made in this pass.
+
+### Task 143: Classify why submission assembly keeps the failing Tonemap/UI draw graph on `submit_serial=9` while the healthy control reaches the later blit/present lane there
+
+**Bead ID:** `oc-7nd`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-7nd` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 142 conclusion that, after Tonemap/UI recipe alignment, the failing lane and healthy lane still diverge in **submission assembly**: the failing run keeps the heavy frame-1 Tonemap→`L88` draw graph on `submit_serial=9`, while the healthy control has already advanced to the later `BLIT_PASS`/present-side lane at that same serial. Implement the smallest honest diagnostic needed to answer the next fork: **what exact upstream submission-assembly / partitioning / handoff condition keeps the failing Tonemap/UI draw graph attached to `submit_serial=9`, and how does the healthy control advance to the later blit/present lane instead?** Prefer exact submission provenance / partitioning attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-7nd` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-submit-serial-9-lane-classification.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest reversible diagnostic directly on the RD handoff seam, gated by the already-in-use `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` environment flag: `swap_buffers_begin frame=... present_requested=... pending_swap_chains=...` plus `draw_list_begin_for_screen frame=... split_swapchain_cmd_buffer=true ...` in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`. Rebuilt the source-built editor, then reran only the minimum two comparisons: failing source-built handoff repro `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-submit-assembly-handoff-failing-vulkan-sourcebuild-20260522-1715/` and healthy overwrite-off control `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-submit-assembly-handoff-control-vulkan-sourcebuild-20260522-1716/`. Durable notes were appended to `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-submit-serial-9-lane-classification.md`.
+
+The exact upstream condition is now classified. In the failing lane, `submit_serial=9` is still assembled during the earlier non-present frame-1 `_execute_frame(false)` path: `frame_execute_begin frame=1 present_requested=false frame_can_present=false swap_chains=0`, `command_buffer_count=1`, and `queue_submit submit_serial=9 ... present_submission=false` carrying the heavy `Tonemap (L87)` -> `Command Graph (L88)` graph. The screen handoff path only appears *after* the crash sequence starts: `draw_list_begin_for_screen frame=1`, then `swap_buffers_begin frame=1 present_requested=true pending_swap_chains=1`, then a later `frame_execute_begin ... frame_can_present=true` / `command_buffer_count=2` present-side submit.
+
+In the healthy control, the same frame-1 non-present submit happens earlier at `submit_serial=7`, but it completes successfully. The run then reaches `draw_list_begin_for_screen frame=1`, enters `swap_buffers_begin frame=1 present_requested=true pending_swap_chains=1`, and the next `_execute_frame(true)` uses the split swapchain command-buffer path (`command_buffer_count=2`, `present_submission=true`, `last_breadcrumb="BLIT_PASS"`) at `submit_serial=8`. By `submit_serial=9`, the healthy run is already on the later BLIT/present lane for the next frame.
+
+So the divergence is not an internal repartition happening *inside* submit 9. The failing Tonemap/UI draw graph stays attached to `submit_serial=9` because that serial never gets past the earlier non-present frame submit; the healthy lane advances because it survives long enough to cross into the later `draw_list_begin_for_screen()` + `swap_buffers(true)` handoff that activates the split swapchain/present path. No commit was made in this pass.
+
+### Task 144: Classify what command/resource/state difference inside the earlier non-present frame-1 `_execute_frame(false)` submit still distinguishes failing from healthy before present-side work starts
+
+**Bead ID:** `oc-u3r`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-u3r` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 143 conclusion that the failing run dies inside the earlier non-present frame-1 `_execute_frame(false)` submit, before the later screen-blit/present handoff that healthy runs survive long enough to reach. Implement the smallest honest diagnostic needed to answer the next fork: **what command, resource, label/breadcrumb, or state difference inside that earlier non-present frame-1 submit still distinguishes failing from healthy before any present-side work even starts, and which of those surviving differences is the best next crash seam?** Prefer exact failing-vs-healthy diff attribution inside the non-present submit over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-u3r` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the minimum exact failing/control artifact pair already produced for the Task 143 handoff instead of widening the matrix or adding more engine churn: failing source-built handoff `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-submit-assembly-handoff-failing-vulkan-sourcebuild-20260522-1715/` versus healthy source-built control `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-submit-assembly-handoff-control-vulkan-sourcebuild-20260522-1716/`. Durable repo notes were added at `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`.
+
+The exact pre-present failing-vs-healthy split is now locked inside the earlier frame-1 non-present submit itself. The healthy lane's `_execute_frame(false)` submit completes earlier at `submit_serial=7` with a small `command_summary` (`labels=17`, last label `Command Graph (L8) (Draw)`) and then survives long enough to enter `draw_list_begin_for_screen` / `swap_buffers_begin` and move to the later `BLIT_PASS` present lane. The failing lane instead dies in its own non-present frame-1 submit at `submit_serial=9`, where the command graph is already much larger before any present work exists (`labels=102`, tail reaches `Tonemap (L87) (Draw) > Command Graph (L88) (Draw)`, last breadcrumb `UI_PASS`) and then hits `fence_wait_error submit_serial=9 wait_result=-4`.
+
+Inside that failing-only late non-present tail, the smallest still-distinguishing seam is the carried Tonemap pipeline packet entering `L88`, not a swapchain/present-side path. The current payload already narrows this to `boundary_state_handoff_classifier={classification="carried_pipeline_packet_then_l88_reestablishes_scope_rebinds_and_adds_vertex_index", minimum_distinguishing_hazard="carried_pipeline_packet"}` and then one step tighter to `pre_rebind_carried_packet_contract={classification="exact_pipeline_packet_with_compatible_only_render_pass_lineage", minimum_distinguishing_hazard="attachment_exact_recipe"}`. That attachment-exact recipe classifier further collapses to a single surviving field: `minimum_distinguishing_field="load_op"`, with only slot 0 disagreeing (`active_load_ops=["0:LOAD"]`, `pipeline_load_ops=["0:CLEAR"]`) while the non-load recipe stays exact. The attribution split is also now explicit: `load_op_attribution_split={classification="active_scope_rebuild_first_attributable_step", first_attributable_step="active_pre_rebind_scope_reconstruction"}`.
+
+So the best next crash seam is the failing-only pre-rebind Tonemap -> `L88` carried-packet contract inside the non-present submit, specifically why the rebuilt active scope entering `L88` acquires `slot 0 load_op=LOAD` while the carried pre-rebind Tonemap packet still preserves the exact `CLEAR` attachment recipe lineage. No new engine edit was required for this slice and no commit was made.
+
+### Task 145: Classify why the rebuilt active scope entering `L88` acquires slot-0 `LOAD` while the carried pre-rebind Tonemap packet still preserves the `CLEAR` lineage
+
+**Bead ID:** `oc-oj0`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-oj0` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 144 conclusion that the sharpest surviving seam still lives inside the earlier non-present frame-1 submit, specifically at the `L88` pre-rebind reconstruction where the rebuilt active scope enters with slot-0 `LOAD` while the carried Tonemap-side packet still preserves the `CLEAR` attachment recipe lineage. Implement the smallest honest diagnostic needed to answer the next fork: **why does the rebuilt active scope entering `L88` acquire slot-0 `LOAD` while the carried pre-rebind Tonemap packet still preserves the `CLEAR` lineage, and what exact codepath/lineage decision makes those two pre-rebind views diverge on the failing lane?** Prefer exact active-scope-versus-carried-packet lineage/decision attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-oj0` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the minimum already-locked failing/control evidence instead of widening the repro matrix: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-submit-assembly-handoff-failing-vulkan-sourcebuild-20260522-1715/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-submit-assembly-handoff-control-vulkan-sourcebuild-20260522-1716/`, plus the earlier UI-origin / attachment-subfield artifacts `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/` and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-attachment-subfield-vulkan-sourcebuild-20260522-105057/`. No new rerun was needed because the runtime seam was already locked and this fork reduced to exact source-lineage attribution. Durable notes were updated at `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`.
+
+The exact divergence is now classified as a **two-lineage split before `L88`'s own pipeline bind**, not a single packet being mutated in place. The carried Tonemap-side packet still preserves slot-0 `CLEAR` because pipeline provenance is born earlier from `RenderingDevice::framebuffer_format_create()`, which seeds `fb_format.render_pass` with placeholder `ATTACHMENT_LOAD_OP_CLEAR` actions for every attachment (`// Actions don't matter for this use case.`), and `RenderingDevice::render_pipeline_create()` then bakes that framebuffer-format render pass into the Tonemap pipeline provenance. The rebuilt active scope entering `L88` acquires slot-0 `LOAD` later on a different codepath: `RendererCanvasRenderRD::_render_batch_items()` starts a fresh UI draw list with `RD::DRAW_DEFAULT_ALL` and `clear=false`; `RenderingDevice::draw_list_begin()` leaves slot 0 at `RDG::ATTACHMENT_OPERATION_DEFAULT`; and `RenderingDeviceGraph::_add_draw_list_begin()` recomputes the attachment load op from tracker policy, where the runtime breadcrumb already proved the branch `source="non_discardable_default_load_contract"` with `resource_tracker->is_discardable=false_after_clear_ignore_checks` and upstream seed `root_texture_create<-texture_format_is_discardable_flag:false`, forcing slot 0 to `ATTACHMENT_LOAD_OP_LOAD`.
+
+So the exact codepath/lineage decision that makes the two pre-rebind views diverge is: **pipeline provenance keeps the framebuffer-format placeholder-`CLEAR` recipe, while the later UI active-scope reconstruction ignores that carried recipe and re-solves slot 0 through the non-discardable default-load rule.** No new engine edit was required for this slice and no commit was made.
+
+### Task 146: Classify whether the earlier placeholder-`CLEAR` framebuffer-format pipeline lineage is benign metadata or hazardous when `L88` re-enters through the runtime `LOAD` lineage
+
+**Bead ID:** `oc-nwz`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-nwz` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 145 conclusion that the surviving `L88` seam is a **two-lineage split**: the carried Tonemap-side packet preserves an earlier framebuffer-format/pipeline lineage seeded with placeholder `ATTACHMENT_LOAD_OP_CLEAR`, while the rebuilt active scope re-enters through a runtime non-discardable `ATTACHMENT_LOAD_OP_LOAD` lineage computed from fresh UI draw-list state. Implement the smallest honest diagnostic needed to answer the next fork: **is that earlier placeholder-`CLEAR` framebuffer-format/pipeline lineage benign metadata, or does it become the hazardous half of the mismatch when `L88` re-enters through the runtime `LOAD` lineage on the failing lane?** Prefer exact lineage-role/hazard attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-nwz` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-placeholder-clear-runtime-role-vulkan-sourcebuild-20260522-174808/`
+
+**Status:** ✅ Complete
+
+**Results:** Added one narrow reversible classifier to `drivers/vulkan/rendering_device_driver_vulkan.cpp`: `load_op_runtime_role={...}` inside the existing `pre_rebind_carried_packet_contract.render_pass_lineage.attachment_exact_recipe` payload. The new classifier compares Tonemap's first pipeline-bind active scope against the pre-rebind `L88` active scope and the carried pipeline provenance for the same surviving slot-0 `load_op` mismatch. After an incremental rebuild (`scons platform=linuxbsd target=editor dev_build=yes -j8`), I reran only the minimum failing source-built repro needed to emit the new verdict: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-placeholder-clear-runtime-role-vulkan-sourcebuild-20260522-174808/`.
+
+The runtime result is decisive on the failing lane itself: `load_op_runtime_role={classification="pipeline_placeholder_clear_is_benign_metadata", ... tonemap_active_load_op="LOAD", tonemap_pipeline_load_op="CLEAR", tonemap_active_render_pass_create_serial="0xd", tonemap_pipeline_render_pass_create_serial="0x9", l88_pre_rebind_active_render_pass_create_serial="0xd", carried_pipeline_render_pass_create_serial="0x9" ...}`. In other words, Tonemap already executes successfully inside the runtime `LOAD` render-pass lineage while the bound pipeline provenance still carries the earlier placeholder `CLEAR` lineage, and `L88` re-enters that same runtime `LOAD` scope before its own rebind. That means the placeholder-`CLEAR` framebuffer-format / pipeline lineage never becomes the live active render-pass contract on this failing seam; it survives only as compatible pipeline provenance metadata attached to the carried packet. The hazardous side remains the runtime active-scope reconstruction / reuse path that re-establishes the `LOAD` lineage before `L88` rebinds, not the older placeholder-`CLEAR` pipeline lineage itself. Durable notes were updated at `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`. No commit was made because the repo already had unrelated in-flight changes.
+
+### Task 147: Classify what still differs inside the live runtime `LOAD` render-pass reuse path on create serial `13` between failing and healthy runs
+
+**Bead ID:** `oc-54h`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-54h` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 146 conclusion that the earlier placeholder-`CLEAR` framebuffer-format/pipeline lineage is benign metadata, while the hazardous side remains the **live runtime active-scope reconstruction/reuse path** that re-establishes the `LOAD` lineage before `L88` rebinds. Implement the smallest honest diagnostic needed to answer the next fork: **inside that live runtime `LOAD` render-pass reuse path on create serial `13`, what still differs between failing and healthy runs in command content, labels, resource usage, or scope state, and which remaining difference is the best next crash seam?** Prefer exact failing-vs-healthy runtime `LOAD`-path attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-54h` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-runtime-load-reuse-classification.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-runtime-load-reuse-control-vulkan-sourcebuild-20260522-1809/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-runtime-load-reuse-failing-vulkan-sourcebuild-20260522-1822/`
+
+**Status:** ✅ Complete
+
+**Results:** Added one narrow reversible summary block to `drivers/vulkan/rendering_device_driver_vulkan.cpp`: `runtime_load_reuse_path={...}` inside the existing `tonemap_l88_contrast` payload. The block stays seam-local and only reports what the live runtime `LOAD` reuse path is doing between Tonemap and the next `L88` draw: whether Tonemap's live active render-pass scope is the same scope `L88` sees **before** its own pipeline rebind, the active create serial / attachment exact hash / load-op hash / subpass on that scope, Tonemap's local workload shape, `L88`'s local workload shape, and the exact Tonemap→`L88` workload deltas inside that one reused runtime scope. After a rebuild (`scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`), I reran only the minimum current-tree comparisons needed: a fresh healthy control on `/home/derrick/.openclaw/workspace/.temp/tonemap-ui-compare-20260522` at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-runtime-load-reuse-control-vulkan-sourcebuild-20260522-1809/` and a fresh failing source-built staged repro at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-runtime-load-reuse-failing-vulkan-sourcebuild-20260522-1822/`.
+
+The failing rerun answers the fork directly. On the crashing non-present frame-1 submit, the new block reports `runtime_load_reuse_path={classification="same_runtime_load_scope_reused_before_l88_rebind", ... active_render_pass_create_serial="0xd", active_render_pass_attachment_exact_hash="0x6529dc72", active_render_pass_load_op_hash="0xc5247e53", subpass=0, tonemap_label={index=100,level=87,draw_calls=1,pipeline_binds=1,uniform_binds=1,...}, l88_label={index=101,level=88,draw_calls=10,pipeline_binds=1,uniform_binds=11,vertex_buffer_binds=10,vertex_buffer_binding_total=10,index_buffer_binds=1,...}, tonemap_to_l88_scope_delta={label_index_delta=1,level_delta=1,draw_calls_delta=9,pipeline_binds_delta=0,uniform_binds_delta=10,vertex_buffer_binds_delta=10,vertex_buffer_binding_total_delta=10,index_buffer_binds_delta=1,...}}`. That confirms the surviving seam is **not** a disagreement about whether Tonemap and `L88` are in different runtime `LOAD` scopes: on the failing lane they are in the same live runtime `LOAD` scope on create serial `13`, and `L88`'s only immediate expansion inside that shared scope is a much heavier local draw payload.
+
+The healthy control gives the comparison point without reopening broader staging. It still enters the same single-attachment `LOAD` UI pass immediately from Tonemap into the next UI draw (`begin_render_pass_scope create_serial=16 ... owner_label="Tonemap (L5) (Draw)" ... attachment_load_ops=[0:LOAD] attachment_exact_hash=0x6529dc72`, followed immediately by `owner_label="Command Graph (L6) (Draw)"` on the same create serial / attachment hash), but the surrounding command graph is dramatically smaller: the corresponding non-present draw submit is `submit_serial=7` with `labels=17`, tail `Tonemap (L7) (Draw) > Command Graph (L8) (Draw)`, versus the failing non-present draw submit at `submit_serial=9` with `labels=102`, tail `... > Tonemap (L87) (Draw) > Command Graph (L88) (Draw)`. So the remaining failing-vs-healthy difference inside the live runtime `LOAD` reuse path is not the existence of the shared `LOAD` scope itself; it is the **late, much deeper, much heavier `L88` payload that gets routed through that scope only on the failing lane**.
+
+That makes the best next crash seam the failing-only submit-assembly / graph-build path that inflates the frame-1 non-present UI draw lane before `L88` runs — specifically, why the failing source-built repro reaches the same `LOAD` UI scope as a deep `L87`→`L88` tail with `+9` extra draws, `+10` extra uniform binds, `+10` vertex-buffer binds, and `+1` index bind, while the healthy control reaches the equivalent scope as the shallow `L7`→`L8` tail with only the lightweight UI draw payload. Durable notes were written to `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-runtime-load-reuse-classification.md`. No commit was made because the repo already had unrelated in-flight changes and this pass stayed diagnostic-only.
+
+### Task 148: Classify what upstream graph-build condition causes `L88` on the failing lane to accumulate the extra draws and binds versus the healthy control
+
+**Bead ID:** `oc-4mq`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-4mq` on start and stay tightly scoped to the same source-built host-Vulkan investigation. Start from the Task 147 conclusion that the shared runtime `LOAD` scope is reused normally on both lanes, while the surviving difference is command-content scale: on the failing lane, `L88` adds `+9` draws, `+10` uniform binds, `+10` vertex-buffer binds, and `+1` index bind versus Tonemap inside the same kind of runtime `LOAD` scope. Implement the smallest honest diagnostic needed to answer the next fork: **what exact upstream graph-build condition makes `L88` on the failing lane accumulate that heavier command tail compared to the healthy control, and which extra workload family is the best next crash seam?** Prefer exact graph-build/content-family attribution over speculative fixes. Keep the change diagnostic and reversible, rerun only the minimum failing/control comparisons needed, save durable notes and artifact references, update this plan with what actually happened, and close bead `oc-4mq` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-runtime-load-reuse-classification.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-control-vulkan-sourcebuild-20260522-1839/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-failing-vulkan-sourcebuild-20260522-1840/`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest graph-build classifier directly to the existing `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` payload in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`. The new `graph_build_condition={...}` block is purely diagnostic and reversible; it only summarizes already-observable UI batch facts that matter to the fork: rendered batch count, whether the live UI work is entirely rect-like, whether every rendered batch needs preserved destination color, whether every rendered batch is clipped, and the resulting `expected_draw_calls_from_rendered_batches`.
+
+After an incremental rebuild (`scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`), I reran only the minimum fresh comparisons needed. The healthy control artifact is `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-control-vulkan-sourcebuild-20260522-1839/` (`exit_status=0`); it reports `batch_summary={rendered=1,rect_like=1,polygon=0,primitive=0,clipped=0,lcd_blend=0,destination_color=1,blend_disabled=0,...}` and `graph_build_condition={classifier="single_rect_preserve_batch",expected_draw_calls_from_rendered_batches=1,all_rendered_batches_are_rect_like=true,all_rendered_batches_need_preserved_color=true,all_rendered_batches_are_clipped=false}`, while the runtime tail stays shallow at `Tonemap (L7) (Draw) > Command Graph (L8) (Draw)`.
+
+The failing staged artifact is `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-failing-vulkan-sourcebuild-20260522-1840/` (`exit_status=134`); it reports `batch_summary={rendered=10,rect_like=10,polygon=0,primitive=0,clipped=10,lcd_blend=0,destination_color=10,blend_disabled=0,...}` and `graph_build_condition={classifier="multi_rect_preserve_clip_batch_chain",expected_draw_calls_from_rendered_batches=10,all_rendered_batches_are_rect_like=true,all_rendered_batches_need_preserved_color=true,all_rendered_batches_are_clipped=true}`, while the runtime seam remains `Tonemap (L87) (Draw) > Command Graph (L88) (Draw)` and still aborts at `fence_wait_error submit_serial=9 wait_result=-4`.
+
+That answers the fork exactly. The upstream graph-build condition that makes the failing lane accumulate the heavier `L88` tail is the UI/canvas batch shape emitted by `RendererCanvasRenderRD::_render_batch_items()`: the healthy control contributes a single preserved destination-color rect batch, while the failing staged lane contributes a ten-batch preserved destination-color clipped rect chain. The new `expected_draw_calls_from_rendered_batches` field matches the surviving runtime payload split directly (`1` in control versus `10` in the failing lane), which makes the best next crash seam the failing-only **canvas/UI clipped rect batch chain** rather than generic runtime `LOAD` reuse metadata. Durable notes were updated at `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-runtime-load-reuse-classification.md`. No commit was made because the repo already had unrelated in-flight changes and this pass stayed diagnostic-only.
 
 ## Final Results
 
@@ -3221,14 +3939,14 @@ Start the next session from this plan plus `REF-07`, then execute in this order:
 
 ### Landing-the-plane handoff
 
-**Stopping point:** The live failing seam is now pinned deeper than the shared-view policy branch: the unchanged RDG-side forcing input is still `resource_tracker->is_discardable=false_after_clear_ignore_checks`, with upstream source `root_texture_create<-texture_format_is_discardable_flag:false`. Tonemap on this repro is taking the **direct persistent-root path** rather than the existing discardable intermediate paths, so RDG still sees a write to a persistent non-discardable root attachment and births the live Tonemap/L88-compatible scope with slot 0 already `LOAD`. The lazy/on-demand shared-view experiment successfully changed the lane policy surface but did **not** move the failure envelope.
+**Stopping point:** The live failing seam is now pinned one step deeper than the earlier “does Tonemap need an explicit overwrite hint?” fork. The overwrite experiment proved the Tonemap-local pass can truthfully ask for `DRAW_IGNORE_COLOR_0`, and the Tonemap draw-list render-pass record did flip to `source="attachment_operation_ignore"`. But the later active scope that `L88` re-enters is rebuilt from a separate RDG draw-list render-pass creation (`label="none"`, `breadcrumb=720896`) on the same `Render Target Color` tracker/write lane (`tracker_write_index=132`), and that rebuild still sees `resource_tracker->is_discardable=false_after_clear_ignore_checks` with upstream source `root_texture_create<-texture_format_is_discardable_flag:false`. That separate rebuild therefore still falls into `source="non_discardable_default_load_contract"` and reintroduces slot-0 `LOAD` before `L88` first rebinds.
 
-**Best current one-line read:** the shared-view rule is over-broad but demoted as the crash trigger; the stronger surviving seam is that Tonemap’s direct-root path still feeds RDG a root non-discardable attachment, so the zero-gap Tonemap → `L88` active scope is created as `LOAD` before `L88` ever re-enters it.
+**Best current one-line read:** the explicit Tonemap overwrite contract only changed the Tonemap-local recipe; it did **not** change the later UI-pass / active-scope rebuild input, which still treats the same root non-discardable tracker as preserve-content and therefore resolves slot 0 back to `LOAD`.
 
-**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/`
+**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/`
 
-**Best next move:** stay on the same locked repro lane and split **why Tonemap is on the direct-root path instead of the discardable Tonemapper-destination path on this repro**, and whether that direct-root path choice is the actual bug seam or a correct route missing a narrower first-write/overwrite signal for RDG. Do not reopen the demoted shared-view materialization question unless a new artifact contradicts the current result.
+**Best next move:** stay on the same locked repro lane and treat the “why did `IGNORE` not stick?” fork as answered: it did stick on Tonemap’s own draw-list, but the later active-scope rebuild is sourced from a different draw-list render-pass creation that still inherits the root non-discardable tracker contract. Any next diagnostic should therefore stay narrowly on that later rebuild/reuse path — e.g. exactly which UI-pass draw-list / framebuffer / tracker ownership edge causes the `label="none"` rebuild to reconsume `write_index=132` under the default non-discardable `LOAD` policy — without reopening route selection or already-demoted shared-view families unless a new artifact directly contradicts this result.
 
 ---
 
-*Updated on 2026-05-21 (partial; stopping point advanced from the RDG default-`LOAD` branch alone to the narrower fact that the surviving seam is Tonemap’s direct persistent-root path still feeding RDG a root non-discardable attachment, while shared-view policy demotion does not move the failure envelope)*
+*Updated on 2026-05-22 (partial; stopping point advanced from “the direct-root Tonemap path lacks an explicit RDG overwrite hint” to the narrower classified result that the explicit Tonemap overwrite hint only changes the Tonemap-local draw-list, while the later active-scope rebuild still independently reintroduces slot-0 `LOAD` from the same root non-discardable tracker contract)*

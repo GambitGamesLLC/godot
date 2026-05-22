@@ -30,11 +30,26 @@
 
 #include "tone_mapper.h"
 
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
 using namespace RendererRD;
+
+namespace {
+bool gdgs_debug_tonemap_overwrite_contract_experiment_enabled() {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (!OS::get_singleton()->has_environment("GODOT_GDGS_DEBUG_TONEMAP_OVERWRITE_CONTRACT")) {
+		return false;
+	}
+	const String value = OS::get_singleton()->get_environment("GODOT_GDGS_DEBUG_TONEMAP_OVERWRITE_CONTRACT").strip_edges().to_lower();
+	return !(value.is_empty() || value == "0" || value == "false" || value == "off" || value == "no");
+#else
+	return false;
+#endif
+}
+} // namespace
 
 ToneMapper::ToneMapper(bool p_use_mobile_version) {
 	using_mobile_version = p_use_mobile_version;
@@ -208,7 +223,12 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 	RID shader = tonemap.shader.version_get_shader(tonemap.shader_version, mode);
 	ERR_FAIL_COND(shader.is_null());
 
-	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer);
+	const bool gdgs_overwrite_contract_experiment = gdgs_debug_tonemap_overwrite_contract_experiment_enabled();
+	const BitField<RD::DrawFlags> draw_flags = gdgs_overwrite_contract_experiment ? BitField<RD::DrawFlags>(RD::DRAW_IGNORE_COLOR_0) : BitField<RD::DrawFlags>(RD::DRAW_DEFAULT_ALL);
+	if (gdgs_overwrite_contract_experiment) {
+		print_line("[gdgs-ts] tonemap_overwrite_contract_experiment={enabled=true,draw_list_begin_flags=RD::DRAW_IGNORE_COLOR_0,attachment_overwrite_contract=explicit_ignore_slot0,fullscreen_draw=true}");
+	}
+	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer, draw_flags);
 	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, tonemap.pipelines[mode].get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer), false, RD::get_singleton()->draw_list_get_current_pass()));
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 0, u_source_color), 0);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_exposure_texture), 1);

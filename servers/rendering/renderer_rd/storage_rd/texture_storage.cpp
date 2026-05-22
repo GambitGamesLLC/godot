@@ -4406,13 +4406,21 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 	}
 }
 
-bool TextureStorage::_gdgs_debug_lazy_shared_view_experiment_enabled(const RenderTarget *rt) const {
+static bool gdgs_debug_env_flag_enabled(const char *p_name) {
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
-	if (!OS::get_singleton()->has_environment("GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW")) {
+	if (!OS::get_singleton()->has_environment(p_name)) {
 		return false;
 	}
-	const String value = OS::get_singleton()->get_environment("GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW").strip_edges().to_lower();
-	const bool enabled = !(value.is_empty() || value == "0" || value == "false" || value == "off" || value == "no");
+	const String value = OS::get_singleton()->get_environment(p_name).strip_edges().to_lower();
+	return !(value.is_empty() || value == "0" || value == "false" || value == "off" || value == "no");
+#else
+	return false;
+#endif
+}
+
+bool TextureStorage::_gdgs_debug_lazy_shared_view_experiment_enabled(const RenderTarget *rt) const {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	const bool enabled = gdgs_debug_env_flag_enabled("GODOT_GDGS_DEBUG_LAZY_RT_SHARED_VIEW");
 	if (!enabled) {
 		return false;
 	}
@@ -4860,7 +4868,17 @@ String TextureStorage::render_target_debug_describe_tonemap_lane(RID p_render_ta
 	} else if (direct_root_access_count > 0) {
 		invariant_classifier = "lazy_on_demand_shared_view_candidate";
 	}
-	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,ownership_contract={class=%s,basis=%s,contrast=%s},msaa=%d,view_count=%d,override_active=%s,shared_view_materialized=%s,lazy_shared_view_experiment=%s,shared_view_requirement={transparent_bg=%s,shared_view_entrypoints={viewport_texture_requests=%s,texture_rd={base=%s,srgb=%s,total=%s},native_handle={base=%s,srgb=%s,total=%s},total=%s},requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, ownership_contract, ownership_contract_basis, ownership_contrast, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", shared_view_materialized ? "true" : "false", lazy_shared_view_experiment ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests), String::num_uint64(rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests + rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests + rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(shared_view_entrypoint_count), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
+	const bool direct_render_target_branch_taken = !p_using_scaling_pass && !p_use_smaa && !p_dest_is_msaa_2d && !rt->overridden.color.is_valid();
+	const bool discardable_intermediate_route_available = p_using_scaling_pass || p_use_smaa || p_dest_is_msaa_2d;
+	const bool tonemap_overwrite_contract_experiment = gdgs_debug_env_flag_enabled("GODOT_GDGS_DEBUG_TONEMAP_OVERWRITE_CONTRACT");
+	const String tonemap_draw_list_begin_flags = tonemap_overwrite_contract_experiment ? "RD::DRAW_IGNORE_COLOR_0" : "RD::DRAW_DEFAULT_ALL";
+	const String tonemap_attachment_ignore = tonemap_overwrite_contract_experiment ? "true" : "false";
+	const String tonemap_rdg_first_write_hint = tonemap_overwrite_contract_experiment ? "explicit_ignore_slot0" : "absent_without_clear_or_ignore";
+	const String tonemap_rdg_safe_discard_signal = tonemap_overwrite_contract_experiment ? "experimentally_expressed_via_ignore_color_0" : "unavailable_without_clear_ignore_or_discardable_tracker";
+	String route_gate_branch = direct_render_target_branch_taken ? "render_target_get_rd_framebuffer" : (p_dest_is_msaa_2d ? "render_target_get_rd_texture_msaa" : (p_using_scaling_pass || p_use_smaa ? "render_scene_buffers_create_texture:Tonemapper.destination" : (rt->overridden.color.is_valid() ? "render_target_override_color" : "other")));
+	String route_gate_reason = direct_render_target_branch_taken ? "scaling_pass=false+smaa=false+dest_is_msaa_2d=false_selects_persistent_root_framebuffer" : (p_dest_is_msaa_2d ? "msaa_direct_write_routes_through_discardable_msaa_intermediate" : (p_using_scaling_pass || p_use_smaa ? "scaling_or_smaa_requires_discardable_tonemapper_destination" : (rt->overridden.color.is_valid() ? "override_color_replaces_internal_render_target_path" : "no_direct_root_branch")));
+	String route_vs_overwrite_classifier = direct_render_target_branch_taken ? (tonemap_overwrite_contract_experiment ? "path_choice_matches_current_policy_with_explicit_overwrite_experiment" : "path_choice_matches_current_policy_but_no_explicit_first_write_hint") : "path_choice_not_on_direct_root_lane";
+	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,ownership_contract={class=%s,basis=%s,contrast=%s},route_gate={using_scaling_pass=%s,use_smaa=%s,dest_is_msaa_2d=%s,selected_branch=%s,selected_reason=%s,discardable_intermediate_route_available=%s,route_vs_overwrite_classifier=%s},direct_write_contract={draw_list_begin_flags=%s,attachment_clear=false,attachment_ignore=%s,fullscreen_draw=true,rdg_first_write_hint=%s,rdg_attachment_override_options=clear_or_ignore_only,rdg_non_discardable_default=load_and_store,rdg_safe_discard_signal=%s},msaa=%d,view_count=%d,override_active=%s,shared_view_materialized=%s,lazy_shared_view_experiment=%s,shared_view_requirement={transparent_bg=%s,shared_view_entrypoints={viewport_texture_requests=%s,texture_rd={base=%s,srgb=%s,total=%s},native_handle={base=%s,srgb=%s,total=%s},total=%s},requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, ownership_contract, ownership_contract_basis, ownership_contrast, p_using_scaling_pass ? "true" : "false", p_use_smaa ? "true" : "false", p_dest_is_msaa_2d ? "true" : "false", route_gate_branch, route_gate_reason, discardable_intermediate_route_available ? "true" : "false", route_vs_overwrite_classifier, tonemap_draw_list_begin_flags, tonemap_attachment_ignore, tonemap_rdg_first_write_hint, tonemap_rdg_safe_discard_signal, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", shared_view_materialized ? "true" : "false", lazy_shared_view_experiment ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests), String::num_uint64(rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests + rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests + rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(shared_view_entrypoint_count), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
 }
 
 RID TextureStorage::render_target_get_rd_texture(RID p_render_target) {
