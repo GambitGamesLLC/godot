@@ -3902,51 +3902,120 @@ The key current read is: the projection dispatch still appears to be the first b
 
 Start the next session from this plan plus `REF-07`, then execute in this order:
 
-1. **Stay on the same source-built Godot binary and keep the repro at `projection_only + disabled`**
-   - do not reopen scratch-only, projection-first, semaphore identity, Tonemap-local bind/setup, wrapper-chain, or post-rebind lanes unless new evidence forces it
-   - keep the staging narrow so every artifact remains directly comparable on the same failing lane: `submit_serial=9` -> `fence_wait_error submit_serial=9 wait_result=-4` -> later `BLIT_PASS`
+1. **Stay on the same source-built Godot binary and the same failing frame-1 non-present lane**
+   - keep the repro narrow and directly comparable: `submit_serial=9` -> `Tonemap (L87) (Draw)` -> `Command Graph (L88) (Draw)` -> `fence_wait_error submit_serial=9 wait_result=-4`
+   - do not reopen scratch-only, projection-first, semaphore identity, Tonemap-local overwrite/load-op lineage, or broader render-pass ownership theories unless the next capped-batch sweep contradicts the current read
 
-2. **Start from the latest stopping-point artifact, not the older depth-prepass seam**
-   - freshest high-signal artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-attachment-exact-vulkan-sourcebuild-20260520-182834/`
-   - current locked seam summary:
-     - Tonemap -> `L88` remains the first honest poisoned-boundary compare
-     - the boundary is still zero-gap
-     - the carried Tonemap packet remains exact on pipeline identity, layout/descriptor provenance, and push-constant-range contract before `L88` first pipeline rebind
-     - the remaining carried render-pass attachment exact-recipe contract has narrowed to a single differing field: `load_op`
+2. **Resume from the clipped UI batch seam, not the older Tonemap/load-op seam**
+   - freshest high-signal failing artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-failing-vulkan-sourcebuild-20260522-1840/`
+   - freshest matching healthy control: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-control-vulkan-sourcebuild-20260522-1839/`
+   - locked seam summary:
+     - healthy control: `single_rect_preserve_batch`
+     - failing repro: `multi_rect_preserve_clip_batch_chain`
+     - failing `expected_draw_calls_from_rendered_batches=10` already matches the surviving heavy `L88` payload exactly
 
-3. **Execute the exact next bead implied by Task 103 / Task 104**
-   - next bead title: `Classify the smallest carried render-pass attachment exact-recipe contract before L88 first pipeline rebind at failing submit_serial=9`
-   - focus only on the attachment exact-recipe subfields still attached to the carried Tonemap packet versus the rebuilt active pre-rebind `L88` scope
-   - the current evidence already says:
-     - `field_classifier="load_op_is_minimum_attachment_exact_hazard"`
-     - `minimum_distinguishing_field="load_op"`
-     - `mismatch_count=1`
-   - so the next honest question is whether the carried `load_op` contract can itself be structurally explained or narrowed further without reopening broader demoted families
+3. **Execute the exact next bead implied by Task 149**
+   - next bead title: `Classify the toxic subfamily inside the failing clipped preserve-color rect batch chain on the frame-1 non-present submit path`
+   - focus only on ordinal toxicity inside the already-classified failing family
+   - primary seam: `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` inside `RendererCanvasRenderRD::_render_batch_items()`
+   - experiment order:
+     - add a reversible env-driven cap/selector for matching rendered batches (rect-like + clipped + preserved destination color)
+     - sweep `N=1`, `N=2`, `N=5`, `N=10/full`
+     - if needed, split `only first matching batch` versus `skip first matching batch`
 
-4. **Do not backslide into already-exhausted families unless the new artifact directly contradicts the current read**
-   - already exact/exhausted on this lane:
-     - pipeline identity
-     - pipeline-layout / descriptor-set-layout provenance
-     - push-constant-range contract
-     - dependency lineage
-     - view-density lineage
-     - broader render-pass compatibility lineage
-   - already demoted:
-     - Tonemap-local bind/setup lanes
-     - hidden wrapper/descendant ownership
-     - broader pass/framebuffer ownership
-     - post-rebind and downstream-only lanes
+4. **Use Vulkan-side instrumentation only as corroboration**
+   - keep `drivers/vulkan/rendering_device_driver_vulkan.cpp` read-only in spirit for this fork: it should confirm whether `L88` draw count and the `submit_serial=9` crash signature move with the capped batch count
+   - do not let this fork widen back into new render-pass-lineage theory unless the capped sweep breaks the current 1:1 batch↔draw correlation
+
+### Task 149: Reconcile the clipped preserve-color rect-chain stopping point and define the next batch-subfamily experiment
+
+**Bead ID:** `oc-wra`
+**SubAgent:** `primary` (for `research`)
+**Role:** `research`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-wra` on start and stay tightly scoped to the current source-built host-Vulkan lane. Read the latest handoff plus the newest repo-local notes/artifacts, reconcile them with the active plan and current repo state, then determine the narrowest next experiment **inside** the failing-only clipped preserve-color rect batch chain. Do not widen back out to already-demoted Tonemap/render-pass theories. Update this plan so it truthfully reflects the current stopping point and give the next coder pass an exact file/seam order.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+- `/home/derrick/.openclaw/workspace/projects/openclaw-chip/handoffs/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/openclaw-chip/handoffs/handoff-2026-05-22T18-56-22-04-00.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-submit-serial-9-lane-classification.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-runtime-load-reuse-classification.md`
+
+**Status:** ✅ Complete
+
+**Results:** Re-read the active plan, latest handoff, and the repo-local notes/artifacts that established the current seam. The current repo state is materially ahead of the stale plan tail: `HEAD` is now `346d1af9` (`debug: narrow gdgs compositor crash to clipped ui batch seam`) and `git status --short --untracked-files=no` is clean, so the handoff note about “uncommitted instrumentation-heavy changes” is no longer true. The active evidence is consistent across the latest handoff and repo-local notes: the live seam is no longer Tonemap overwrite/load-op attribution. It is the **failing-only canvas/UI clipped preserve-color rect batch chain** on the frame-1 non-present `submit_serial=9` lane.
+
+The highest-value next experiment is now a **minimal ordinal threshold perturbation** inside `RendererCanvasRenderRD::_render_batch_items()` rather than another passive Tonemap/RDG lineage dump. Current evidence already proves the failing lane has exactly one `ui_pass_origin` instance with `batch_summary={rendered=10,rect_like=10,clipped=10,destination_color=10,...}` and `graph_build_condition={classifier="multi_rect_preserve_clip_batch_chain",expected_draw_calls_from_rendered_batches=10,...}` while the healthy control has one `single_rect_preserve_batch`. Because every failing rendered batch is already coarse-classified the same way, the next honest fork is not “is clipping or preserved color involved?” — that is already yes. The next honest fork is **which ordinal subset inside that 10-batch chain is sufficient to preserve the crash signature**.
+
+Recommended next coder pass, in exact order:
+1. In `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`, stay inside `RendererCanvasRenderRD::_render_batch_items()` and add a tiny reversible debug gate alongside the existing `gdgs_ui_pass_origin_log` logic. The gate should only affect the already-identified family: rendered batches that are rect-like, clipped, and require preserved destination color on the same failing path. Add a cap/selector env-driven experiment that can: (a) stop after the first `N` matching rendered batches, and optionally (b) skip only the first matching batch or only allow the first matching batch. Keep the default behavior unchanged when the env var is absent.
+2. Reuse the same failing staged repro lane first (`/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-failing-vulkan-sourcebuild-20260522-1840/` as the comparison root) and sweep the minimum ordinal cases in this order: `N=1`, `N=2`, `N=5`, `N=10/full`. This classifies whether the poison is first-batch-sufficient, requires later batches, or appears only after a count threshold.
+3. If the sweep shows `N=1` survives but `N>=2` crashes, stay in the same file and run the second fork immediately: “only first matching batch” versus “skip first matching batch, keep the rest.” That separates `first clipped rect is toxic` from `later clipped rects / accumulation is toxic` without widening scope.
+4. Use the existing seam-local corroboration in `drivers/vulkan/rendering_device_driver_vulkan.cpp` only as a readout, not a new theory source: confirm `submit_serial=9`, `Tonemap (L87) -> Command Graph (L88)`, and whether `L88` draw count tracks the capped batch count. Do not reopen render-pass-lineage forks unless the capped sweep contradicts the current one-to-one batch↔draw correlation.
+
+That makes the next question executable and falsifiable: **is the toxic subfamily the first clipped preserve-color rect, the later clipped rects, or the chain length itself?** This is the narrowest next fork that uses current evidence instead of backing out into broader demoted seams.
+
+### Task 150: Add a reversible clipped preserve-color rect-batch ordinal gate in `_render_batch_items()`
+
+**Bead ID:** `oc-mt3`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-mt3` on start and stay tightly scoped to the already-classified failing family inside `RendererCanvasRenderRD::_render_batch_items()`. Add a tiny reversible env-driven gate that only affects rect-like rendered batches that are clipped and require preserved destination color. Support three temporary diagnostic controls: cap after the first `N` matching batches, render only the first matching batch, and skip the first matching batch. Keep default behavior unchanged when unset, keep the instrumentation easy to remove, update this plan with exact QA instructions, run repo-local validation, and commit/push the Godot change when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the ordinal gate directly inside `RendererCanvasRenderRD::_render_batch_items()` and kept it constrained to the already-classified failing family: batches that are rect-like (`TYPE_RECT` / `TYPE_NINEPATCH`), clipped (`batch->clip != nullptr`), and use a blend mode that requires preserved destination color. The gate is fully opt-in and env-driven, with no behavior change when unset. Supported knobs:
+- `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=<N>` — render only the first `N` matching batches, then skip later matching batches.
+- `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_ONLY_FIRST=1` — render the first matching batch and skip later matching batches.
+- `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_SKIP_FIRST=1` — skip only the first matching batch and keep later matching batches.
+
+The predicate was intentionally kept narrow and honest based on the current source/runtime notes instead of introducing a broader “UI batch” gate. Implementation stays local to the render loop, counts only matching batches, and logs a small per-pass activation/result summary so QA can verify which selector was active and how many matching batches were skipped.
+
+Validation run for this coder pass:
+- `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `git diff --check`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/renderer_rd/renderer_canvas_render_rd.linuxbsd.editor.dev.x86_64.o`
+
+QA instructions for the next pass:
+1. Reuse the same failing source-built host-Vulkan staged lane and keep the repro at `projection_only + disabled` unless a narrower harness already exists for the UI-batch seam.
+2. Sweep these env cases in order while preserving the existing comparison roots/log capture:
+   - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`
+   - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=2`
+   - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=5`
+   - unset / full chain (control)
+3. If `cap=1` survives while higher counts fail, immediately run the fork that separates first-vs-later toxicity:
+   - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_ONLY_FIRST=1`
+   - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_SKIP_FIRST=1`
+4. In the logs, confirm the new gate summaries:
+   - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={...}`
+   - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate_result={matched=...,skipped=...}`
+5. Use the existing Vulkan-side submit/L88 diagnostics only as corroboration: check whether the familiar `submit_serial=9` / `BLIT_PASS` failure signature and any L88 draw-count evidence move with the reduced matching-batch count.
 
 ### Landing-the-plane handoff
 
-**Stopping point:** The live failing seam is now pinned one step deeper than the earlier “does Tonemap need an explicit overwrite hint?” fork. The overwrite experiment proved the Tonemap-local pass can truthfully ask for `DRAW_IGNORE_COLOR_0`, and the Tonemap draw-list render-pass record did flip to `source="attachment_operation_ignore"`. But the later active scope that `L88` re-enters is rebuilt from a separate RDG draw-list render-pass creation (`label="none"`, `breadcrumb=720896`) on the same `Render Target Color` tracker/write lane (`tracker_write_index=132`), and that rebuild still sees `resource_tracker->is_discardable=false_after_clear_ignore_checks` with upstream source `root_texture_create<-texture_format_is_discardable_flag:false`. That separate rebuild therefore still falls into `source="non_discardable_default_load_contract"` and reintroduces slot-0 `LOAD` before `L88` first rebinds.
+**Stopping point:** The live failing seam is now the failing-only `multi_rect_preserve_clip_batch_chain` feeding the heavy `L88` payload on the frame-1 non-present `submit_serial=9` path. The prior plan tail that still centered on Tonemap overwrite/load-op lineage is stale and no longer matches the current repo or head commit.
 
-**Best current one-line read:** the explicit Tonemap overwrite contract only changed the Tonemap-local recipe; it did **not** change the later UI-pass / active-scope rebuild input, which still treats the same root non-discardable tracker as preserve-content and therefore resolves slot 0 back to `LOAD`.
+**Best current one-line read:** healthy control survives with one preserve-color rect batch; failing repro dies with a ten-batch clipped preserve-color rect chain, so the next honest fork is ordinal toxicity inside that chain, not another pass-level render-pass theory.
 
-**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/`
+**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-failing-vulkan-sourcebuild-20260522-1840/`
 
-**Best next move:** stay on the same locked repro lane and treat the “why did `IGNORE` not stick?” fork as answered: it did stick on Tonemap’s own draw-list, but the later active-scope rebuild is sourced from a different draw-list render-pass creation that still inherits the root non-discardable tracker contract. Any next diagnostic should therefore stay narrowly on that later rebuild/reuse path — e.g. exactly which UI-pass draw-list / framebuffer / tracker ownership edge causes the `label="none"` rebuild to reconsume `write_index=132` under the default non-discardable `LOAD` policy — without reopening route selection or already-demoted shared-view families unless a new artifact directly contradicts this result.
+**Best next move:** instrument `RendererCanvasRenderRD::_render_batch_items()` with a reversible ordinal cap/selector for the already-classified clipped preserve-color rect family, sweep `N=1/2/5/full`, then if needed split “first matching batch only” versus “all but first.” Keep `drivers/vulkan/rendering_device_driver_vulkan.cpp` as corroboration only to confirm whether `L88` draw count and the `submit_serial=9` crash signature move with the cap.
 
 ---
 
-*Updated on 2026-05-22 (partial; stopping point advanced from “the direct-root Tonemap path lacks an explicit RDG overwrite hint” to the narrower classified result that the explicit Tonemap overwrite hint only changes the Tonemap-local draw-list, while the later active-scope rebuild still independently reintroduces slot-0 `LOAD` from the same root non-discardable tracker contract)*
+*Updated on 2026-05-22 (partial; stopping point advanced from Tonemap overwrite/load-op attribution to the narrower clipped preserve-color rect-chain seam, with the next experiment defined as an ordinal threshold/first-vs-later batch split inside `RendererCanvasRenderRD::_render_batch_items()`) *

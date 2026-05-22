@@ -92,6 +92,30 @@ bool gdgs_canvas_blend_mode_uses_prior_color(int p_blend_mode) {
 			return false;
 	}
 }
+
+bool gdgs_debug_env_bool_enabled(const char *p_name) {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (!OS::get_singleton()->has_environment(p_name)) {
+		return false;
+	}
+	const String value = OS::get_singleton()->get_environment(p_name).strip_edges().to_lower();
+	return !(value.is_empty() || value == "0" || value == "false" || value == "off" || value == "no");
+#else
+	return false;
+#endif
+}
+
+int gdgs_debug_env_int_or(const char *p_name, int p_default) {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	if (!OS::get_singleton()->has_environment(p_name)) {
+		return p_default;
+	}
+	return OS::get_singleton()->get_environment(p_name).strip_edges().to_int();
+#else
+	return p_default;
+#endif
+}
+
 } // namespace
 
 void RendererCanvasRenderRD::_update_transform_2d_to_mat4(const Transform2D &p_transform, float *p_mat4) {
@@ -2416,6 +2440,17 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, fb_uniform_set, BASE_UNIFORM_SET);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, state.default_transforms_uniform_set, TRANSFORMS_UNIFORM_SET);
 
+	const int gdgs_temp_diag_rect_preserve_clip_cap = gdgs_debug_env_int_or("GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP", -1);
+	const bool gdgs_temp_diag_rect_preserve_clip_only_first = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_ONLY_FIRST");
+	const bool gdgs_temp_diag_rect_preserve_clip_skip_first = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_SKIP_FIRST");
+	const bool gdgs_temp_diag_rect_preserve_clip_gate_active = gdgs_temp_diag_rect_preserve_clip_cap >= 0 || gdgs_temp_diag_rect_preserve_clip_only_first || gdgs_temp_diag_rect_preserve_clip_skip_first;
+	int gdgs_temp_diag_rect_preserve_clip_match_count = 0;
+	int gdgs_temp_diag_rect_preserve_clip_skipped_count = 0;
+
+	if (gdgs_temp_diag_rect_preserve_clip_gate_active) {
+		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false"));
+	}
+
 	Item *current_clip = nullptr;
 	state.current_batch_uniform_set = RID();
 
@@ -2424,6 +2459,33 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 		// Skipping when there is no instances.
 		if (current_batch->instance_count == 0) {
 			continue;
+		}
+
+		bool gdgs_temp_diag_rect_preserve_clip_match = false;
+		if (gdgs_temp_diag_rect_preserve_clip_gate_active) {
+			const bool gdgs_temp_diag_rect_like = current_batch->command_type == Item::Command::TYPE_RECT || current_batch->command_type == Item::Command::TYPE_NINEPATCH;
+			const CanvasShaderData *batch_shader_data = current_batch->material_data && current_batch->material_data->shader_data && current_batch->material_data->shader_data->version.is_valid() && current_batch->material_data->shader_data->is_valid() ? current_batch->material_data->shader_data : shader.default_version_data;
+			const int batch_blend_mode = batch_shader_data ? batch_shader_data->blend_mode : RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
+			gdgs_temp_diag_rect_preserve_clip_match = gdgs_temp_diag_rect_like && current_batch->clip != nullptr && gdgs_canvas_blend_mode_uses_prior_color(batch_blend_mode);
+		}
+		if (gdgs_temp_diag_rect_preserve_clip_match) {
+			gdgs_temp_diag_rect_preserve_clip_match_count++;
+
+			bool skip_matching_batch = false;
+			if (gdgs_temp_diag_rect_preserve_clip_skip_first && gdgs_temp_diag_rect_preserve_clip_match_count == 1) {
+				skip_matching_batch = true;
+			}
+			if (gdgs_temp_diag_rect_preserve_clip_only_first && gdgs_temp_diag_rect_preserve_clip_match_count > 1) {
+				skip_matching_batch = true;
+			}
+			if (gdgs_temp_diag_rect_preserve_clip_cap >= 0 && gdgs_temp_diag_rect_preserve_clip_match_count > gdgs_temp_diag_rect_preserve_clip_cap) {
+				skip_matching_batch = true;
+			}
+
+			if (skip_matching_batch) {
+				gdgs_temp_diag_rect_preserve_clip_skipped_count++;
+				continue;
+			}
 		}
 
 		//setup clip
@@ -2451,6 +2513,10 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 		}
 
 		_render_batch(draw_list, shader_data, fb_format, p_lights, current_batch, r_render_info);
+	}
+
+	if (gdgs_temp_diag_rect_preserve_clip_gate_active) {
+		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate_result={matched=%d,skipped=%d}", gdgs_temp_diag_rect_preserve_clip_match_count, gdgs_temp_diag_rect_preserve_clip_skipped_count));
 	}
 
 	RD::get_singleton()->draw_list_end();
