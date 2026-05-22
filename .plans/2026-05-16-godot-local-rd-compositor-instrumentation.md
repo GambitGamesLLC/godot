@@ -3112,6 +3112,37 @@ Exact conclusion: the unchanged RDG-side input still feeding `non_discardable_de
 
 ---
 
+### Task 123: Classify whether the root texture `is_discardable=false` contract is the true bug seam for the Tonemap lane at failing `submit_serial=9`
+
+**Bead ID:** `oc-0v8`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-0v8` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the unchanged RDG-side forcing input is `resource_tracker->is_discardable=false_after_clear_ignore_checks`, with upstream source `root_texture_create<-texture_format_is_discardable_flag:false`, and that still feeds `non_discardable_default_load_contract`, which births the live Tonemap/L88-compatible scope as slot-0 `LOAD`. Implement the smallest honest diagnostic needed to classify the next fork: **is this root texture `is_discardable=false` contract itself the true bug seam for this Tonemap lane, or does it still look like a correct rule with some deeper surviving assumption underneath it?** Prefer root-texture / texture-format / Tonemap-L88 pre-rebind ownership evidence over reopening already-demoted shared-view policy questions. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-0v8` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest ownership classifier to the existing Tonemap lane log in `servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`: `ownership_contract={class,basis,contrast}` now distinguishes the direct persistent-root lane from the already-existing discardable Tonemapper intermediate and discardable MSAA intermediate lanes without reopening the demoted shared-view policy question. Rebuilt the same source-built editor (`scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`), verified the new marker string in the binary, and reran the locked host-Vulkan `projection_only__disabled` repro with shared-view demotion enabled. Fresh artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/`.
+
+The decisive runtime line is:
+- `tonemap_render_target_lane ... lane={path_class=persistent_root_direct,lane_owner=rt->color,lane_policy=persistent_root_direct_lazy_shared_view,ownership_contract={class=persistent_root_non_discardable,basis=non_msaa_render_target_color_texture_format_default_false_root_tracker_seed,contrast=direct_path_bypasses_discardable_tonemapper_destination},...}`
+
+Paired with the same run’s unchanged RDG line:
+- `label="Tonemap" ... source="non_discardable_default_load_contract" ... tracker_discardable=false ... load_branch_upstream_input="root_texture_create<-texture_format_is_discardable_flag:false"`
+
+Exact conclusion: the root texture `is_discardable=false` contract still reads as the **correct persistent-root ownership rule** for `rt->color`, not the isolated bug seam by itself. The deeper surviving assumption is that this Tonemap lane takes the **direct-root path** and therefore bypasses the already-existing explicit discardable intermediate paths, while RDG still only sees a write to a persistent non-discardable root attachment and rebuilds the live Tonemap/L88-compatible scope with the generic slot-0 `LOAD` contract. Updated `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the exact artifact root and conclusion. `bd update oc-0v8 --status in_progress --json` worked at start and `bd close oc-0v8 --reason "Classified whether root texture is_discardable=false is the true Tonemap lane bug seam" --json` succeeded at finish. No commit was made because this remains investigation-only instrumentation on the active debug branch.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial
@@ -3190,14 +3221,14 @@ Start the next session from this plan plus `REF-07`, then execute in this order:
 
 ### Landing-the-plane handoff
 
-**Stopping point:** The live failing seam is now pinned one step deeper: Tonemap slot 0 reaches the RDG recipe as a **root tracker seeded `is_discardable=false`**, and the graph’s `non_discardable_default_load_contract` then applies an unconditional `LOAD`, while the carried Tonemap pipeline packet still keeps slot 0 at `CLEAR` across the zero-gap handoff into `L88`.
+**Stopping point:** The live failing seam is now pinned deeper than the shared-view policy branch: the unchanged RDG-side forcing input is still `resource_tracker->is_discardable=false_after_clear_ignore_checks`, with upstream source `root_texture_create<-texture_format_is_discardable_flag:false`. Tonemap on this repro is taking the **direct persistent-root path** rather than the existing discardable intermediate paths, so RDG still sees a write to a persistent non-discardable root attachment and births the live Tonemap/L88-compatible scope with slot 0 already `LOAD`. The lazy/on-demand shared-view experiment successfully changed the lane policy surface but did **not** move the failure envelope.
 
-**Best current one-line read:** the carried packet is still not the first source of the `LOAD` divergence; the earliest concrete cause is Tonemap’s root non-discardable attachment attribution feeding the unconditional RDG default-`LOAD` branch, and `L88` just reuses that already-live compatible scope.
+**Best current one-line read:** the shared-view rule is over-broad but demoted as the crash trigger; the stronger surviving seam is that Tonemap’s direct-root path still feeds RDG a root non-discardable attachment, so the zero-gap Tonemap → `L88` active scope is created as `LOAD` before `L88` ever re-enters it.
 
-**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/`
+**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/`
 
-**Best next move:** stay on the same locked repro lane and walk one step upstream of the default-load rule: determine **who/what seeds the Tonemap slot-0 root tracker as non-discardable** on this path. Do not reopen the already-resolved question of why default non-discardable chooses `LOAD`; that branch is now evidenced as unconditional in this lane.
+**Best next move:** stay on the same locked repro lane and split **why Tonemap is on the direct-root path instead of the discardable Tonemapper-destination path on this repro**, and whether that direct-root path choice is the actual bug seam or a correct route missing a narrower first-write/overwrite signal for RDG. Do not reopen the demoted shared-view materialization question unless a new artifact contradicts the current result.
 
 ---
 
-*Updated on 2026-05-21 (partial; stopping point advanced from the Tonemap RDG non-discardable default-load contract as the first attributable source of slot-0 `LOAD` to the narrower fact that the remaining seam lives in the root tracker’s non-discardable attribution, while the default non-discardable policy itself is unconditional `LOAD` on this lane)*
+*Updated on 2026-05-21 (partial; stopping point advanced from the RDG default-`LOAD` branch alone to the narrower fact that the surviving seam is Tonemap’s direct persistent-root path still feeding RDG a root non-discardable attachment, while shared-view policy demotion does not move the failure envelope)*

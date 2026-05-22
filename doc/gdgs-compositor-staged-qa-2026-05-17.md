@@ -5204,3 +5204,52 @@ More precisely, the surviving forcing chain on this lane is:
 6. the live Tonemap/L88-compatible render pass is created with slot 0 already set to `LOAD`
 
 So Task 122 narrows the answer one step further than Task 121: the exact unchanged RDG branch input is the **tracker discardability field itself** (`resource_tracker->is_discardable=false`), and its unchanged upstream source on this repro lane is still the root texture's `TextureFormat.is_discardable=false` seed inherited at root creation.
+
+## 2026-05-21 — Task 123: classify whether the root texture `is_discardable=false` contract is itself the true Tonemap bug seam
+
+Artifact root:
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-root-contract-classifier-vulkan-sourcebuild-20260521-220037/`
+
+### Smallest added diagnostic
+
+I kept the change inside the existing `tonemap_render_target_lane` payload in `TextureStorage::render_target_debug_describe_tonemap_lane()` and added one narrow ownership block:
+
+- `ownership_contract={class=...,basis=...,contrast=...}`
+
+This does not reopen the demoted shared-view policy lane. It only states, for the exact Tonemap destination path already being logged, whether the destination is:
+
+- the persistent non-discardable render-target root,
+- the explicit discardable Tonemapper intermediate, or
+- the explicit discardable MSAA intermediate.
+
+### Fresh runtime result
+
+The fresh shared-view-demotion rerun keeps the same failure envelope (`exit_status=134`, `fence_wait_error submit_serial=9 wait_result=-4`) and now classifies the failing Tonemap destination path directly:
+
+- `path_class=persistent_root_direct`
+- `lane_owner=rt->color`
+- `lane_policy=persistent_root_direct_lazy_shared_view`
+- `ownership_contract={class=persistent_root_non_discardable,basis=non_msaa_render_target_color_texture_format_default_false_root_tracker_seed,contrast=direct_path_bypasses_discardable_tonemapper_destination}`
+- `shared_view_materialized=false`
+- `transparent_bg=false`
+- `shared_view_entrypoints.total=0`
+
+The same run still names the RDG-side forcing branch exactly as before:
+
+- `label="Tonemap"`
+- `source="non_discardable_default_load_contract"`
+- `tracker_discardable=false`
+- `discardable_provenance="root_texture_create"`
+- `discardable_seed=false`
+- `load_branch_decision_input="resource_tracker->is_discardable=false_after_clear_ignore_checks"`
+- `load_branch_upstream_input="root_texture_create<-texture_format_is_discardable_flag:false"`
+
+### Exact conclusion
+
+This makes the fork cleaner:
+
+- the root texture `is_discardable=false` contract still looks like a **correct persistent-root ownership rule** for `rt->color`
+- the failing Tonemap lane is specifically the **direct-root path**, not the explicit discardable Tonemapper intermediate path and not the explicit discardable MSAA intermediate path
+- therefore the surviving seam is deeper than the root seed itself: Tonemap’s direct-root/full-target path is still being expressed to RDG only as a write to a persistent root attachment, so the graph rebuild keeps applying the generic non-discardable `LOAD` contract to that root attachment before `L88`
+
+In plain English: the root texture contract is doing what the render-target ownership code says it should do — preserve the persistent root. The narrower surviving problem is that this exact Tonemap lane bypasses the already-existing discardable intermediate paths, yet the pre-rebind active-scope reconstruction still lacks a narrower “first-write / overwrite / safe-discard-for-this-pass” signal for the persistent root attachment. That is why the live Tonemap/L88-compatible scope is still born with slot 0 as `LOAD` even after the shared-view demotions.

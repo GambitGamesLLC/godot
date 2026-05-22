@@ -4813,12 +4813,18 @@ String TextureStorage::render_target_debug_describe_tonemap_lane(RID p_render_ta
 	String lane_owner = "rt->color";
 	String lane_policy = lazy_shared_view_experiment && !shared_view_materialized ? "persistent_root_direct_lazy_shared_view" : "persistent_root_sampled_shared";
 	String lane_rationale = lazy_shared_view_experiment && !shared_view_materialized ? "tonemap_direct_to_render_target_framebuffer_without_materialized_shared_view" : "tonemap_direct_to_render_target_framebuffer";
+	String ownership_contract = "persistent_root_non_discardable";
+	String ownership_contract_basis = "non_msaa_render_target_color_texture_format_default_false_root_tracker_seed";
+	String ownership_contrast = "direct_path_bypasses_discardable_tonemapper_destination";
 	String attachment_rid_summary = "color=" + rid_debug_name(rt->color);
 	if (rt->overridden.color.is_valid()) {
 		path_class = "overridden_color_direct";
 		lane_owner = "rt->overridden.color";
 		lane_policy = "external_override";
 		lane_rationale = "render_target_override_replaces_persistent_root";
+		ownership_contract = "external_override_unknown";
+		ownership_contract_basis = "override_color_replaces_internal_render_target_root_contract";
+		ownership_contrast = "override_path_skips_internal_tonemap_destination_policy_split";
 		attachment_rid_summary += ",override=" + rid_debug_name(rt->overridden.color);
 	}
 	if (p_using_scaling_pass || p_use_smaa) {
@@ -4826,12 +4832,18 @@ String TextureStorage::render_target_debug_describe_tonemap_lane(RID p_render_ta
 		lane_owner = "Tonemapper.destination";
 		lane_policy = "not_direct_render_target_write";
 		lane_rationale = p_use_smaa ? "tonemap_writes_intermediate_before_smaa" : "tonemap_writes_intermediate_before_scaling_pass";
+		ownership_contract = "transient_tonemapper_destination_discardable";
+		ownership_contract_basis = "render_scene_buffers_create_texture_p_discardable_true";
+		ownership_contrast = "indirect_path_uses_explicit_discardable_intermediate_before_copy_back";
 	}
 	if (p_dest_is_msaa_2d) {
 		path_class = "msaa_intermediate_with_resolve_to_persistent_root";
 		lane_owner = "rt->color_multisample";
 		lane_policy = "transient_msaa_intermediate_resolves_into_rt->color";
 		lane_rationale = "tonemap_direct_write_targets_msaa_attachment_then_resolves_to_persistent_root";
+		ownership_contract = "transient_msaa_intermediate_discardable";
+		ownership_contract_basis = "msaa_color_path_sets_texture_format_is_discardable_true";
+		ownership_contrast = "msaa_direct_path_uses_discardable_intermediate_then_resolves_root";
 		attachment_rid_summary += ",color_msaa=" + rid_debug_name(rt->color_multisample);
 	}
 	if (rt->texture.is_valid()) {
@@ -4848,7 +4860,7 @@ String TextureStorage::render_target_debug_describe_tonemap_lane(RID p_render_ta
 	} else if (direct_root_access_count > 0) {
 		invariant_classifier = "lazy_on_demand_shared_view_candidate";
 	}
-	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,msaa=%d,view_count=%d,override_active=%s,shared_view_materialized=%s,lazy_shared_view_experiment=%s,shared_view_requirement={transparent_bg=%s,shared_view_entrypoints={viewport_texture_requests=%s,texture_rd={base=%s,srgb=%s,total=%s},native_handle={base=%s,srgb=%s,total=%s},total=%s},requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", shared_view_materialized ? "true" : "false", lazy_shared_view_experiment ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests), String::num_uint64(rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests + rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests + rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(shared_view_entrypoint_count), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
+	return vformat("{path_class=%s,lane_owner=%s,lane_policy=%s,lane_rationale=%s,ownership_contract={class=%s,basis=%s,contrast=%s},msaa=%d,view_count=%d,override_active=%s,shared_view_materialized=%s,lazy_shared_view_experiment=%s,shared_view_requirement={transparent_bg=%s,shared_view_entrypoints={viewport_texture_requests=%s,texture_rd={base=%s,srgb=%s,total=%s},native_handle={base=%s,srgb=%s,total=%s},total=%s},requirement_class=%s,invariant_classifier=%s,direct_root_accesses={framebuffer=%s,rd_texture=%s,rd_texture_slice=%s,rd_texture_msaa=%s,total=%s}} ,attachments={%s}}", path_class, lane_owner, lane_policy, lane_rationale, ownership_contract, ownership_contract_basis, ownership_contrast, (int)rt->msaa, (int)rt->view_count, rt->overridden.color.is_valid() ? "true" : "false", shared_view_materialized ? "true" : "false", lazy_shared_view_experiment ? "true" : "false", rt->is_transparent ? "true" : "false", String::num_uint64(rt->debug_render_target_texture_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests), String::num_uint64(rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_rd_requests + rt->debug_render_target_texture_rd_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(rt->debug_render_target_texture_native_handle_requests + rt->debug_render_target_texture_native_handle_srgb_requests), String::num_uint64(shared_view_entrypoint_count), requirement_class, invariant_classifier, String::num_uint64(rt->debug_rd_framebuffer_requests), String::num_uint64(rt->debug_rd_root_texture_requests), String::num_uint64(rt->debug_rd_root_texture_slice_requests), String::num_uint64(rt->debug_rd_msaa_texture_requests), String::num_uint64(direct_root_access_count), attachment_rid_summary);
 }
 
 RID TextureStorage::render_target_get_rd_texture(RID p_render_target) {
