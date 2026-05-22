@@ -3067,6 +3067,51 @@ Exact conclusion: shared-view demotion changed the lane-policy surface but **did
 
 ---
 
+### Task 122: Classify the unchanged RDG attachment/tracker input still feeding `non_discardable_default_load_contract` after shared-view demotion at failing `submit_serial=9`
+
+**Bead ID:** `oc-ae2`  
+**SubAgent:** `primary` (for `coder`)  
+**Role:** `coder`  
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ae2` on start and stay on the same source-built host-Vulkan `projection_only + disabled` repro lane around failing `submit_serial=9`. Do not widen into already-demoted lanes unless the evidence forces it. The current truth is now locked: the rebuilt active scope still insists on slot-0 `LOAD` because the Tonemap RDG active-scope render-pass recipe itself is still born from `source="non_discardable_default_load_contract"` using a root, non-parented, non-discardable tracker; `L88` only re-enters that already-created compatible live scope. Implement the smallest honest diagnostic needed to classify **which unchanged RDG-side attachment/tracker input still feeds that `non_discardable_default_load_contract` path** after the shared-view demotions — e.g. the exact tracker field, attachment metadata, or recipe input that remains unchanged and still forces the root non-discardable branch on this lane. Prefer Tonemap/`L88` pre-rebind RDG attachment/state/ownership evidence over reopening already-demoted shared-view policy questions. Save durable notes/artifact references, update this plan with what actually happened, and close bead `oc-ae2` with a clear reason when the evidence package is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest honest RDG-side diagnostic for this narrower question in `servers/rendering/rendering_device_graph.cpp`: the existing debug/dev-only `draw_list_render_pass_create` attachment summary now prints `load_branch_decision_input` and `load_branch_upstream_input` whenever the non-discardable default branch is taken. That keeps the scope of change entirely inside the already-active Tonemap/L88 RDG logging path and makes the exact branch input explicit instead of inferred.
+
+Validation stayed on the same source-built host-Vulkan `projection_only__disabled` repro lane with shared-view demotion still enabled. I rebuilt the editor with `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64` and reran into `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-rdg-input-vulkan-sourcebuild-20260521-210609/` (`exact_command.txt`, `stdout.log`, `stderr.log`, `exit_status.txt`). The fresh runtime evidence names the unchanged forcing input directly on the Tonemap attachment:
+
+- `label="Tonemap"`, `source="non_discardable_default_load_contract"`
+- `tracker_discardable=false`, `tracker_has_parent=false`
+- `discardable_provenance="root_texture_create"`, `discardable_seed=false`, `discardable_seed_contract="texture_format_is_discardable_flag"`
+- `load_branch_decision_input="resource_tracker->is_discardable=false_after_clear_ignore_checks"`
+- `load_branch_upstream_input="root_texture_create<-texture_format_is_discardable_flag:false"`
+
+The same run still bridges into the live active scope with no behavioral change:
+
+- `[gdgs-vk] render_pass_create create_serial=13 ... attachment_load_ops=[0:LOAD]`
+- Tonemap begins on that exact object and `Command Graph (L88) (Draw)` immediately reuses it
+- the pre-rebind classifier still says `load_op_attribution_split.classification="active_scope_rebuild_first_attributable_step"` while the carried Tonemap packet remains `CLEAR`
+
+Exact conclusion: the unchanged RDG-side input still feeding `non_discardable_default_load_contract` is the tracker discardability field itself — `resource_tracker->is_discardable=false` after the clear/ignore checks. Its unchanged upstream source on this locked lane is still root texture creation inheriting `TextureFormat.is_discardable=false` (`discardable_seed=false`, provenance `root_texture_create`) with no parented tracker rewrite. That is the exact surviving input that keeps Tonemap/L88 slot 0 on the non-discardable default `LOAD` branch after the shared-view demotions. Updated `doc/gdgs-compositor-staged-qa-2026-05-17.md` with the artifact root and this narrower classification. `bd update oc-ae2 --status in_progress --json` worked at start; closure recorded when the bead close completed.
+
+---
+
 ## Final Results
 
 **Status:** ⚠️ Partial

@@ -5149,3 +5149,58 @@ The unchanged forcing contract is still the **Tonemap RDG active-scope render-pa
 - `L88` does not newly decide `LOAD`; it only re-enters the already-created Tonemap/L88-compatible active scope
 
 So the rebuilt active scope still insists on slot-0 `LOAD` because the **graph-side non-discardable root attachment contract survived the shared-view experiment unchanged**. The experiment changed the lane-policy surface, but not the root tracker discardability contract that RDG uses when constructing the live Tonemap/L88-compatible render pass.
+
+## 2026-05-21 — Task 122: classify the unchanged RDG attachment/tracker input still feeding `non_discardable_default_load_contract`
+
+Artifact root:
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-rdg-input-vulkan-sourcebuild-20260521-210609/`
+
+### Smallest added diagnostic
+
+I kept the change inside the existing RDG `draw_list_render_pass_create` debug payload and added two explicit per-attachment fields for the non-discardable default branch:
+
+- `load_branch_decision_input`
+- `load_branch_upstream_input`
+
+That makes the RDG log name the exact field that selects the branch, instead of only implying it from the surrounding tracker dump.
+
+### Fresh runtime result
+
+The fresh env-on shared-view-demotion rerun still lands on the same crash envelope (`exit_status=134`, `fence_wait_error submit_serial=9 wait_result=-4`) and now names the unchanged RDG-side forcing input directly on the Tonemap attachment:
+
+- `label="Tonemap"`
+- `source="non_discardable_default_load_contract"`
+- `tracker_discardable=false`
+- `tracker_has_parent=false`
+- `discardable_provenance="root_texture_create"`
+- `discardable_seed=false`
+- `discardable_seed_contract="texture_format_is_discardable_flag"`
+- `load_branch_decision_input="resource_tracker->is_discardable=false_after_clear_ignore_checks"`
+- `load_branch_upstream_input="root_texture_create<-texture_format_is_discardable_flag:false"`
+
+The same run still bridges straight into the live Tonemap/L88 scope:
+
+- `[gdgs-vk] render_pass_create create_serial=13 ... attachment_load_ops=[0:LOAD]`
+- `[gdgs-vk] begin_render_pass_scope create_serial=13 ... owner_label="Tonemap (L87) (Draw)" ... attachment_load_ops=[0:LOAD]`
+- `[gdgs-vk] begin_render_pass_scope create_serial=13 ... owner_label="Command Graph (L88) (Draw)" ... attachment_load_ops=[0:LOAD]`
+
+And the pre-rebind classifier is still unchanged in the same artifact:
+
+- `pre_rebind_carried_packet_contract.minimum_distinguishing_hazard="attachment_exact_recipe"`
+- `load_op_attribution_split.classification="active_scope_rebuild_first_attributable_step"`
+- carried Tonemap packet still `CLEAR`, rebuilt active scope still `LOAD`
+
+### Exact conclusion
+
+The unchanged RDG-side input is **not** a shared-view ownership bit. It is the attachment tracker field `resource_tracker->is_discardable`, which still arrives at Tonemap as `false` after the clear/ignore checks.
+
+More precisely, the surviving forcing chain on this lane is:
+
+1. `TextureFormat.is_discardable=false`
+2. root tracker creation records that as `discardable_seed=false` with `discardable_seed_contract="texture_format_is_discardable_flag"`
+3. the attachment remains a root tracker (`discardable_provenance="root_texture_create"`, `tracker_has_parent=false`)
+4. RDG therefore sees `resource_tracker->is_discardable=false`
+5. the draw-list recipe takes `source="non_discardable_default_load_contract"`
+6. the live Tonemap/L88-compatible render pass is created with slot 0 already set to `LOAD`
+
+So Task 122 narrows the answer one step further than Task 121: the exact unchanged RDG branch input is the **tracker discardability field itself** (`resource_tracker->is_discardable=false`), and its unchanged upstream source on this repro lane is still the root texture's `TextureFormat.is_discardable=false` seed inherited at root creation.
