@@ -4313,3 +4313,75 @@ Precise QA recipe for the next pass:
   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_bind=`
   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_index_bind=`
 - Keep the existing Vulkan corroboration only as the lane identity check: the crash should remain `submit_serial=9`, tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and last breadcrumb `BLIT_PASS` while the new substep marker shows which narrower bind seam still survives.
+
+### Task 80: QA the fine pre-L88 bind-substep split on the refreshed source-built Vulkan lane
+
+**Bead ID:** `oc-7rh`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-7rh` on start and stay strictly on the fine pre-L88 bind-substep seam. Use `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` on the same source-built host-Vulkan `projection_only__disabled` failing lane, keep `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` plus `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` enabled in every run, and arm exactly one of the new substep envs at a time in this order: `...TRACE_UNIFORM_BIND=1`, `...TRACE_PIPELINE_BIND=1`, `...TRACE_BLEND_CONSTANTS=1`, `...TRACE_VERTEX_BIND=1`, `...TRACE_INDEX_BIND=1`. Before trusting results, verify the runtime gate banner exposes the chosen `trace_* = true` field. Capture the matching fine marker plus the unchanged lane identity (`submit_serial=9`, tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, breadcrumb `BLIT_PASS`), update this plan with artifact roots and the exact tightest surviving seam conclusion, and close the bead when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/{uniform_bind_only,pipeline_bind_only,blend_constants_only,vertex_bind_only,index_bind_only}/`
+
+**Status:** ✅ Complete
+
+**Results:** QA hit the requested five-run fine-substep pass on the same source-built host-Wayland / Vulkan `projection_only__disabled` failing lane, but first had to correct a stale runtime again. The pre-run string check showed the editor binary did not yet expose the new fine gate fields / markers even though the source tree did, so the runtime was rebuilt in place from current source via `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64` before any trustable rerun. Proof of the corrected runtime lives at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/runtime_binary_proof.txt`, which captures the rebuilt binary mtime/sha256 plus the exact gate-banner and marker strings now present in the image, including `trace_uniform_bind=%s`, `trace_pipeline_bind=%s`, `trace_blend_constants=%s`, `trace_vertex_bind=%s`, `trace_index_bind=%s`, and each `temp_diag_first_clipped_preserve_rect_{uniform_bind,pipeline_bind,blend_constants,vertex_bind,index_bind}={` marker.
+
+Artifact root for the corrected QA rerun: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/` with top-level `runtime_binary_proof.txt` and `run_summary.tsv`, plus per-run `exact_command.txt`, `env.txt`, `stdout.log`, `stderr.log`, and `exit_status.txt` under `uniform_bind_only/`, `pipeline_bind_only/`, `blend_constants_only/`, `vertex_bind_only/`, and `index_bind_only/`.
+
+All five runs proved the exact requested gate field before the crash envelope and each emitted the matching fine marker exactly once on the first kept clipped preserve-color rect batch:
+- uniform bind: `temp_diag_clipped_preserve_rect_gate={cap=1,...,trace_uniform_bind=true,trace_pipeline_bind=false,trace_blend_constants=false,trace_vertex_bind=false,trace_index_bind=false}` with `temp_diag_first_clipped_preserve_rect_uniform_bind={batch_index=0,match_ordinal=1,setup_stage=batch_uniform_set_bind,...}`
+- pipeline bind: `temp_diag_clipped_preserve_rect_gate={cap=1,...,trace_uniform_bind=false,trace_pipeline_bind=true,trace_blend_constants=false,trace_vertex_bind=false,trace_index_bind=false}` with `temp_diag_first_clipped_preserve_rect_pipeline_bind={batch_index=0,match_ordinal=1,setup_stage=render_pipeline_bind,...}`
+- blend constants: `temp_diag_clipped_preserve_rect_gate={cap=1,...,trace_uniform_bind=false,trace_pipeline_bind=false,trace_blend_constants=true,trace_vertex_bind=false,trace_index_bind=false}` with `temp_diag_first_clipped_preserve_rect_blend_constants={batch_index=0,match_ordinal=1,setup_stage=blend_constants,applied=false,value=none}`
+- vertex bind: `temp_diag_clipped_preserve_rect_gate={cap=1,...,trace_uniform_bind=false,trace_pipeline_bind=false,trace_blend_constants=false,trace_vertex_bind=true,trace_index_bind=false}` with `temp_diag_first_clipped_preserve_rect_vertex_bind={batch_index=0,match_ordinal=1,setup_stage=vertex_buffer_bind,...}`
+- index bind: `temp_diag_clipped_preserve_rect_gate={cap=1,...,trace_uniform_bind=false,trace_pipeline_bind=false,trace_blend_constants=false,trace_vertex_bind=false,trace_index_bind=true}` with `temp_diag_first_clipped_preserve_rect_index_bind={batch_index=0,match_ordinal=1,setup_stage=index_array_bind,...}`
+
+The unchanged failure signature held in every case: all five runs exited `134`, all five still logged `submit_serial=9`, all five preserved the same command-summary tail ending `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and all five still terminated on `ERROR: Last known breadcrumb: BLIT_PASS`.
+
+Exact QA conclusion: none of the five fine substep traces broke the seam any further. The tightest surviving seam is still the full four-bucket interaction already reported on the same lane — `minimal_changed_bucket_candidates=[["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]]` with `surviving_changed_bucket_count=4` in every run — so the fine pre-L88 bind substeps are observationally downstream of that unchanged interaction rather than an isolated narrower failure owner. The exact recommended next slice is to split the surviving four-bucket family itself, starting with the still-coupled `vertex_input_recipe` family (for example vertex binding layout vs attribute layout / format or vertex-input recipe provenance) while keeping the same refreshed source-built Vulkan `projection_only__disabled` cap=1 lane and the same submit-9 / L87→L88 / `BLIT_PASS` identity check.
+### Task 82: Split the surviving `vertex_input_recipe` family on the cap=1 pre-L88 lane
+
+**Bead ID:** `oc-7l2`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-7l2` and stay inside `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` unless a tiny adjacent seam is strictly required. Starting from the verified fine-substep QA rerun where the tightest surviving family remained `minimal_changed_bucket_candidates=[["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]]`, split `vertex_input_recipe` more finely on the same refreshed source-built host-Vulkan `projection_only__disabled` cap=1 lane. Keep the instrumentation reversible, default-off, and env-gated in the current diagnostic style; prefer honest separation between vertex binding layout, attribute layout/format, and recipe provenance for the first kept clipped preserve-color rect batch; run repo-local validation plus a targeted compile; update this plan with exact files touched and a precise QA recipe; commit/push the Godot repo updates; and close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept the diagnostic slice inside `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and split the still-shared `vertex_input_recipe` family without widening the lane or speculating about fixes. The existing cap=1 gate banner now exposes four new default-off env toggles: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_RECIPE=1` (family switch), `...TRACE_VERTEX_INPUT_BINDING_LAYOUT=1`, `...TRACE_VERTEX_INPUT_ATTRIBUTE_LAYOUT=1`, and `...TRACE_VERTEX_INPUT_PROVENANCE=1`. On the first kept clipped preserve-color rect batch, the rect/ninepatch path now emits exactly-once markers that separate: `temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout=` for the binding recipe (`binding=0`, `stride=sizeof(InstanceData)`, instance frequency); `temp_diag_first_clipped_preserve_rect_vertex_input_attribute_layout=` for the eight quad-instance attributes (`locations 8..15`, offsets, exact RD formats, and stable semantics like `src_rect` / `lights`); and `temp_diag_first_clipped_preserve_rect_vertex_input_provenance=` for the recipe owner / source path (`RendererCanvasRenderRD::shader.quad_vertex_format_id`, `InstanceData` rect/ninepatch branch, active instance buffer RID + byte offset + instance window). The family toggle arms all three substeps together, while the three narrower envs let QA prove each slice independently on the same cap=1 lane.
+
+Validation run: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`; `git diff --check`; and targeted compile `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/renderer_rd/renderer_canvas_render_rd.linuxbsd.editor.dev.x86_64.o` (passed). No staged repro was run in this coder pass.
+
+Precise QA recipe for the next pass:
+- Use the refreshed source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` on the same source-built host-Vulkan `projection_only__disabled` failing lane.
+- Keep the stable lane envs unchanged in every run:
+  - `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1`
+  - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`
+- For a proving run, arm exactly one of these at a time:
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_BINDING_LAYOUT=1`
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_ATTRIBUTE_LAYOUT=1`
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_PROVENANCE=1`
+- Optional combined control: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_RECIPE=1` should flip all three gate fields to `true` and emit all three markers once on the same first kept batch.
+- Before trusting a run, confirm the gate banner exposes the chosen field(s): `trace_vertex_input_recipe=`, `trace_vertex_input_binding_layout=`, `trace_vertex_input_attribute_layout=`, and/or `trace_vertex_input_provenance=`.
+- Capture which new marker(s) appear immediately before the unchanged failure envelope:
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_input_attribute_layout=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_input_provenance=`
+- Keep the existing Vulkan lane identity check unchanged: the crash should still remain `submit_serial=9`, command-summary tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and final breadcrumb `BLIT_PASS` while QA compares whether the surviving changed-bucket family narrows below the current four-bucket set after the vertex-input recipe split.
