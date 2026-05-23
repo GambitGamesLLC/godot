@@ -4211,3 +4211,105 @@ Precise QA recipe for the next pass:
   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_uniform_pipeline=`
   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_draw_binding=`
 - Compare the bucket outputs across reruns to see which prerequisite bucket remains the tightest surviving seam on the cap=1 lane.
+
+### Task 77: QA the split cap=1 clipped preserve-color rect prereq buckets on the source-built Vulkan lane
+
+**Bead ID:** `oc-n4m`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** None
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-n4m` on start and stay strictly on the split cap=1 clipped preserve-color rect prereq seam. Reuse the refreshed source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`, rerun the same host-Vulkan `projection_only__disabled` failing lane with `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` and `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, then arm one bucket at a time in this order: `...TRACE_SCISSOR=1`, `...TRACE_UNIFORM_PIPELINE=1`, `...TRACE_DRAW_BINDING=1`, and optional legacy combined `...TRACE=1`. Capture which bucket marker survives immediately before the usual submit-9 failure envelope, whether the one-batch failure signature still holds, update this plan with artifact roots plus the exact read on the tightest surviving seam, and close the bead when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-20260522-2007/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-20260522-2007/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-20260522-2007/{scissor_only,uniform_pipeline_only,draw_binding_only,combined_control}/`
+
+**Status:** ✅ Complete
+
+**Results:** QA ran all four intended passes from `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` on the same host-Wayland / Vulkan staged harness lane against `projection_only__disabled`, always keeping `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` and `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` enabled. Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-20260522-2007/` with per-run `exact_command.txt`, `env.txt`, `stdout.log`, `stderr.log`, and `exit_status.txt` under `scissor_only/`, `uniform_pipeline_only/`, `draw_binding_only/`, and `combined_control/` plus top-level `run_summary.tsv`.
+
+The one-batch failure signature held unchanged in every run: each pass exited `134`, each hit the same `fence_wait_error submit_serial=9 wait_result=-4`, and each command-summary tail still ended on `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`. But the new split-bucket attribution markers did **not** appear in the three bucketed runs. In `scissor_only/stdout.log`, `uniform_pipeline_only/stdout.log`, and `draw_binding_only/stdout.log`, the gate banner stayed at the older combined-only shape — `temp_diag_clipped_preserve_rect_gate={cap=1,only_first=false,skip_first=false,first_trace=false}` — with **no** `trace_scissor`, `trace_uniform_pipeline`, or `trace_draw_binding` fields and no `temp_diag_first_clipped_preserve_rect_scissor=`, `...uniform_pipeline=`, or `...draw_binding=` lines anywhere in stdout/stderr. The legacy combined-control rerun still worked and logged the older combined markers exactly once: `temp_diag_first_clipped_preserve_rect_batch=` and `temp_diag_first_clipped_preserve_rect_prereq=` together with `temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}`.
+
+Exact QA conclusion: this pass did **not** reach a new tighter surviving prereq bucket because the runtime binary used for the source-built lane is still behaving like the pre-split combined instrumentation build, even though the source tree now contains the split gate banner and bucket markers. So the tightest surviving observable seam remains the legacy combined `temp_diag_first_clipped_preserve_rect_prereq=` packet, and the exact next slice should stay narrow: rebuild/refresh `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` from commit `22a4557c` so the split gate fields (`trace_scissor`, `trace_uniform_pipeline`, `trace_draw_binding`) actually appear at runtime, then rerun the same `cap=1` bucket order without changing the failing lane.
+
+### Task 78: QA rerun the split cap=1 clipped preserve-color rect prereq buckets after refreshing the source-built binary
+
+**Bead ID:** `oc-ivy`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ivy` on start and stay strictly on the split cap=1 clipped preserve-color rect prereq seam. First refresh `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` from commit `22a4557c`, then prove the runtime binary exposes the split gate banner + bucket markers before rerunning the same host-Vulkan `projection_only__disabled` failing lane with `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` and `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Run one bucket at a time in this order: `...TRACE_SCISSOR=1`, `...TRACE_UNIFORM_PIPELINE=1`, `...TRACE_DRAW_BINDING=1`, and only add the legacy combined control if useful. Capture whether the split gate fields now appear, whether each bucket marker emits, whether the one-batch submit-9 / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / exit-134 failure signature holds, update this plan with artifact roots plus the exact read on the tightest surviving seam, and close the bead when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-rerun-verified-20260522-201744/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-rerun-verified-20260522-201744/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-rerun-verified-20260522-201744/{scissor_only,uniform_pipeline_only,draw_binding_only}/`
+
+**Status:** ✅ Complete
+
+**Results:** QA corrected the stale-runtime problem first, then reran only the three requested split buckets on the same source-built host-Wayland / Vulkan `projection_only__disabled` cap=1 lane. The rebuilt editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` was refreshed in-place from source commit `22a4557c` via `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`, and the refreshed runtime was proven before any rerun using `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-rerun-verified-20260522-201744/runtime_binary_proof.txt`. That proof file captures the rebuilt binary mtime/sha256 plus the exact split-banner / split-marker strings now present in the runtime image: `temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s,trace_scissor=%s,trace_uniform_pipeline=%s,trace_draw_binding=%s}`, `temp_diag_first_clipped_preserve_rect_scissor={`, `temp_diag_first_clipped_preserve_rect_uniform_pipeline={`, and `temp_diag_first_clipped_preserve_rect_draw_binding={`.
+
+Artifact root for the corrected rerun: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-rerun-verified-20260522-201744/` with per-run `exact_command.txt`, `env.txt`, `stdout.log`, `stderr.log`, and `exit_status.txt` under `scissor_only/`, `uniform_pipeline_only/`, and `draw_binding_only/`, plus top-level `run_summary.tsv`.
+
+All three reruns now show the refreshed split gate banner exactly as intended:
+- scissor only: `temp_diag_clipped_preserve_rect_gate={cap=1,only_first=false,skip_first=false,first_trace=false,trace_scissor=true,trace_uniform_pipeline=false,trace_draw_binding=false}`
+- uniform/pipeline only: `temp_diag_clipped_preserve_rect_gate={cap=1,only_first=false,skip_first=false,first_trace=false,trace_scissor=false,trace_uniform_pipeline=true,trace_draw_binding=false}`
+- draw-binding only: `temp_diag_clipped_preserve_rect_gate={cap=1,only_first=false,skip_first=false,first_trace=false,trace_scissor=false,trace_uniform_pipeline=false,trace_draw_binding=true}`
+
+Each bucket marker also emits exactly once on the first kept clipped preserve-color rect batch:
+- scissor: `temp_diag_first_clipped_preserve_rect_scissor={batch_index=0,match_ordinal=1,setup_stage=scissor_reestablishment,reestablished=true,scissor_state_after={enabled=true,rect={x=16.000000,y=16.000000,w=504.000000,h=460.000000}}}`
+- uniform/pipeline: `temp_diag_first_clipped_preserve_rect_uniform_pipeline={batch_index=0,match_ordinal=1,setup_stage=batch_uniform_set_pipeline_pairing,material_uniform_set=none,batch_uniform_set={rid=11338713661474,rebound=true},shader_blend_mode=mix,pipeline={rid=11343008628747,vertex_format=2,render_primitive=triangles,shader_variant=quad,use_lighting=false,use_msdf=false,use_lcd=false,lcd_blend=false}}`
+- draw-binding: `temp_diag_first_clipped_preserve_rect_draw_binding={batch_index=0,match_ordinal=1,setup_stage=draw_binding_package,instance_buffer=11325828759567,instance_start=0,instance_count=27,vertex_offset_bytes=0,index_array=665719930881,blend_constants_applied=false}`
+
+The one-batch failure signature held unchanged in every corrected split run: each pass exited `134`, each still logged `queue_submit submit_serial=9`, each still preserved the same `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` tail, and each still collapsed to `ERROR: Last known breadcrumb: BLIT_PASS`. Exact QA conclusion after the stale-binary correction: the split markers now work and prove the refreshed binary was actually exercised, but **all three prerequisite buckets survive cleanly on the same failing one-batch lane**, so this retry does not isolate a single tighter prereq bucket. The exact next slice should remain narrow: add another attribution split inside the still-shared first-kept `pre_l88_draw` packet (for example, finer separation inside the uniform/pipeline bind sequence or the vertex/index binding substeps) while keeping the same refreshed source-built Vulkan `projection_only__disabled` cap=1 lane.
+
+### Task 79: Split the shared cap=1 `pre_l88_draw` packet into finer bind substeps
+
+**Bead ID:** `oc-cep`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-cep` and stay inside `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` unless a tiny adjacent seam is strictly required. Starting from the verified cap=1 rerun where scissor, uniform/pipeline, and draw-binding buckets all survived on the same one-batch failing lane, split the still-shared `pre_l88_draw` packet more finely. Prioritize separate attribution for uniform/pipeline bind substeps and vertex/index/draw-binding substeps, keep the diagnostic reversible and default-off in the existing env-gated style, run repo-local validation plus a targeted compile, update this plan with exact files touched and precise QA instructions, commit/push the Godot repo updates, and close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept the change entirely inside `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and split the still-shared first-kept `pre_l88_draw` packet into narrower default-off bind markers without reopening any broader seam. The existing family-level envs (`...TRACE_UNIFORM_PIPELINE`, `...TRACE_DRAW_BINDING`) still work, but the cap=1 lane now also exposes five finer substep toggles that each emit exactly once for the first kept clipped preserve-color rect batch: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_UNIFORM_BIND=1` logs `temp_diag_first_clipped_preserve_rect_uniform_bind=` at the cached batch-uniform-set bind seam; `...TRACE_PIPELINE_BIND=1` logs `..._pipeline_bind=` at the render-pipeline bind seam; `...TRACE_BLEND_CONSTANTS=1` logs `..._blend_constants=` immediately after optional blend-constant application; `...TRACE_VERTEX_BIND=1` logs `..._vertex_bind=` at the vertex-buffer bind seam; and `...TRACE_INDEX_BIND=1` logs `..._index_bind=` at the index-array bind seam. The gate banner now prints all five new toggles alongside the earlier family toggles so QA can prove the refreshed binary and exact attribution path being exercised. This sharpens the next discriminator on the same unchanged one-batch `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` lane by letting QA ask whether the surviving seam still tracks the batch uniform bind, the pipeline bind, blend constants, vertex-buffer bind, or index-array bind individually rather than only the broader family packets.
+
+Validation run: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`; `git diff --check`; and targeted compile `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/renderer_rd/renderer_canvas_render_rd.linuxbsd.editor.dev.x86_64.o` (passed).
+
+Precise QA recipe for the next pass:
+- Use the refreshed source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` on the same source-built host-Vulkan `projection_only__disabled` failing lane.
+- Keep the stable lane envs unchanged:
+  - `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1`
+  - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`
+- Arm exactly one of these new substep envs at a time for the first pass:
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_UNIFORM_BIND=1`
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_BIND=1`
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_CONSTANTS=1`
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_BIND=1`
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_INDEX_BIND=1`
+- Confirm the gate banner reflects the chosen toggle, e.g. `trace_uniform_bind=true` / `trace_pipeline_bind=true` / `trace_blend_constants=true` / `trace_vertex_bind=true` / `trace_index_bind=true`.
+- Capture which exact marker still appears immediately before the unchanged failure envelope:
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_uniform_bind=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_pipeline_bind=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_constants=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_bind=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_index_bind=`
+- Keep the existing Vulkan corroboration only as the lane identity check: the crash should remain `submit_serial=9`, tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and last breadcrumb `BLIT_PASS` while the new substep marker shows which narrower bind seam still survives.

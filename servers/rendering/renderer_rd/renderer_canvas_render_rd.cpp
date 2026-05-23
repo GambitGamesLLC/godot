@@ -192,6 +192,11 @@ thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_combined_trace_enab
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_scissor_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = false;
 thread_local const void *gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr = nullptr;
 thread_local int gdgs_temp_diag_first_clipped_preserve_rect_batch_index = -1;
 thread_local int gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal = -1;
@@ -204,6 +209,11 @@ thread_local uint64_t gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_s
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_index_bind_bucket_logged = false;
 thread_local int gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode = RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
@@ -2539,7 +2549,12 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	const bool gdgs_temp_diag_first_rect_trace_scissor = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_SCISSOR");
 	const bool gdgs_temp_diag_first_rect_trace_uniform_pipeline = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_UNIFORM_PIPELINE");
 	const bool gdgs_temp_diag_first_rect_trace_draw_binding = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_DRAW_BINDING");
-	const bool gdgs_temp_diag_first_rect_trace_any = gdgs_temp_diag_first_rect_trace || gdgs_temp_diag_first_rect_trace_scissor || gdgs_temp_diag_first_rect_trace_uniform_pipeline || gdgs_temp_diag_first_rect_trace_draw_binding;
+	const bool gdgs_temp_diag_first_rect_trace_uniform_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_UNIFORM_BIND");
+	const bool gdgs_temp_diag_first_rect_trace_pipeline_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_BIND");
+	const bool gdgs_temp_diag_first_rect_trace_blend_constants = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_CONSTANTS");
+	const bool gdgs_temp_diag_first_rect_trace_vertex_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_BIND");
+	const bool gdgs_temp_diag_first_rect_trace_index_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_INDEX_BIND");
+	const bool gdgs_temp_diag_first_rect_trace_any = gdgs_temp_diag_first_rect_trace || gdgs_temp_diag_first_rect_trace_scissor || gdgs_temp_diag_first_rect_trace_uniform_pipeline || gdgs_temp_diag_first_rect_trace_draw_binding || gdgs_temp_diag_first_rect_trace_uniform_bind || gdgs_temp_diag_first_rect_trace_pipeline_bind || gdgs_temp_diag_first_rect_trace_blend_constants || gdgs_temp_diag_first_rect_trace_vertex_bind || gdgs_temp_diag_first_rect_trace_index_bind;
 	int gdgs_temp_diag_rect_preserve_clip_match_count = 0;
 	int gdgs_temp_diag_rect_preserve_clip_skipped_count = 0;
 
@@ -2548,6 +2563,11 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_scissor_trace_enabled = gdgs_temp_diag_first_rect_trace_scissor;
 	gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_trace_enabled = gdgs_temp_diag_first_rect_trace_uniform_pipeline;
 	gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_enabled = gdgs_temp_diag_first_rect_trace_draw_binding;
+	gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_uniform_bind;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_pipeline_bind;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_trace_enabled = gdgs_temp_diag_first_rect_trace_blend_constants;
+	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_vertex_bind;
+	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_index_bind;
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr = nullptr;
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_index = -1;
 	gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal = -1;
@@ -2560,11 +2580,16 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode = RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
 	if (gdgs_temp_diag_rect_preserve_clip_gate_active || gdgs_temp_diag_first_rect_trace_any) {
-		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s,trace_scissor=%s,trace_uniform_pipeline=%s,trace_draw_binding=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false", gdgs_temp_diag_first_rect_trace ? "true" : "false", gdgs_temp_diag_first_rect_trace_scissor ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_pipeline ? "true" : "false", gdgs_temp_diag_first_rect_trace_draw_binding ? "true" : "false"));
+		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s,trace_scissor=%s,trace_uniform_pipeline=%s,trace_draw_binding=%s,trace_uniform_bind=%s,trace_pipeline_bind=%s,trace_blend_constants=%s,trace_vertex_bind=%s,trace_index_bind=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false", gdgs_temp_diag_first_rect_trace ? "true" : "false", gdgs_temp_diag_first_rect_trace_scissor ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_pipeline ? "true" : "false", gdgs_temp_diag_first_rect_trace_draw_binding ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_constants ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_index_bind ? "true" : "false"));
 	}
 
 	Item *current_clip = nullptr;
@@ -2702,6 +2727,11 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_scissor_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr = nullptr;
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_index = -1;
 	gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal = -1;
@@ -2710,6 +2740,11 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
 	state.current_batch_index = 0;
@@ -3424,6 +3459,16 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 			state.current_batch_uniform_set = *uniform_set;
 			RD::get_singleton()->draw_list_bind_uniform_set(p_draw_list, *uniform_set, BATCH_UNIFORM_SET);
 		}
+		if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_bucket_logged) {
+			gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_bucket_logged = true;
+			print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_uniform_bind={batch_index=%d,match_ordinal=%d,setup_stage=batch_uniform_set_bind,material_uniform_set=%s,batch_uniform_set={rid=%s,rebound=%s,active_after=%s}}",
+					gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+					gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+					gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set != 0 ? itos(gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set) : String("none"),
+					gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set != 0 ? itos(gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set) : String("none"),
+					gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound ? "true" : "false",
+					state.current_batch_uniform_set.is_valid() ? gdgs_rid_to_string(state.current_batch_uniform_set) : String("none")));
+		}
 	}
 
 	RID pipeline;
@@ -3444,6 +3489,24 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 			pipeline_key.vertex_format_id = shader.quad_vertex_format_id;
 			pipeline = _get_pipeline_specialization_or_ubershader(p_shader_data, pipeline_key, push_constant);
 			RD::get_singleton()->draw_list_bind_render_pipeline(p_draw_list, pipeline);
+			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged) {
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged = true;
+				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_pipeline_bind={batch_index=%d,match_ordinal=%d,setup_stage=render_pipeline_bind,material_uniform_set=%s,batch_uniform_set={rid=%s,rebound=%s},shader_blend_mode=%s,pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s,use_lighting=%s,use_msdf=%s,use_lcd=%s,lcd_blend=%s}}",
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+						gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+						gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set != 0 ? itos(gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set) : String("none"),
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set != 0 ? itos(gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set) : String("none"),
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound ? "true" : "false",
+						gdgs_canvas_blend_mode_name(gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode),
+						gdgs_rid_to_string(pipeline),
+						(int)shader.quad_vertex_format_id,
+						gdgs_canvas_render_primitive_name(p_batch->render_primitive),
+						gdgs_canvas_shader_variant_name(p_batch->shader_variant),
+						p_batch->use_lighting ? "true" : "false",
+						p_batch->use_msdf ? "true" : "false",
+						p_batch->use_lcd ? "true" : "false",
+						p_batch->has_blend ? "true" : "false"));
+			}
 			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged) {
 				gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged = true;
 				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_uniform_pipeline={batch_index=%d,match_ordinal=%d,setup_stage=batch_uniform_set_pipeline_pairing,material_uniform_set=%s,batch_uniform_set={rid=%s,rebound=%s},shader_blend_mode=%s,pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s,use_lighting=%s,use_msdf=%s,use_lcd=%s,lcd_blend=%s}}",
@@ -3465,12 +3528,39 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 			if (p_batch->has_blend) {
 				RD::get_singleton()->draw_list_set_blend_constants(p_draw_list, p_batch->modulate);
 			}
+			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_bucket_logged) {
+				gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_bucket_logged = true;
+				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_constants={batch_index=%d,match_ordinal=%d,setup_stage=blend_constants,applied=%s,value=%s}",
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+						gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+						p_batch->has_blend ? "true" : "false",
+						p_batch->has_blend ? vformat("{r=%f,g=%f,b=%f,a=%f}", p_batch->modulate.r, p_batch->modulate.g, p_batch->modulate.b, p_batch->modulate.a) : String("none")));
+			}
 
 			RD::get_singleton()->draw_list_set_push_constant(p_draw_list, &push_constant, sizeof(push_constant));
 			FixedVector<RID, 1> vb = { p_batch->instance_buffer };
 			FixedVector<uint64_t, 1> vo = { uint64_t(p_batch->start) * sizeof(InstanceData) };
 			RD::get_singleton()->draw_list_bind_vertex_buffers_format(p_draw_list, shader.quad_vertex_format_id, 1, vb, vo);
+			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_bucket_logged) {
+				gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_bucket_logged = true;
+				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_bind={batch_index=%d,match_ordinal=%d,setup_stage=vertex_buffer_bind,vertex_format=%d,instance_buffer=%s,instance_start=%d,instance_count=%d,vertex_offset_bytes=%d}",
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+						gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+						(int)shader.quad_vertex_format_id,
+						gdgs_rid_to_string(p_batch->instance_buffer),
+						p_batch->start,
+						p_batch->instance_count,
+						(int)vo[0]));
+			}
 			RD::get_singleton()->draw_list_bind_index_array(p_draw_list, shader.quad_index_array);
+			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_index_bind_bucket_logged) {
+				gdgs_temp_diag_first_clipped_preserve_rect_index_bind_bucket_logged = true;
+				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_index_bind={batch_index=%d,match_ordinal=%d,setup_stage=index_array_bind,index_array=%s,render_primitive=%s}",
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+						gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+						gdgs_rid_to_string(shader.quad_index_array),
+						gdgs_canvas_render_primitive_name(p_batch->render_primitive)));
+			}
 			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged) {
 				gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged = true;
 				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_draw_binding={batch_index=%d,match_ordinal=%d,setup_stage=draw_binding_package,instance_buffer=%s,instance_start=%d,instance_count=%d,vertex_offset_bytes=%d,index_array=%s,blend_constants_applied=%s}",
