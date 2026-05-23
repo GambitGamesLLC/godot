@@ -93,6 +93,87 @@ bool gdgs_canvas_blend_mode_uses_prior_color(int p_blend_mode) {
 	}
 }
 
+const char *gdgs_canvas_blend_factor_name(RD::BlendFactor p_factor) {
+	switch (p_factor) {
+		case RD::BLEND_FACTOR_ZERO:
+			return "zero";
+		case RD::BLEND_FACTOR_ONE:
+			return "one";
+		case RD::BLEND_FACTOR_SRC_COLOR:
+			return "src_color";
+		case RD::BLEND_FACTOR_ONE_MINUS_SRC_COLOR:
+			return "one_minus_src_color";
+		case RD::BLEND_FACTOR_DST_COLOR:
+			return "dst_color";
+		case RD::BLEND_FACTOR_ONE_MINUS_DST_COLOR:
+			return "one_minus_dst_color";
+		case RD::BLEND_FACTOR_SRC_ALPHA:
+			return "src_alpha";
+		case RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:
+			return "one_minus_src_alpha";
+		case RD::BLEND_FACTOR_DST_ALPHA:
+			return "dst_alpha";
+		case RD::BLEND_FACTOR_ONE_MINUS_DST_ALPHA:
+			return "one_minus_dst_alpha";
+		case RD::BLEND_FACTOR_CONSTANT_COLOR:
+			return "constant_color";
+		case RD::BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR:
+			return "one_minus_constant_color";
+		case RD::BLEND_FACTOR_CONSTANT_ALPHA:
+			return "constant_alpha";
+		case RD::BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA:
+			return "one_minus_constant_alpha";
+		case RD::BLEND_FACTOR_SRC_ALPHA_SATURATE:
+			return "src_alpha_saturate";
+		case RD::BLEND_FACTOR_SRC1_COLOR:
+			return "src1_color";
+		case RD::BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
+			return "one_minus_src1_color";
+		case RD::BLEND_FACTOR_SRC1_ALPHA:
+			return "src1_alpha";
+		case RD::BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
+			return "one_minus_src1_alpha";
+		default:
+			return "unknown";
+	}
+}
+
+const char *gdgs_canvas_blend_op_name(RD::BlendOperation p_op) {
+	switch (p_op) {
+		case RD::BLEND_OP_ADD:
+			return "add";
+		case RD::BLEND_OP_SUBTRACT:
+			return "subtract";
+		case RD::BLEND_OP_REVERSE_SUBTRACT:
+			return "reverse_subtract";
+		case RD::BLEND_OP_MINIMUM:
+			return "minimum";
+		case RD::BLEND_OP_MAXIMUM:
+			return "maximum";
+		default:
+			return "unknown";
+	}
+}
+
+void gdgs_canvas_compute_blend_recipe(RendererRD::MaterialStorage::ShaderData::BlendMode p_blend_mode, bool p_lcd_blend, RD::PipelineColorBlendState::Attachment &r_attachment, uint32_t &r_dynamic_state_flags, const char *&r_recipe_branch) {
+	r_attachment = RD::PipelineColorBlendState::Attachment();
+	r_dynamic_state_flags = 0;
+	r_recipe_branch = p_lcd_blend ? "lcd_blend_override" : "shader_blend_mode_attachment";
+
+	if (p_lcd_blend) {
+		r_attachment.enable_blend = true;
+		r_attachment.alpha_blend_op = RD::BLEND_OP_ADD;
+		r_attachment.color_blend_op = RD::BLEND_OP_ADD;
+		r_attachment.src_color_blend_factor = RD::BLEND_FACTOR_CONSTANT_COLOR;
+		r_attachment.dst_color_blend_factor = RD::BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+		r_attachment.src_alpha_blend_factor = RD::BLEND_FACTOR_ONE;
+		r_attachment.dst_alpha_blend_factor = RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		r_dynamic_state_flags = RD::DYNAMIC_STATE_BLEND_CONSTANTS;
+	} else {
+		r_attachment = RendererRD::MaterialStorage::ShaderData::blend_mode_to_blend_attachment(p_blend_mode);
+	}
+}
+
 bool gdgs_debug_env_bool_enabled(const char *p_name) {
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 	if (!OS::get_singleton()->has_environment(p_name)) {
@@ -240,6 +321,9 @@ thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_trace_enabled = false;
@@ -260,6 +344,9 @@ thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_bucket_logged = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_bucket_logged = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_bucket_logged = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_index_bind_bucket_logged = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_bucket_logged = false;
@@ -1731,18 +1818,9 @@ void RendererCanvasRenderRD::CanvasShaderData::_create_pipeline(PipelineKey p_pi
 	RD::PipelineColorBlendState blend_state;
 	RD::PipelineColorBlendState::Attachment attachment;
 	uint32_t dynamic_state_flags = 0;
-	if (p_pipeline_key.lcd_blend) {
-		attachment.enable_blend = true;
-		attachment.alpha_blend_op = RD::BLEND_OP_ADD;
-		attachment.color_blend_op = RD::BLEND_OP_ADD;
-		attachment.src_color_blend_factor = RD::BLEND_FACTOR_CONSTANT_COLOR;
-		attachment.dst_color_blend_factor = RD::BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
-		attachment.src_alpha_blend_factor = RD::BLEND_FACTOR_ONE;
-		attachment.dst_alpha_blend_factor = RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-		dynamic_state_flags = RD::DYNAMIC_STATE_BLEND_CONSTANTS;
-	} else {
-		attachment = RendererRD::MaterialStorage::ShaderData::blend_mode_to_blend_attachment(blend_mode_rd);
-	}
+	const char *blend_recipe_branch = nullptr;
+	gdgs_canvas_compute_blend_recipe(blend_mode_rd, p_pipeline_key.lcd_blend, attachment, dynamic_state_flags, blend_recipe_branch);
+	(void)blend_recipe_branch;
 
 	blend_state.attachments.push_back(attachment);
 
@@ -2603,13 +2681,17 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	const bool gdgs_temp_diag_first_rect_trace_uniform_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_UNIFORM_BIND");
 	const bool gdgs_temp_diag_first_rect_trace_pipeline_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_BIND");
 	const bool gdgs_temp_diag_first_rect_trace_blend_constants = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_CONSTANTS");
+	const bool gdgs_temp_diag_first_rect_trace_blend_recipe = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_RECIPE");
+	const bool gdgs_temp_diag_first_rect_trace_blend_recipe_selector = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_RECIPE_SELECTOR");
+	const bool gdgs_temp_diag_first_rect_trace_blend_recipe_attachment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_RECIPE_ATTACHMENT");
+	const bool gdgs_temp_diag_first_rect_trace_blend_recipe_dynamic_state = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_RECIPE_DYNAMIC_STATE");
 	const bool gdgs_temp_diag_first_rect_trace_vertex_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_BIND");
 	const bool gdgs_temp_diag_first_rect_trace_index_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_INDEX_BIND");
 	const bool gdgs_temp_diag_first_rect_trace_vertex_input_recipe = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_RECIPE");
 	const bool gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_BINDING_LAYOUT");
 	const bool gdgs_temp_diag_first_rect_trace_vertex_input_attribute_layout = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_ATTRIBUTE_LAYOUT");
 	const bool gdgs_temp_diag_first_rect_trace_vertex_input_provenance = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_PROVENANCE");
-	const bool gdgs_temp_diag_first_rect_trace_any = gdgs_temp_diag_first_rect_trace || gdgs_temp_diag_first_rect_trace_scissor || gdgs_temp_diag_first_rect_trace_uniform_pipeline || gdgs_temp_diag_first_rect_trace_draw_binding || gdgs_temp_diag_first_rect_trace_uniform_bind || gdgs_temp_diag_first_rect_trace_pipeline_bind || gdgs_temp_diag_first_rect_trace_blend_constants || gdgs_temp_diag_first_rect_trace_vertex_bind || gdgs_temp_diag_first_rect_trace_index_bind || gdgs_temp_diag_first_rect_trace_vertex_input_recipe || gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout || gdgs_temp_diag_first_rect_trace_vertex_input_attribute_layout || gdgs_temp_diag_first_rect_trace_vertex_input_provenance;
+	const bool gdgs_temp_diag_first_rect_trace_any = gdgs_temp_diag_first_rect_trace || gdgs_temp_diag_first_rect_trace_scissor || gdgs_temp_diag_first_rect_trace_uniform_pipeline || gdgs_temp_diag_first_rect_trace_draw_binding || gdgs_temp_diag_first_rect_trace_uniform_bind || gdgs_temp_diag_first_rect_trace_pipeline_bind || gdgs_temp_diag_first_rect_trace_blend_constants || gdgs_temp_diag_first_rect_trace_blend_recipe || gdgs_temp_diag_first_rect_trace_blend_recipe_selector || gdgs_temp_diag_first_rect_trace_blend_recipe_attachment || gdgs_temp_diag_first_rect_trace_blend_recipe_dynamic_state || gdgs_temp_diag_first_rect_trace_vertex_bind || gdgs_temp_diag_first_rect_trace_index_bind || gdgs_temp_diag_first_rect_trace_vertex_input_recipe || gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout || gdgs_temp_diag_first_rect_trace_vertex_input_attribute_layout || gdgs_temp_diag_first_rect_trace_vertex_input_provenance;
 	int gdgs_temp_diag_rect_preserve_clip_match_count = 0;
 	int gdgs_temp_diag_rect_preserve_clip_skipped_count = 0;
 
@@ -2621,6 +2703,9 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_uniform_bind;
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_pipeline_bind;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_trace_enabled = gdgs_temp_diag_first_rect_trace_blend_constants;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_trace_enabled = gdgs_temp_diag_first_rect_trace_blend_recipe || gdgs_temp_diag_first_rect_trace_blend_recipe_selector;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_trace_enabled = gdgs_temp_diag_first_rect_trace_blend_recipe || gdgs_temp_diag_first_rect_trace_blend_recipe_attachment;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_trace_enabled = gdgs_temp_diag_first_rect_trace_blend_recipe || gdgs_temp_diag_first_rect_trace_blend_recipe_dynamic_state;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_vertex_bind;
 	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_index_bind;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_trace_enabled = gdgs_temp_diag_first_rect_trace_vertex_input_recipe || gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout;
@@ -2641,6 +2726,9 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_bucket_logged = false;
@@ -2650,7 +2738,7 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
 	if (gdgs_temp_diag_rect_preserve_clip_gate_active || gdgs_temp_diag_first_rect_trace_any) {
-		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s,trace_scissor=%s,trace_uniform_pipeline=%s,trace_draw_binding=%s,trace_uniform_bind=%s,trace_pipeline_bind=%s,trace_blend_constants=%s,trace_vertex_bind=%s,trace_index_bind=%s,trace_vertex_input_recipe=%s,trace_vertex_input_binding_layout=%s,trace_vertex_input_attribute_layout=%s,trace_vertex_input_provenance=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false", gdgs_temp_diag_first_rect_trace ? "true" : "false", gdgs_temp_diag_first_rect_trace_scissor ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_pipeline ? "true" : "false", gdgs_temp_diag_first_rect_trace_draw_binding ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_constants ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_index_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_recipe ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_attribute_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_provenance ? "true" : "false"));
+		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s,trace_scissor=%s,trace_uniform_pipeline=%s,trace_draw_binding=%s,trace_uniform_bind=%s,trace_pipeline_bind=%s,trace_blend_constants=%s,trace_blend_recipe=%s,trace_blend_recipe_selector=%s,trace_blend_recipe_attachment=%s,trace_blend_recipe_dynamic_state=%s,trace_vertex_bind=%s,trace_index_bind=%s,trace_vertex_input_recipe=%s,trace_vertex_input_binding_layout=%s,trace_vertex_input_attribute_layout=%s,trace_vertex_input_provenance=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false", gdgs_temp_diag_first_rect_trace ? "true" : "false", gdgs_temp_diag_first_rect_trace_scissor ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_pipeline ? "true" : "false", gdgs_temp_diag_first_rect_trace_draw_binding ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_constants ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_selector ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_attachment ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_dynamic_state ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_index_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_recipe ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_attribute_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_provenance ? "true" : "false"));
 	}
 
 	Item *current_clip = nullptr;
@@ -2791,6 +2879,9 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_trace_enabled = false;
@@ -2807,6 +2898,9 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_uniform_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_bucket_logged = false;
@@ -3555,6 +3649,55 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 
 			pipeline_key.vertex_format_id = shader.quad_vertex_format_id;
 			pipeline = _get_pipeline_specialization_or_ubershader(p_shader_data, pipeline_key, push_constant);
+			const RendererRD::MaterialStorage::ShaderData::BlendMode gdgs_blend_mode_rd = RendererRD::MaterialStorage::ShaderData::BlendMode(gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode);
+			RD::PipelineColorBlendState::Attachment gdgs_blend_recipe_attachment;
+			uint32_t gdgs_blend_recipe_dynamic_state_flags = 0;
+			const char *gdgs_blend_recipe_branch = nullptr;
+			gdgs_canvas_compute_blend_recipe(gdgs_blend_mode_rd, p_batch->has_blend, gdgs_blend_recipe_attachment, gdgs_blend_recipe_dynamic_state_flags, gdgs_blend_recipe_branch);
+			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch) {
+				if (gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_bucket_logged) {
+					gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_bucket_logged = true;
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_selector={batch_index=%d,match_ordinal=%d,setup_stage=blend_recipe_selector,shader_blend_mode=%s,uses_prior_color=%s,use_lcd=%s,has_blend=%s,recipe_branch=%s,pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s}}",
+							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+							gdgs_canvas_blend_mode_name(gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode),
+							gdgs_canvas_blend_mode_uses_prior_color(gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode) ? "true" : "false",
+							p_batch->use_lcd ? "true" : "false",
+							p_batch->has_blend ? "true" : "false",
+							gdgs_blend_recipe_branch,
+							gdgs_rid_to_string(pipeline),
+							(int)shader.quad_vertex_format_id,
+							gdgs_canvas_render_primitive_name(p_batch->render_primitive),
+							gdgs_canvas_shader_variant_name(p_batch->shader_variant)));
+				}
+				if (gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_bucket_logged) {
+					gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_bucket_logged = true;
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_attachment={batch_index=%d,match_ordinal=%d,setup_stage=blend_recipe_attachment,enable_blend=%s,color_op=%s,alpha_op=%s,src_color=%s,dst_color=%s,src_alpha=%s,dst_alpha=%s,write_mask={r=%s,g=%s,b=%s,a=%s}}",
+							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+							gdgs_blend_recipe_attachment.enable_blend ? "true" : "false",
+							gdgs_canvas_blend_op_name(gdgs_blend_recipe_attachment.color_blend_op),
+							gdgs_canvas_blend_op_name(gdgs_blend_recipe_attachment.alpha_blend_op),
+							gdgs_canvas_blend_factor_name(gdgs_blend_recipe_attachment.src_color_blend_factor),
+							gdgs_canvas_blend_factor_name(gdgs_blend_recipe_attachment.dst_color_blend_factor),
+							gdgs_canvas_blend_factor_name(gdgs_blend_recipe_attachment.src_alpha_blend_factor),
+							gdgs_canvas_blend_factor_name(gdgs_blend_recipe_attachment.dst_alpha_blend_factor),
+							gdgs_blend_recipe_attachment.write_r ? "true" : "false",
+							gdgs_blend_recipe_attachment.write_g ? "true" : "false",
+							gdgs_blend_recipe_attachment.write_b ? "true" : "false",
+							gdgs_blend_recipe_attachment.write_a ? "true" : "false"));
+				}
+				if (gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_bucket_logged) {
+					gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_bucket_logged = true;
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state={batch_index=%d,match_ordinal=%d,setup_stage=blend_recipe_dynamic_state,dynamic_state_flags=0x%x,blend_constants_dynamic=%s,blend_constants_applied=%s,blend_constants_value=%s}",
+							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+							gdgs_blend_recipe_dynamic_state_flags,
+							(gdgs_blend_recipe_dynamic_state_flags & RD::DYNAMIC_STATE_BLEND_CONSTANTS) != 0 ? "true" : "false",
+							p_batch->has_blend ? "true" : "false",
+							p_batch->has_blend ? vformat("{r=%f,g=%f,b=%f,a=%f}", p_batch->modulate.r, p_batch->modulate.g, p_batch->modulate.b, p_batch->modulate.a) : String("none")));
+				}
+			}
 			RD::get_singleton()->draw_list_bind_render_pipeline(p_draw_list, pipeline);
 			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged) {
 				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_bind_bucket_logged = true;
