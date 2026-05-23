@@ -268,6 +268,10 @@ String gdgs_rid_to_string(RID p_rid) {
 	return p_rid.is_valid() ? itos(p_rid.get_id()) : String("null");
 }
 
+String gdgs_u64_hex_string(uint64_t p_value) {
+	return String("0x") + String::num_uint64(p_value, 16);
+}
+
 const char *gdgs_canvas_data_format_name(RD::DataFormat p_format) {
 	switch (p_format) {
 		case RD::DATA_FORMAT_R32G32B32A32_SFLOAT:
@@ -366,6 +370,12 @@ thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_specialization_cons
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_descriptor_shape_bucket_logged = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_push_constant_shape_bucket_logged = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_context_reached = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_version_valid = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_rid_valid = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_uses_default_shader = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_ubershader = false;
+thread_local uint64_t gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_pipeline_hash = 0;
 thread_local int gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode = RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
@@ -2772,6 +2782,12 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_descriptor_shape_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_push_constant_shape_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_context_reached = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_version_valid = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_rid_valid = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_uses_default_shader = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_ubershader = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_pipeline_hash = 0;
 	gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode = RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
@@ -2906,6 +2922,24 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	if (gdgs_temp_diag_rect_preserve_clip_gate_active) {
 		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate_result={matched=%d,skipped=%d}", gdgs_temp_diag_rect_preserve_clip_match_count, gdgs_temp_diag_rect_preserve_clip_skipped_count));
 	}
+	if (gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_trace_enabled) {
+		const char *gdgs_pipeline_layout_provenance_reason = gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == nullptr ? "no_matching_batch" : (gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_bucket_logged ? "emitted" : (gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_context_reached ? "context_reached_but_full_marker_missing" : "setup_block_not_reached"));
+		const char *gdgs_pipeline_layout_provenance_shader_source = gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_context_reached ? (gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_uses_default_shader ? "default_canvas_shader" : "material_shader_override") : "unknown";
+		const char *gdgs_pipeline_layout_provenance_binding_shape_class = gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set != 0 ? "base_material_transforms_batch" : "base_transforms_batch_without_material";
+		print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_status={batch_index=%d,match_ordinal=%d,trace_enabled=true,batch_captured=%s,context_reached=%s,full_marker_emitted=%s,reason=%s,shader_source=%s,shader_version_valid=%s,shader_rid_valid=%s,pipeline_hash=%s,ubershader=%s,binding_shape_class=%s}",
+				gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+				gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+				gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr != nullptr ? "true" : "false",
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_context_reached ? "true" : "false",
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_bucket_logged ? "true" : "false",
+				gdgs_pipeline_layout_provenance_reason,
+				gdgs_pipeline_layout_provenance_shader_source,
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_version_valid ? "true" : "false",
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_rid_valid ? "true" : "false",
+				gdgs_u64_hex_string(gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_pipeline_hash),
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_ubershader ? "true" : "false",
+				gdgs_pipeline_layout_provenance_binding_shape_class));
+	}
 
 	RD::get_singleton()->draw_list_end();
 
@@ -2962,6 +2996,12 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_descriptor_shape_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_push_constant_shape_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_context_reached = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_version_valid = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_rid_valid = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_uses_default_shader = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_ubershader = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_pipeline_hash = 0;
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
 	state.current_batch_index = 0;
@@ -3753,6 +3793,14 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 				const char *gdgs_pipeline_layout_binding_shape_class = gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set != 0 ? "base_material_transforms_batch" : "base_transforms_batch_without_material";
 				RID gdgs_pipeline_layout_shader_rid = p_shader_data->get_shader(p_batch->shader_variant, pipeline_key.ubershader);
 				const bool gdgs_pipeline_layout_uses_default_shader = p_shader_data == shader.default_version_data;
+				const bool gdgs_pipeline_layout_shader_version_valid = p_shader_data->version.is_valid();
+				const bool gdgs_pipeline_layout_shader_rid_valid = gdgs_pipeline_layout_shader_rid.is_valid();
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_context_reached = true;
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_version_valid = gdgs_pipeline_layout_shader_version_valid;
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_shader_rid_valid = gdgs_pipeline_layout_shader_rid_valid;
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_uses_default_shader = gdgs_pipeline_layout_uses_default_shader;
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_ubershader = pipeline_key.ubershader;
+				gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_pipeline_hash = pipeline_key.hash();
 				if (gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_descriptor_shape_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_descriptor_shape_bucket_logged) {
 					gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_descriptor_shape_bucket_logged = true;
 					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_pipeline_layout_descriptor_shape={batch_index=%d,match_ordinal=%d,setup_stage=pipeline_layout_descriptor_shape,shader_layout_set_count=4,actively_bound_set_count=%d,binding_shape_class=%s,descriptor_sets=[{set=0,role=base_framebuffer_scope,rid=%s},{set=1,role=material_shader_params,rid=%s,bound=%s},{set=2,role=canvas_transforms,rid=%s},{set=3,role=batch_texture_state,rid=%s,rebound=%s}]}",
@@ -3788,13 +3836,13 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 				}
 				if (gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_bucket_logged) {
 					gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_bucket_logged = true;
-					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance={batch_index=%d,match_ordinal=%d,setup_stage=pipeline_layout_provenance,recipe_owner=CanvasShaderData::pipeline_hash_map,shader_source=%s,shader_version=%s,shader_rid=%s,pipeline_hash=0x%llx,ubershader=%s,framebuffer_format_id=%d,vertex_format_id=%d,render_primitive=%s,shader_variant=%s,lcd_blend=%s,binding_shape_class=%s}",
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance={batch_index=%d,match_ordinal=%d,setup_stage=pipeline_layout_provenance,recipe_owner=CanvasShaderData::pipeline_hash_map,shader_source=%s,shader_version=%s,shader_rid=%s,pipeline_hash=%s,ubershader=%s,framebuffer_format_id=%d,vertex_format_id=%d,render_primitive=%s,shader_variant=%s,lcd_blend=%s,binding_shape_class=%s}",
 							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
 							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
 							gdgs_pipeline_layout_uses_default_shader ? "default_canvas_shader" : "material_shader_override",
-							p_shader_data->version.is_valid() ? itos(p_shader_data->version.get_id()) : String("none"),
+							gdgs_pipeline_layout_shader_version_valid ? itos(p_shader_data->version.get_id()) : String("none"),
 							gdgs_rid_to_string(gdgs_pipeline_layout_shader_rid),
-							(uint64_t)pipeline_key.hash(),
+							gdgs_u64_hex_string(gdgs_temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance_pipeline_hash),
 							pipeline_key.ubershader ? "true" : "false",
 							(int)pipeline_key.framebuffer_format_id,
 							(int)pipeline_key.vertex_format_id,
