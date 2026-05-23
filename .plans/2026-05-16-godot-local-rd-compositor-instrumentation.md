@@ -3033,6 +3033,17 @@ Exact unchanged contract/state that survived the shared-view policy flip on the 
 
 Conclusion: the shared-view lane/policy contract really changed, but the stronger unchanged crash-trigger candidate did not. The surviving suspect is still the Tonemap/L88 pre-rebind attachment/state seam: an exact carried Tonemap pipeline packet crosses the zero-gap boundary, then L88 reconstructs an active compatible-only render-pass scope whose exact attachment recipe differs only by slot-0 `load_op` (`Tonemap/pipeline=CLEAR` vs rebuilt active scope=`LOAD`) before the unchanged submit-9 failure. Updated `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md` with the same classification and artifact roots. `bd update oc-246 --status in_progress --json` worked at start; close-out recorded at task completion.
 
+QA refresh on 2026-05-23 for the reversible `src_color`-only first clipped preserve-rect experiment stayed on the refreshed source-built host-Vulkan `projection_only__disabled` lane and reran both cases into `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/` (`baseline/`, `experiment/`, plus `runtime_binary_proof.txt` and `run_summary.txt`). Exact comparison result:
+
+- baseline root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/baseline/`
+- experiment root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/experiment/`
+- the experiment applied exactly where intended: `temp_diag_clipped_preserve_rect_gate...src_color_premul_experiment=true`, `blend_recipe_selector...recipe_branch=shader_blend_mode_attachment_src_color_premul_experiment`, and `blend_recipe_attachment...src_color=one`
+- the control stayed on the baseline recipe: `src_color_premul_experiment=false`, `recipe_branch=shader_blend_mode_attachment`, and `blend_recipe_attachment...src_color=src_alpha`
+- the attachment diff stayed narrowly scoped to `src_color`; both runs kept `dst_color=one_minus_src_alpha`, `src_alpha=one`, `dst_alpha=one_minus_src_alpha`, `color_op=add`, `alpha_op=add`, and the same `blend_recipe_dynamic_state={dynamic_state_flags=0x0,blend_constants_dynamic=false,blend_constants_applied=false,blend_constants_value=none}`
+- the locked failing identity survived unchanged in both runs: `exit_status=134`, `fence_wait_error submit_serial=9 wait_result=-4`, the same tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity, and later `ERROR: Last known breadcrumb: BLIT_PASS`
+
+QA conclusion: this reversible experiment did apply and only flipped the first clipped preserve-rect packet’s `src_color` from `SRC_ALPHA` to `ONE`, but it did **not** move or soften the locked submit-9 / Tonemap→L88 / UI-pass / later-`BLIT_PASS` failure envelope.
+
 ---
 
 ### Task 121: Classify why the rebuilt active scope still insists on slot-0 `LOAD` after shared-view demotion at failing `submit_serial=9`
@@ -3188,9 +3199,18 @@ So the answer to bead `oc-l98` is: **the surviving seam is not that Tonemap acci
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
 
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-**Results:** Pending.
+**Results:** Completed on the refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane without widening scope. The paired lane does **not** honestly collapse to a smaller single selector/provenance owner inside the first failing `L88` `CanvasShaderRD:0` packet. The shared boundary is only the coarse rect/ninepatch canvas packet entrance (`switch (p_batch->command_type)` plus the same `p_batch` / `shader_variant=quad` packet context). Below that boundary, the two survivors immediately diverge into independent owners: `vertex_input_recipe` stays a static rect/ninepatch instance-format selection owned by `RendererCanvasRenderRD::shader.quad_vertex_format_id`, while `specialization_constants` stays a per-batch shader-flag assignment owned by `PipelineKey::shader_specialization` from `batch.use_lighting/use_msdf/use_lcd`. Because one side is renderer-static recipe ownership and the other is batch-flag ownership, both remain independently necessary even inside the previously paired lane; the earlier pairing was a truthful grouping cut, not a smaller minimal distinguisher.
+
+Exact artifact roots used for this read:
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`
+
+Concrete paired-lane classification: `shared_canvas_packet_entry_only_then_immediate_provenance_split`; shared context = first failing `submit_serial=9` UI-pass / `BLIT_PASS` `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` `CanvasShaderRD:0` packet at `command_type=rect`, `shader_variant=quad`; split point = packet setup after entering the rect/ninepatch branch, where `pipeline_key.vertex_format_id = shader.quad_vertex_format_id` and `pipeline_key.shader_specialization.use_* = p_batch->use_*` are populated by different owners. No new durable in-repo artifacts were generated beyond this plan update.
+
+Exact next recommended slice: keep `blend_recipe` as the already-separated preserve-destination-color lane and stop treating `vertex_input_recipe + specialization_constants` as reducible to one smaller provenance source. If a further narrowing is still needed, test the two now-independent packet-internal survivors separately against the same failing identity checks: (1) the static rect/ninepatch `shader.quad_vertex_format_id` constructor path for `vertex_input_recipe`, and (2) the per-batch `use_lighting/use_msdf/use_lcd` assignment path for `specialization_constants`.
 
 ---
 
@@ -4756,17 +4776,1029 @@ Exact recommended next slice: stay on the refreshed source-built host-Vulkan `pr
 
 ---
 
-## Session Stop Point (2026-05-22 land the plane)
+### Task 96: Run the narrowed three-bucket interaction compare on the locked cap=1 Vulkan lane
+
+**Bead ID:** `oc-08ns`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-08ns` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Use the existing three surviving split families — `vertex_input_recipe`, `blend_recipe`, and `specialization_constants` — at the same first-kept clipped preserve-color rect seam around `Tonemap (L87) -> Command Graph (L88)` / `submit_serial=9`. Run a narrow interaction-focused compare that recomputes the minimal distinguishing subset over only those three buckets and determine whether the seam now reduces to a 1-of-3 subset, a 2-of-3 subset, or remains a true `full_three_bucket_interaction`. Update this plan with the exact artifact roots used, the concrete classification result, and the next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Recomputed the minimal distinguishing subset over only `vertex_input_recipe`, `blend_recipe`, and `specialization_constants` using the already-locked refreshed source-built host-Vulkan `projection_only__disabled` cap=1 evidence instead of widening scope or reopening the repro lane. Exact artifact roots used: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-2105/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-split-qa-vulkan-sourcebuild-20260522-2123/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-split-qa-vulkan-sourcebuild-20260522-2140/`, and especially `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/` (`provenance_only/stdout.log`). That locked `neighboring_pass_pipeline_compare.next.recipe_delta=` payload still shows the same Tonemap -> `Command Graph (L88) (Draw)` seam on failing `submit_serial=9`, but after Task 94's honest `pipeline_layout` demotion the remaining three buckets each still differ independently at the exact same seam: `vertex_input_recipe_hash` stays `0xae289b01` vs `0xaf2a1c78`, `blend_recipe_hash` stays `0x2d67c100` vs `0xd22fca4d`, and `specialization_constant_hash` stays `0x208ccbee` vs `0x6273dcb1`. Because every surviving 1-bucket candidate already mismatches on its own, no 1-of-3 subset can match; and because every 2-of-3 subset necessarily contains at least one of those already-mismatching buckets, no 2-of-3 subset can match either. Honest classification result: the seam remains a true `full_three_bucket_interaction`, not a 1-of-3 or 2-of-3 reduction. No new durable artifact files were generated in this pass; this plan update is the durable record. Exact next recommended slice: stay on this same refreshed source-built Vulkan `projection_only__disabled` cap=1 lane and split the surviving three-bucket family by provenance/coupling rather than by another flat subset compare — most naturally by adding a narrow compare that asks whether the Tonemap-carried packet and the immediate L88 rebind consume the same or different shader-family/control-path provenance across `vertex_input_recipe`, `blend_recipe`, and `specialization_constants` together, while preserving the same `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / `BLIT_PASS` identity checks.
+
+---
+
+### Task 97: Split the surviving three-bucket family by Tonemap-to-L88 provenance/coupling on the locked cap=1 Vulkan lane
+
+**Bead ID:** `oc-t2gg`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-t2gg` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Do not widen scope beyond the surviving three-bucket family `vertex_input_recipe + blend_recipe + specialization_constants`. Instead of another flat subset compare, split the seam by provenance/coupling across the Tonemap-carried packet and the immediate `Command Graph (L88)` rebind at failing `submit_serial=9`. Determine whether those two sides consume the same shader-family/control-path provenance for the three surviving buckets together, or whether the live hazard appears in the handoff between them. Update this plan with exact artifact roots used, the concrete coupling/provenance classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Stayed strictly on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` by re-reading the existing durable seam/provenance artifacts instead of widening scope or generating speculative new engine changes. Exact artifact roots used: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/` — especially the `provenance_only/stdout.log` captures under those roots. Honest coupling/provenance classification: the surviving three-bucket family does **not** behave like one shared Tonemap-to-L88 packet consumed unchanged on both sides. The Tonemap-carried packet is provenance-stable through the zero-gap boundary (`pre_rebind_carried_packet_contract.classification="exact_pipeline_packet_with_compatible_only_render_pass_lineage"`), but it carries Tonemap-owned recipe values (`TonemapShaderRD:0`, `vertex_input_recipe_hash=0xae289b01`, `blend_recipe_hash=0x2d67c100`, `specialization_constant_hash=0x208ccbee`). The immediate `Command Graph (L88)` rebind then switches to its own different packet/provenance (`CanvasShaderRD:0`, `vertex_input_recipe_hash=0xaf2a1c78`, `blend_recipe_hash=0xd22fca4d`, `specialization_constant_hash=0x6273dcb1`) while `l88_pipeline_to_uniform_keeps_own_packet=true` and `l88_uniform_changes_only_vertex_index=true`. So the concrete answer for Task 97 is: the live hazard is best classified as a **Tonemap-carried-packet → L88-owned rebind handoff interaction**, not as “both sides consume the same shader-family/control-path provenance” for the three surviving buckets together. The artifact vocabulary is consistent across the roots above: `boundary_state_handoff_classifier.classification="carried_pipeline_packet_then_l88_reestablishes_scope_rebinds_and_adds_vertex_index"`, `ownership_side_classifier.classification="boundary_crossing_interaction"`, and `runtime_load_reuse_path.classification="same_runtime_load_scope_reused_before_l88_rebind"`. That means the surviving three-bucket family still appears coupled, but the coupling is across the boundary: Tonemap keeps its own packet exact until L88 immediately re-establishes scope and replaces it with a different local packet that jointly introduces the surviving `vertex_input_recipe + blend_recipe + specialization_constants` provenance. No new durable artifact files were generated in this pass; this plan update is the durable handoff record. Exact next recommended slice: stay on this same refreshed source-built Vulkan `projection_only__disabled` cap=1 lane and split **inside the L88-owned rebind itself** rather than doing another cross-pass subset compare — specifically, use the existing first-pipeline-bind vs later vertex/index/uniform breadcrumbs to prove whether the surviving three-bucket family is already fully established at the first L88 pipeline bind, or whether any part of the live hazard only becomes attributable after the subsequent vertex/index re-establishment that follows that bind.
+
+---
+
+### Task 98: Split inside the L88-owned rebind to locate when the surviving three-bucket family becomes attributable
+
+**Bead ID:** `oc-i4oc`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-i4oc` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the live hazard is a Tonemap-carried-packet -> L88-owned rebind handoff interaction. Split inside the L88-owned rebind itself using the existing first-pipeline-bind versus later vertex/index/uniform breadcrumbs to determine whether the surviving `vertex_input_recipe + blend_recipe + specialization_constants` family is already fully established at the first L88 pipeline bind, or whether any part of the live hazard only becomes attributable after the later vertex/index re-establishment. Update this plan with exact artifact roots used, the concrete inside-L88 attribution classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Complete. Used the refreshed source-built host-Vulkan `projection_only__disabled` `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` artifacts rooted at:
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`
+
+Inside-L88 attribution classification: the surviving `vertex_input_recipe + blend_recipe + specialization_constants` family is already fully established at the **first L88 pipeline bind**. The decisive breadcrumbs are `l88_first_pipeline_bind_after_state`, `l88_first_uniform_bind_before_state`, `l88_pipeline_to_uniform_keeps_own_packet=true`, and `l88_uniform_changes_only_vertex_index=true`: the first L88 pipeline bind already swaps pipeline provenance to the Canvas/UI packet carrying the final `vertex_input_recipe_hash`, `blend_recipe_hash`, and `specialization_constant_hash`, while the later vertex/index re-establishment only changes runtime vertex/index binding occupancy (`vertex_binding_count` / `index_buffer_bound`) before the first uniform bind. That means no part of the surviving three-bucket family newly becomes attributable only after the later vertex/index re-establishment.
+
+Honest reduction: this does **not** yet reduce the live hazard below the three-bucket family. It only removes the "maybe later vertex/index setup makes one of those buckets live" branch. No new durable in-repo artifacts were created in this pass beyond this plan update.
+
+Exact next recommended slice: run the already-planned narrow three-bucket interaction compare anchored specifically to the **first L88 pipeline bind** and ask whether the minimal distinguisher inside that bind is a 1-of-3 subset, a 2-of-3 subset, or a true `full_three_bucket_interaction` across `vertex_input_recipe`, `blend_recipe`, and `specialization_constants`. This next slice should treat the later vertex/index/uniform re-establishment as post-attribution scaffolding, not as a candidate owner of those three buckets.
+
+---
+
+### Task 99: Run the three-bucket interaction compare anchored specifically to the first L88 pipeline bind
+
+**Bead ID:** `oc-45sz`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-45sz` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the surviving `vertex_input_recipe + blend_recipe + specialization_constants` family is already fully established at the first L88 pipeline bind. Recompute the minimal distinguishing subset anchored specifically to that first L88 pipeline bind and determine whether the minimal distinguisher there is a 1-of-3 subset, a 2-of-3 subset, or still a true `full_three_bucket_interaction`. Update this plan with exact artifact roots used, the concrete first-bind classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Recomputed the minimal distinguishing subset anchored specifically to the **first L88 pipeline bind** by re-reading the already-locked refreshed source-built host-Vulkan `projection_only__disabled` `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` evidence instead of widening the lane or generating speculative new artifacts. Exact artifact roots used: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/` (`provenance_only/stdout.log`). The decisive first-bind evidence is the existing `l88_first_pipeline_bind_after_state` / `l88_pipeline_to_uniform_keeps_own_packet=true` / `l88_uniform_changes_only_vertex_index=true` chain: at the first L88 pipeline bind itself, the packet already switches to the Canvas/UI provenance with `vertex_input_recipe_hash=0xaf2a1c78`, `blend_recipe_hash=0xd22fca4d`, and `specialization_constant_hash=0x6273dcb1`, while the carried Tonemap side remains `0xae289b01`, `0x2d67c100`, and `0x208ccbee` respectively. Honest first-bind classification: this still does **not** reduce to any 1-of-3 or 2-of-3 subset. Each of the three surviving buckets already mismatches independently at the first L88 pipeline bind, so no singleton subset matches there, and no pair can match either because every pair necessarily contains at least one already-mismatching member. The minimal distinguisher at the first bind therefore remains a true `full_three_bucket_interaction` across `vertex_input_recipe`, `blend_recipe`, and `specialization_constants`. No new durable in-repo artifacts were generated in this pass beyond this plan update. Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` cap=1 lane and split **within the first L88 pipeline bind packet itself** by shared recipe provenance/cause, not by another subset-count compare — most naturally by asking whether the three surviving first-bind deltas are all downstream expressions of one narrower Canvas/UI packet family choice or whether they still need one more field-level provenance split inside the first-bind packet while preserving the same `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / `UI_PASS` identity checks.
+
+---
+
+### Task 100: Split inside the first L88 pipeline-bind packet by shared recipe provenance/cause
+
+**Bead ID:** `oc-el1a`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-el1a` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the surviving `vertex_input_recipe + blend_recipe + specialization_constants` family is already a true full-three-bucket interaction at the first L88 pipeline bind. Split inside that first L88 pipeline-bind packet itself by shared recipe provenance/cause: determine whether the three surviving buckets collapse onto a smaller common driver or provenance source within the packet, or whether they remain independently necessary even at that first-bind seam. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / BLIT_PASS continuity). Update this plan with exact artifact roots used, the concrete inside-first-bind provenance/cause classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Stayed strictly on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` and re-read the durable evidence instead of widening scope or generating speculative new engine changes. Exact artifact roots used: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/` (`provenance_only/stdout.log`).
+
+Concrete inside-first-bind provenance/cause classification: the three surviving buckets do share one **high-level packet provenance** — the first L88 pipeline bind switches from the carried `TonemapShaderRD:0` packet to the `CanvasShaderRD:0` UI packet on the same locked `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / `UI_PASS` lane — but they do **not** honestly collapse to one narrower internal driver inside that packet. The shared-family part is real: `l88_first_pipeline_bind_after_state` already establishes the final L88 packet, `l88_pipeline_to_uniform_keeps_own_packet=true`, and the packet stays Canvas/UI-owned before later vertex/index occupancy changes. But inside that packet, each surviving bucket still carries its own concrete local cause/provenance rather than one smaller common sub-driver: `vertex_input_recipe` stays the instanced canvas rect packet (`vertex_input_class="instanced_vertex_input"`, binding/attribute layout from `RendererCanvasRenderRD::shader.quad_vertex_format_id`), `blend_recipe` stays the preserve-prior-color attachment recipe (`relation="different_attachment_recipe_same_constants"`, selector path `shader_blend_mode_attachment`, `uses_prior_color=true`, dynamic blend constants still inert), and `specialization_constants` stay the zero-selector / zero-packed canvas specialization contract (`relation="different_specialization_recipe"`, `PipelineKey::shader_specialization <- batch.use_*`, all relevant booleans false). So the honest answer for Task 100 is: **shared Canvas/UI packet provenance exists, but it is only a packet-family umbrella; it does not reduce the minimum distinguishing cause below the same full three-bucket interaction at the first L88 bind.**
+
+This keeps the failing-lane identity intact throughout the reread: `submit_serial=9` remains the first failing frame-1 main submit, the command-summary tail still ends `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and the later breadcrumb continuity still stays on the UI lane / `BLIT_PASS` collapse. No new durable in-repo artifacts were generated in this pass beyond this plan update.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` cap=1 lane and split the first L88 packet by **cross-bucket provenance grouping**, not by flat subset counting. The sharpest honest next cut is to test whether the surviving three-bucket family divides into a smaller shared **canvas batch-shape pair** versus an independent third lane — most naturally `vertex_input_recipe + specialization_constants` as the canvas instance/shader-variant contract versus `blend_recipe` as the preserve-destination-color overlay contract — while preserving the same `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and UI-pass / `BLIT_PASS` identity checks.
+
+---
+
+### Task 101: Test cross-bucket provenance grouping inside the first L88 packet
+
+**Bead ID:** `oc-ayso`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ayso` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the first L88 pipeline-bind packet shares a high-level `CanvasShaderRD:0` umbrella but does not honestly collapse to one narrower internal cause. Run the next cross-bucket provenance grouping cut inside that first L88 packet: specifically test whether `vertex_input_recipe + specialization_constants` travel together as a canvas batch / shader-variant contract while `blend_recipe` remains an independent preserve-destination-color lane, or whether a different grouping is better supported by the existing evidence. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / BLIT_PASS continuity). Update this plan with exact artifact roots used, the concrete grouping classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Re-read the already-locked refreshed source-built host-Vulkan `projection_only__disabled` `cap=1` evidence instead of widening scope or generating new speculative artifacts. Exact artifact roots used for this grouping cut: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`.
+
+The honest grouping classification is: the first `L88` pipeline-bind packet still enters under one high-level `CanvasShaderRD:0` umbrella, but inside that packet the evidence now supports a **two-lane provenance grouping without reducing the minimum distinguisher below the full three-bucket seam**. `vertex_input_recipe` and `specialization_constants` travel together as the canvas batch / shader-variant contract: both are owned by the same canvas rect packet family (`RendererCanvasRenderRD::shader.quad_vertex_format_id` + `PipelineKey::shader_specialization <- batch.use_*`), both stay structurally inert/stable on this batch (`vertex_format=2`, rect-instance layout, `packed_0=0x0`, no specialization flags), and both describe how the canvas shader variant is instantiated for the first kept clipped preserve-color rect. `blend_recipe` remains a separate preserve-destination-color lane: its selector/attachment payload is independently driven by `shader_blend_mode=mix`, `uses_prior_color=true`, and the concrete src-alpha / one-minus-src-alpha attachment recipe, while dynamic blend constants stay demoted/inert.
+
+Crucially, this is a provenance grouping result, not an overclaim that the failure reduces to only two changed buckets. At the same failing-lane identity (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / later `BLIT_PASS` continuity), all three bucket hashes still differ at the first `L88` bind, so the minimum distinguishing seam remains the same full three-bucket interaction. No new durable in-repo artifacts were generated beyond this plan update.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and split the paired `vertex_input_recipe + specialization_constants` lane one level narrower at the shared canvas packet selector/provenance boundary — i.e. prove whether that pair really collapses to one smaller canvas recipe/variant constructor decision, while treating `blend_recipe` as the already-separated preserve-destination-color lane and preserving the same `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / `UI_PASS` identity checks.
+
+---
+
+### Task 102: Split the paired vertex_input + specialization lane at the shared canvas packet selector/provenance boundary
+
+**Bead ID:** `oc-96hf`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-96hf` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current grouping classification that inside the first L88 pipeline-bind packet, `vertex_input_recipe + specialization_constants` travel together as the canvas batch / shader-variant contract, while `blend_recipe` is already separated as the preserve-destination-color attachment lane. Split the paired `vertex_input_recipe + specialization_constants` lane one level narrower at the shared canvas packet selector/provenance boundary: determine whether that pair honestly collapses to a smaller common selector/provenance source inside the canvas packet, or whether both remain independently necessary even within the paired lane. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / BLIT_PASS continuity). Update this plan with exact artifact roots used, the concrete paired-lane classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed on the refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane without widening scope. The paired lane does **not** honestly collapse to a smaller single selector/provenance owner inside the first failing `L88` `CanvasShaderRD:0` packet. The shared boundary is only the coarse rect/ninepatch canvas packet entrance (`switch (p_batch->command_type)` plus the same `p_batch` / `shader_variant=quad` packet context). Below that boundary, the two survivors immediately diverge into independent owners: `vertex_input_recipe` stays a static rect/ninepatch instance-format selection owned by `RendererCanvasRenderRD::shader.quad_vertex_format_id`, while `specialization_constants` stays a per-batch shader-flag assignment owned by `PipelineKey::shader_specialization` from `batch.use_lighting/use_msdf/use_lcd`. Because one side is renderer-static recipe ownership and the other is batch-flag ownership, both remain independently necessary even inside the previously paired lane; the earlier pairing was a truthful grouping cut, not a smaller minimal distinguisher.
+
+Exact artifact roots used for this read:
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`
+
+Concrete paired-lane classification: `shared_canvas_packet_entry_only_then_immediate_provenance_split`; shared context = first failing `submit_serial=9` UI-pass / `BLIT_PASS` `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` `CanvasShaderRD:0` packet at `command_type=rect`, `shader_variant=quad`; split point = packet setup after entering the rect/ninepatch branch, where `pipeline_key.vertex_format_id = shader.quad_vertex_format_id` and `pipeline_key.shader_specialization.use_* = p_batch->use_*` are populated by different owners. No new durable in-repo artifacts were generated beyond this plan update.
+
+Exact next recommended slice: keep `blend_recipe` as the already-separated preserve-destination-color lane and stop treating `vertex_input_recipe + specialization_constants` as reducible to one smaller provenance source. If a further narrowing is still needed, test the two now-independent packet-internal survivors separately against the same failing identity checks: (1) the static rect/ninepatch `shader.quad_vertex_format_id` constructor path for `vertex_input_recipe`, and (2) the per-batch `use_lighting/use_msdf/use_lcd` assignment path for `specialization_constants`.
+
+---
+
+### Task 103: Test vertex_input and specialization as independent packet-internal survivors with blend kept separate
+
+**Bead ID:** `oc-joym`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-joym` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that `blend_recipe` is already separated as the preserve-destination-color attachment lane, while the old `vertex_input_recipe + specialization_constants` pair only shares coarse `CanvasShaderRD:0` packet entry and then immediately diverges. Treat `vertex_input_recipe` and `specialization_constants` as two independent packet-internal survivors and test whether either one can now be honestly demoted or whether both remain independently necessary under the same failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / BLIT_PASS continuity). Update this plan with exact artifact roots used, the concrete independent-survivor classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow research reconciliation pass on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane, without widening scope or generating speculative engine changes. Exact artifact roots re-read for this classification: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`.
+
+Honest independent-survivor classification: `blend_recipe` stays separated as the preserve-destination-color attachment lane, and the old `vertex_input_recipe + specialization_constants` pair does **not** collapse to a smaller shared owner beyond the coarse `CanvasShaderRD:0` / rect-ninepatch packet entrance. Inside the first failing `L88` packet, `vertex_input_recipe` remains independently necessary as the static rect/ninepatch instance-format selection owned by `RendererCanvasRenderRD::shader.quad_vertex_format_id`, while `specialization_constants` remains independently necessary as the per-batch shader-flag assignment owned by `PipelineKey::shader_specialization` via `batch.use_lighting/use_msdf/use_lcd`. Neither survivor can be honestly demoted on the current failing identity checks: `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and UI pass / `BLIT_PASS` continuity all remain unchanged, and the later vertex/index re-establishment still only changes runtime binding occupancy rather than introducing a new attribution step for either survivor.
+
+No new durable in-repo artifact files were generated in this pass beyond this plan update. Exact next recommended slice: keep `blend_recipe` as the already-separated lane and test the two remaining packet-internal survivors separately rather than as a pair — first the static rect/ninepatch `shader.quad_vertex_format_id` constructor path for `vertex_input_recipe`, then the per-batch `use_lighting/use_msdf/use_lcd` assignment path for `specialization_constants`, while preserving the exact same failing identity checks.
+
+---
+
+### Task 104: Test the static rect/ninepatch `quad_vertex_format_id` constructor path for the surviving `vertex_input_recipe` lane
+
+**Bead ID:** `oc-v5v0`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-v5v0` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that `blend_recipe` remains its own preserve-destination-color attachment lane and that both `vertex_input_recipe` and `specialization_constants` remain independently necessary survivors under the same failing identity checks. For this slice, narrow only the `vertex_input_recipe` survivor by testing the static rect/ninepatch `RendererCanvasRenderRD::shader.quad_vertex_format_id` constructor/provenance path: determine whether the surviving `vertex_input_recipe` lane honestly collapses to that constructor/source, or whether an additional internal split is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / BLIT_PASS continuity). Update this plan with exact artifact roots used, the concrete `vertex_input_recipe` constructor-path classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow research reconciliation pass on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope or generating speculative engine changes. Exact artifact roots re-read for this constructor-path classification: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`.
+
+Honest `vertex_input_recipe` constructor-path classification: the surviving `vertex_input_recipe` lane **does** collapse to the static rect/ninepatch constructor/provenance source `RendererCanvasRenderRD::shader.quad_vertex_format_id`; no additional internal split is required on the current failing identity checks. The locked first-`L88` packet evidence already shows the relevant vertex-input state as a stable static canvas rect instance format (`vertex_format=2`, one instance-rate binding at `binding=0` with `stride=128`, eight attributes at locations `8..15`, rect/ninepatch `InstanceData` semantics), and the source path in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` confirms that rect/ninepatch packet setup assigns `pipeline_key.vertex_format_id = shader.quad_vertex_format_id` while that format itself is created once from the static rect/ninepatch vertex-format constructor (`shader.quad_vertex_format_id = RD::get_singleton()->vertex_format_create(vf)`). Unlike the earlier paired `vertex_input_recipe + specialization_constants` read, there is no second live owner inside the `vertex_input_recipe` lane once the investigation is restricted to this constructor/provenance path: binding layout, attribute layout, and provenance all remain expressions of the same static `quad_vertex_format_id` source rather than separate surviving sub-lanes. This keeps the same failing identity envelope intact (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / later `BLIT_PASS` continuity).
+
+`blend_recipe` therefore remains its already-separated preserve-destination-color attachment lane, `vertex_input_recipe` is now honestly reduced to the static rect/ninepatch `shader.quad_vertex_format_id` constructor/provenance lane, and `specialization_constants` remains the other independent packet-internal survivor. No new durable in-repo artifacts were generated beyond this plan update. Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and test the remaining independent `specialization_constants` survivor directly at its own packet-local provenance path — `PipelineKey::shader_specialization` via `batch.use_lighting/use_msdf/use_lcd` — while preserving the exact same `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and UI-pass / `BLIT_PASS` identity checks.
+
+---
+
+### Task 105: Test the surviving `specialization_constants` lane at `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`
+
+**Bead ID:** `oc-etvz`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-etvz` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that `blend_recipe` remains its own preserve-destination-color attachment lane and that `vertex_input_recipe` has now honestly reduced to the static rect/ninepatch `RendererCanvasRenderRD::shader.quad_vertex_format_id` constructor/provenance path. For this slice, narrow only the remaining independent `specialization_constants` survivor by testing whether it honestly collapses to `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`, or whether an additional internal split is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / BLIT_PASS continuity). Update this plan with exact artifact roots used, the concrete `specialization_constants` source-path classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow research reconciliation pass on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope or generating speculative engine changes. Exact artifact roots re-read for this source-path classification: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. A direct source cross-check in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` matches the artifact read exactly: `pipeline_key.shader_specialization.use_lighting = p_batch->use_lighting;`, `pipeline_key.shader_specialization.use_msdf = p_batch->use_msdf;`, and `pipeline_key.shader_specialization.use_lcd = p_batch->use_lcd;` are assigned in one packet-local path, and the split diagnostic markers for selector / packing / provenance are all emitted from that same setup block.
+
+Honest `specialization_constants` source-path classification: the surviving `specialization_constants` lane **does** collapse to `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`; no additional internal split is required on the current failing identity checks. The locked first-`L88` packet evidence already shows this batch stays in the zero-specialization case (`selector_class=no_specialization_flags`, `use_lighting=false`, `use_msdf=false`, `use_lcd=false`, `constant_id=0`, `constant_type=int`, `packed_0=0x0`), and the local provenance marker already identifies the exact surviving owner as `recipe_owner=PipelineKey::shader_specialization` with `assignment_path={use_lighting=batch.use_lighting,use_msdf=batch.use_msdf,use_lcd=batch.use_lcd}`. Unlike the earlier coarse `vertex_input_recipe + specialization_constants` grouping, there is no second live owner left **inside** the `specialization_constants` lane once this slice is restricted to its packet-local selector/packing/provenance path: selector booleans, packed value, and provenance all remain expressions of the same `PipelineKey::shader_specialization` assignment source rather than separate surviving sub-lanes. The failing-lane identity stays intact throughout this narrowed read: `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, and later `BLIT_PASS` remain unchanged.
+
+That leaves the current first-`L88` packet classification in its honest reduced shape: `blend_recipe` remains the already-separated preserve-destination-color attachment lane, `vertex_input_recipe` remains reduced to the static rect/ninepatch `RendererCanvasRenderRD::shader.quad_vertex_format_id` constructor/provenance lane, and `specialization_constants` is now reduced to the packet-local `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd` assignment lane. No new durable in-repo artifact files were generated in this pass beyond this plan update. Exact next recommended slice: do **not** spend another pass splitting `specialization_constants` internally. If further narrowing is still needed, stay on the same refreshed source-built Vulkan `projection_only__disabled` cap=1 lane and move back up one level to test whether any of the three already-reduced survivors (`blend_recipe`, `vertex_input_recipe`, `specialization_constants`) can now be honestly demoted as a whole-lane explanation at the first `L88` bind, while preserving the exact same `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and UI-pass / `BLIT_PASS` identity checks.
+
+---
+
+### Task 106: Test whether any already-reduced survivor lane can be honestly demoted at the first L88 bind
+
+**Bead ID:** `oc-907n`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-907n` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the surviving first-L88-bind family has now been reduced into three concrete source lanes: `blend_recipe` as the preserve-destination-color attachment lane, `vertex_input_recipe` as the static rect/ninepatch `RendererCanvasRenderRD::shader.quad_vertex_format_id` constructor/provenance path, and `specialization_constants` as `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`. Without reopening already-closed internal splits, test whether any of those three already-reduced survivor lanes can now be honestly demoted as a whole lane at the first `L88` bind under the same failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass / BLIT_PASS continuity), or whether all three remain jointly necessary even after reduction. Update this plan with exact artifact roots used, the concrete whole-lane demotion classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow research reconciliation pass on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope, reopening already-closed internal splits, or generating speculative engine changes. Exact artifact roots re-read for this whole-lane demotion check: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the current source ownership points directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`: `shader.quad_vertex_format_id` is created at `vertex_format_create(vf)` and assigned into this rect/ninepatch packet via `pipeline_key.vertex_format_id = shader.quad_vertex_format_id`, while `pipeline_key.shader_specialization.use_lighting/use_msdf/use_lcd` are assigned directly from `p_batch->use_lighting/use_msdf/use_lcd` in the same packet-local setup block.
+
+Concrete whole-lane demotion classification: **none of the three already-reduced survivor lanes can now be honestly demoted as a whole lane at the first `L88` bind**. The lane remains a true joint three-lane requirement even after reduction. The reason is narrower than the older coarse bucket story, but it does not become smaller: at the same failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`), the first-`L88` bind still switches from the carried Tonemap packet to the Canvas/UI packet with all three reduced lane identities changing independently at once. The durable first-bind provenance still shows `vertex_input_recipe_hash=0xae289b01 -> 0xaf2a1c78`, `blend_recipe_hash=0x2d67c100 -> 0xd22fca4d`, and `specialization_constant_hash=0x208ccbee -> 0x6273dcb1` across the Tonemap-to-`L88` rebind boundary, while the later vertex/index re-establishment still only changes runtime occupancy (`l88_pipeline_to_uniform_keeps_own_packet=true`, `l88_uniform_changes_only_vertex_index=true`) rather than introducing a new owner for any of the three lanes. Because each already-reduced lane still remains the concrete owner of its own live mismatch at the first bind, there is no honest whole-lane demotion available here for `blend_recipe`, `vertex_input_recipe`, or `specialization_constants` individually.
+
+More explicitly: `blend_recipe` still remains the preserve-destination-color attachment lane (`different_attachment_recipe_same_constants`, dynamic blend constants still inert); `vertex_input_recipe` still remains the static rect/ninepatch `RendererCanvasRenderRD::shader.quad_vertex_format_id` constructor/provenance lane; and `specialization_constants` still remains the packet-local `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd` assignment lane. The earlier full-three-bucket result therefore survives source reduction intact: the minimal distinguisher does **not** shrink below the same joint three-lane interaction just because each lane now has a sharper concrete source owner. No new durable in-repo artifact files were generated in this pass beyond this plan update.
+
+Exact next recommended slice: stop spending passes on whole-lane demotion of the three reduced survivors. Stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and move one level **upstream of the three reduced lane owners** to the first `L88` Canvas/UI packet-entry selector bundle — the coarse rect/ninepatch canvas packet entrance that chooses this packet at all (`p_batch` / `command_type=rect` / `shader_variant=quad` together with the preserve-color batch context) — and test whether that shared packet-entry selection is the next honest common driver for why the three reduced lanes appear together at the first bind, while preserving the exact same `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and UI-pass / `BLIT_PASS` identity checks.
+
+---
+
+### Task 107: Test the first L88 Canvas/UI packet-entry selector bundle as the next common-driver candidate
+
+**Bead ID:** `oc-5t4i`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-5t4i` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that no whole-lane demotion is honest yet at the first `L88` bind even after reducing the three survivor lanes to concrete source paths. Move upstream to the first `L88` Canvas/UI packet-entry selector bundle as the next honest common-driver candidate: test whether the shared packet-entry bundle (`p_batch`, `command_type=rect`, `shader_variant=quad`, plus preserve-color batch context) is the smallest common driver that jointly explains the still-live `blend_recipe`, `vertex_input_recipe`, and `specialization_constants` lane flips, or whether an additional common-driver split is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete packet-entry common-driver classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research pass on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope or claiming a reduction the evidence does not support. Exact artifact roots re-read for this packet-entry common-driver check: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the current source ownership directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`: the first matching failing packet is still logged as `command_type=rect`, `shader_variant=quad`, `blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`, `use_lighting=false`, `use_msdf=false`, `use_lcd=false`, inside a UI pass whose batch summary stays `rendered=10`, `rect_like=10`, `clipped=10`, `destination_color=10`, with `graph_build_condition.classifier="multi_rect_preserve_clip_batch_chain"` and `overwrite_classifier="preserve_prior_root_contents"`. Upstream source ownership remains concrete: rect batching assigns `command_type=TYPE_RECT` and default `shader_variant=SHADER_VARIANT_QUAD` together in the batch builder, while the draw-time packet copies `variant/use_* /has_blend` from `p_batch`, routes rect/ninepatch packets through the `TYPE_RECT` / `TYPE_NINEPATCH` switch arm, assigns `pipeline_key.vertex_format_id = shader.quad_vertex_format_id`, and packs `PipelineKey::shader_specialization` directly from `p_batch->use_lighting/use_msdf/use_lcd`.
+
+Concrete packet-entry common-driver classification: **the proposed first-`L88` Canvas/UI packet-entry bundle is an honest compound common-driver bundle, but it is not yet an irreducible single common driver; one additional upstream split is still required.** More specifically, the evidence supports a two-factor bundle rather than a one-factor collapse. The `rect/quad p_batch` packet-class entrance is the honest shared upstream selector for the still-live `vertex_input_recipe` and `specialization_constants` lanes: the same packet-local `p_batch` state chooses `command_type=rect`, carries `shader_variant=quad`, and then immediately feeds both `shader.quad_vertex_format_id` provenance and `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`. But `blend_recipe` does not collapse into that packet-class selector alone. Its still-live first-bind mismatch remains attached to the preserve-destination-color side of the same packet family: the batch is `blend_mode=mix` with `uses_prior_color=true`, and the failing packet occurs inside the preserved-color/clipped multi-rect chain logged as `multi_rect_preserve_clip_batch_chain` / `preserve_prior_root_contents`. So the joint explanation is real only as the **compound conjunction** `{rect/quad packet-class entry} + {preserve-color batch context}`. That is smaller and more honest than the earlier coarse three-lane story, but it still does **not** reduce to one singular upstream selector that owns all three lane flips by itself.
+
+Said plainly: no additional split is needed to justify the bundle as a coarse joint explanation for why the three surviving first-`L88` lane flips appear together, but an additional split **is** still required if the goal is the next honest minimal common-driver cut. The packet-class half (`p_batch`, `command_type=rect`, `shader_variant=quad`) explains the `vertex_input_recipe` and `specialization_constants` survivors; the preserve-color half explains why the `blend_recipe` survivor joins that same first bind. `pipeline_layout` remains honestly demoted below this bundle and was re-checked only as a comparator, not reopened as a survivor.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and split this compound packet-entry bundle into its two upstream common-driver halves without reopening the already-closed internal lane reductions. First, test the rect/quad packet-class selector as the shared upstream owner of the `vertex_input_recipe + specialization_constants` pair (`_new_batch(...)` rect entry / `shader_variant=SHADER_VARIANT_QUAD` batch formation path, then the rect/ninepatch draw-time `p_batch` switch that assigns `shader.quad_vertex_format_id` and packs `PipelineKey::shader_specialization`). Second, separately test the preserve-color batch-context half as the upstream owner of the surviving `blend_recipe` lane (`blend_mode=mix` / `uses_prior_color=true` joined with the clipped multi-rect preserve chain and `preserve_prior_root_contents` UI-pass context). Keep the exact same failing identity checks fixed: `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, and later `BLIT_PASS`. No new durable in-repo artifact files were generated in this pass beyond this plan update.
+
+---
+
+### Task 108: Split `rect/quad` packet-class entry from preserve-color batch context at the first `L88` bind
+
+**Bead ID:** `oc-tync`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-tync` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the first-`L88` Canvas/UI packet-entry candidate is a compound common-driver bundle: `{rect/quad p_batch entry}` explains the still-live `vertex_input_recipe + specialization_constants` side, while `blend_recipe` still needs the preserved-color side (`blend_mode=mix`, `uses_prior_color=true`) within the clipped multi-rect preserve chain / `preserve_prior_root_contents` context. Split those two upstream halves cleanly at the first `L88` bind: determine whether `{rect/quad packet-class entry}` and `{preserve-color batch context}` are the minimal honest common-driver split for the surviving family, or whether one additional upstream cut is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete upstream-half classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research pass on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, keeping the same failing identity checks fixed (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`) and avoiding any new speculative engine work. Exact artifact roots re-read for this upstream-half split were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the current source ownership directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`: rect batching still assigns `command_type=TYPE_RECT` together with default `shader_variant=SHADER_VARIANT_QUAD` in the batch builder, while the draw-time rect/ninepatch path copies `p_batch->use_lighting/use_msdf/use_lcd` into `PipelineKey::shader_specialization`, assigns `pipeline_key.vertex_format_id = shader.quad_vertex_format_id`, and computes the blend attachment from shader blend mode plus `p_batch->has_blend`. The first matching failing packet remains `command_type=rect`, `shader_variant=quad`, `blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`, `use_lighting=false`, `use_msdf=false`, `use_lcd=false`, inside a UI pass whose batch summary stays `rendered=10`, `rect_like=10`, `clipped=10`, `destination_color=10`, with `graph_build_condition.classifier="multi_rect_preserve_clip_batch_chain"` and `overwrite_classifier="preserve_prior_root_contents"`.
+
+Concrete upstream-half classification: the split into `{rect/quad packet-class entry}` and `{preserve-color batch context}` is honest and useful, but it is **not yet the final minimal cut for the whole surviving family**. The `rect/quad packet-class entry` half is already the honest shared upstream selector for the still-live `vertex_input_recipe + specialization_constants` pair: the same packet-class entrance selects rect/quad handling, then directly feeds both `shader.quad_vertex_format_id` provenance and `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`. But the preserve-color half is still one step too coarse. The surviving `blend_recipe` lane does require preserved-color context, yet the evidence still ties that context to a conjunction of (a) the packet-local preserved-color selector (`blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`) and (b) the pass-level clipped preserve chain / overwrite policy (`multi_rect_preserve_clip_batch_chain`, `preserve_prior_root_contents`). So `{rect/quad packet-class entry}` is already minimal enough for the `vertex_input_recipe + specialization_constants` side, while `{preserve-color batch context}` is still a compound half rather than the final smallest honest owner for `blend_recipe`.
+
+Said plainly: **one additional upstream cut is still required**, but only on the preserve-color side. The current two-half split is the right next-level decomposition of the old three-lane bundle, yet it still over-groups the surviving `blend_recipe` explanation. The next honest question is whether `blend_recipe` is best owned by the packet-local preserved-color selector itself (`blend_mode` / `uses_prior_color` / `has_blend`), by the UI-pass-level clipped preserve chain / root-contents preservation context, or only by their conjunction. `pipeline_layout` remains honestly demoted below this split and was re-checked only as a comparator. No new durable in-repo artifacts were generated in this pass beyond this plan update.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and keep the already-settled `rect/quad` half closed as the shared owner for `vertex_input_recipe + specialization_constants`. Spend the next pass only on the preserve-color half: split the packet-local preserved-color selector (`blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`) from the pass-level clipped preserve chain / overwrite policy (`multi_rect_preserve_clip_batch_chain`, `preserve_prior_root_contents`) and determine which of those is the smallest honest surviving owner of `blend_recipe` at the first `L88` bind.
+
+---
+
+### Task 109: Split `blend_recipe` ownership between packet-local preserved-color selector and pass-level clipped preserve chain
+
+**Bead ID:** `oc-a38n`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-a38n` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that `{rect/quad packet-class entry}` is already an honest minimal shared owner for the surviving `vertex_input_recipe + specialization_constants` pair, while the `blend_recipe` side still needs one more upstream cut. Split `blend_recipe` ownership between: (1) the packet-local preserved-color selector (`blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`) and (2) the UI-pass clipped preserve chain / overwrite-policy context (`multi_rect_preserve_clip_batch_chain`, `preserve_prior_root_contents`). Determine whether `blend_recipe` is honestly owned by one side, the other side, or only their conjunction. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete `blend_recipe` ownership classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research pass on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, keeping the same failing-lane identity checks fixed (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`) and avoiding speculative engine work. Exact artifact roots re-read for this ownership split were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the current source ownership directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`: the failing packet still lands as `command_type=rect`, `shader_variant=quad`, `blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`, `use_lighting=false`, `use_msdf=false`, `use_lcd=false`, inside a UI pass whose batch summary stays `rendered=10`, `rect_like=10`, `clipped=10`, `destination_color=10`, with `graph_build_condition.classifier="multi_rect_preserve_clip_batch_chain"` and `overwrite_classifier="preserve_prior_root_contents"`.
+
+Concrete `blend_recipe` ownership classification: the surviving `blend_recipe` is **honestly owned by the packet-local preserved-color selector, not by the pass-level clipped preserve chain and not only by their conjunction**. The clipped preserve chain / overwrite-policy context is still real and still explains why this packet appears on a preserve-prior-contents UI path, but it does not actually construct the `blend_recipe`. The source shows the recipe is built packet-locally in `gdgs_canvas_compute_blend_recipe(...)`, where `p_lcd_blend` comes from `pipeline_key.lcd_blend = p_batch->has_blend` and the non-LCD branch falls through to `ShaderData::blend_mode_to_blend_attachment(p_blend_mode)`. On the locked failing packet, `has_blend=false` removes the LCD override path and leaves the ordinary shader blend-mode attachment path, while `blend_mode=mix` / `uses_prior_color=true` supplies the destination-color-preserving attachment choice. That matches the refreshed runtime traces: the failing packet stays the first clipped preserve rect inside the same UI preserve chain, but the actual `blend_recipe` delta remains a packet recipe fact (`different_attachment_recipe_same_constants`) rather than a pass-graph policy field. So the pass-level context is a truthful **selection context**, not the minimal owner of the recipe itself.
+
+Said plainly: the previous preserve-color half was still too coarse because it mixed packet-local recipe construction with pass-level preserve-content context. After splitting them, the smallest honest surviving owner for `blend_recipe` is the packet-local selector family `{blend_mode=mix, uses_prior_color=true, has_blend=false}`. The UI-pass clipped preserve chain (`multi_rect_preserve_clip_batch_chain`, `preserve_prior_root_contents`) remains an explanatory prerequisite for why this is the relevant failing packet on this lane, but it is now honestly demoted below direct recipe ownership. No new durable in-repo artifacts were generated in this pass beyond this plan update.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and keep the pass-level clipped preserve chain demoted as contextual selection only. Spend the next pass only inside the packet-local `blend_recipe` owner: split the non-LCD branch gate `has_blend=false` from the actual shader blend-mode attachment choice `blend_mode=mix` / `uses_prior_color=true` inside `gdgs_canvas_compute_blend_recipe(...)`, and determine whether the smallest honest remaining owner is simply the `shader_blend_mode_attachment` branch versus LCD override, or the exact `mix` destination-color attachment selection inside that branch.
+
+---
+
+### Task 110: Split inside the packet-local `blend_recipe` owner
+
+**Bead ID:** `oc-n14y`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-n14y` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that `blend_recipe` is honestly owned by the packet-local preserved-color selector `{blend_mode=mix, uses_prior_color=true, has_blend=false}`, while the pass-level clipped preserve chain is only selection context. Split inside that packet-local owner: determine whether the surviving `blend_recipe` lane is best owned by the `has_blend=false` gate (non-LCD branch gate), by the exact `blend_mode=mix` / `uses_prior_color=true` attachment selection in `gdgs_canvas_compute_blend_recipe(...)`, or only by their conjunction. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete packet-local blend-owner split classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research pass on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, keeping the same failing-lane identity checks fixed (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`) and avoiding speculative engine work. Exact artifact roots re-read for this packet-local blend-owner split were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the current source ownership directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and `servers/rendering/renderer_rd/storage_rd/material_storage.cpp`: `gdgs_canvas_compute_blend_recipe(...)` first gates on `p_lcd_blend`, assigning `recipe_branch="lcd_blend_override"` only when `p_lcd_blend` is true, otherwise falling through to `recipe_branch="shader_blend_mode_attachment"` and `RendererRD::MaterialStorage::ShaderData::blend_mode_to_blend_attachment(p_blend_mode)`; the `BLEND_MODE_MIX` attachment constructor then supplies the exact surviving src/dst factors seen in the runtime trace.
+
+Concrete packet-local blend-owner split classification: the surviving `blend_recipe` lane is best owned by **the exact `blend_mode=mix` / `uses_prior_color=true` attachment selection inside the non-LCD branch**, not by the `has_blend=false` gate alone and not only by the broader conjunction as a minimal owner. The `has_blend=false` / `p_lcd_blend=false` fact is still real and still necessary as a packet-local branch gate because it removes the LCD override path and keeps this packet on `recipe_branch="shader_blend_mode_attachment"`. But that gate by itself does not construct the observed surviving recipe: many non-LCD packets can pass through the same branch, and the exact failing attachment state still comes from `blend_mode_to_blend_attachment(BLEND_MODE_MIX)` — matching the refreshed runtime marker `temp_diag_first_clipped_preserve_rect_blend_recipe_selector={shader_blend_mode=mix,uses_prior_color=true,has_blend=false,recipe_branch=shader_blend_mode_attachment,...}` together with `temp_diag_first_clipped_preserve_rect_blend_recipe_attachment={enable_blend=true,color_op=add,alpha_op=add,src_color=src_alpha,dst_color=one_minus_src_alpha,src_alpha=one,dst_alpha=one_minus_src_alpha,...}` and inert dynamic state (`blend_constants_dynamic=false`, `blend_constants_applied=false`). So the honest reduction is: `has_blend=false` is a **selection gate/context within the packet-local owner**, while the smallest direct owner of the surviving `blend_recipe` mismatch is the exact non-LCD `mix` attachment recipe selected by `blend_mode=mix` / `uses_prior_color=true`.
+
+This keeps the earlier demotions honest. The pass-level clipped preserve chain / overwrite policy (`multi_rect_preserve_clip_batch_chain`, `preserve_prior_root_contents`) remains only the selection context for why this packet is the relevant failing packet on this lane; it still does not directly own the recipe. No new durable in-repo artifacts were generated in this pass beyond this plan update.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and keep the preserve-chain context demoted. Treat `blend_recipe` as now reduced to the packet-local non-LCD `mix` attachment lane, leave `vertex_input_recipe` reduced to `RendererCanvasRenderRD::shader.quad_vertex_format_id`, and leave `specialization_constants` reduced to `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`. The next honest reduction attempt is therefore **not** another internal `blend_recipe` split; it is to move back up one level and re-test whole-lane demotion across the three already-reduced survivors (`blend_recipe`, `vertex_input_recipe`, `specialization_constants`) under the same fixed failing identity checks.
+
+---
+
+### Task 111: Retest whole-lane demotion now that all three survivors are fully reduced source lanes
+
+**Bead ID:** `oc-zenk`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-zenk` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the three first-L88-bind survivors are now fully reduced source lanes: `vertex_input_recipe -> RendererCanvasRenderRD::shader.quad_vertex_format_id`, `specialization_constants -> PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`, and `blend_recipe -> exact non-LCD blend_mode=mix / uses_prior_color=true attachment selection in gdgs_canvas_compute_blend_recipe(...)`, with `has_blend=false` and the clipped preserve chain both demoted to selection context. Re-test whole-lane demotion across those three already-reduced survivors under the same fixed failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`) and determine whether any full reduced lane can now be honestly demoted or whether all three still remain jointly necessary even after complete reduction. Update this plan with exact artifact roots used, the concrete post-reduction whole-lane demotion classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow research reconciliation pass on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope, reopening already-closed internal splits, or generating speculative engine changes. Exact artifact roots re-read for this post-reduction whole-lane demotion check: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the current source ownership points directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`: `shader.quad_vertex_format_id` is created at `vertex_format_create(vf)` and assigned into this rect/ninepatch packet via `pipeline_key.vertex_format_id = shader.quad_vertex_format_id`, while `pipeline_key.shader_specialization.use_lighting/use_msdf/use_lcd` are assigned directly from `p_batch->use_lighting/use_msdf/use_lcd` in the same packet-local setup block.
+
+Concrete post-reduction whole-lane demotion classification: **none of the three already-reduced survivor lanes can now be honestly demoted as a whole lane at the first `L88` bind**. The lane remains a true joint three-lane requirement even after reduction. At the same fixed failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`), the first-`L88` bind still switches from the carried Tonemap packet to the Canvas/UI packet with all three reduced lane identities changing independently at once: `vertex_input_recipe_hash=0xae289b01 -> 0xaf2a1c78`, `blend_recipe_hash=0x2d67c100 -> 0xd22fca4d`, and `specialization_constant_hash=0x208ccbee -> 0x6273dcb1`. The later vertex/index re-establishment still only changes runtime occupancy (`l88_pipeline_to_uniform_keeps_own_packet=true`, `l88_uniform_changes_only_vertex_index=true`) rather than introducing a new owner for any of the three lanes. More explicitly: `blend_recipe` remains the preserve-destination-color attachment lane (`different_attachment_recipe_same_constants`, dynamic blend constants still inert); `vertex_input_recipe` remains the static rect/ninepatch `RendererCanvasRenderRD::shader.quad_vertex_format_id` constructor/provenance lane; and `specialization_constants` remains the packet-local `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd` assignment lane. The earlier full-three-bucket result therefore survives source reduction intact: the minimal distinguisher does **not** shrink below the same joint three-lane interaction just because each lane now has a sharper concrete source owner.
+
+No new durable in-repo artifact files were generated in this pass beyond this plan update. Exact next recommended slice: stop spending passes on whole-lane demotion of the three reduced survivors. Stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and move one level **upstream of the three reduced lane owners** to the first `L88` Canvas/UI packet-entry selector bundle — the coarse rect/ninepatch canvas packet entrance that chooses this packet at all (`p_batch` / `command_type=rect` / `shader_variant=quad` together with the preserve-color batch context) — and test whether that shared packet-entry selection is the next honest common driver for why the three reduced lanes appear together at the first bind, while preserving the exact same `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and UI-pass / `BLIT_PASS` identity checks.
+
+---
+
+### Task 112: Re-test the first `L88` packet-entry selector bundle as the common driver with all three survivor lanes fully reduced
+
+**Bead ID:** `oc-i04u`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-i04u` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that no honest whole-lane demotion exists even after full reduction of the three first-L88-bind survivors: `vertex_input_recipe -> RendererCanvasRenderRD::shader.quad_vertex_format_id`, `specialization_constants -> PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`, and `blend_recipe -> exact non-LCD blend_mode=mix / uses_prior_color=true attachment selection in gdgs_canvas_compute_blend_recipe(...)`. Move one level upstream and re-test the first `L88` Canvas/UI packet-entry selector bundle — rect/ninepatch packet entry (`p_batch`, `command_type=rect`, `shader_variant=quad`) plus preserve-color batch context — as the next honest common driver for why those three reduced lanes appear together. Determine whether that shared packet-entry selection is now the best common-driver explanation with the cleaner reduced-lane model, or whether another upstream split is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete common-driver classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research retest on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, keeping the same failing identity checks fixed (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`) and avoiding speculative engine work. Exact artifact roots re-read for this retest were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the current source ownership directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`: the first matching failing packet is still `command_type=rect`, `shader_variant=quad`, `blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`, `use_lighting=false`, `use_msdf=false`, `use_lcd=false`; the rect/ninepatch draw path still assigns `pipeline_key.vertex_format_id = shader.quad_vertex_format_id` and packs `PipelineKey::shader_specialization` from `p_batch->use_lighting/use_msdf/use_lcd`; and the non-LCD blend attachment still comes from `gdgs_canvas_compute_blend_recipe(...)` under `blend_mode=mix` with preserved destination color.
+
+Concrete common-driver classification: the first-`L88` packet-entry selector bundle is still the **best coarse common-driver explanation**, but it is **not** the final minimal common-driver cut. With the cleaner reduced-lane model, the honest shared explanation is still a compound bundle: `{rect/quad packet-class entry}` explains why `vertex_input_recipe` and `specialization_constants` appear together, while the surviving `blend_recipe` lane still joins only because the same failing packet also carries the packet-local preserve-color selector (`blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`). That means another upstream split is still required if the goal is the smallest honest common-driver classification. The packet-entry bundle is truthful as a joint explanation for why the three reduced lanes co-occur at the first bind, but it still over-groups the live causes into two distinct upstream halves rather than one irreducible selector.
+
+Said plainly: this retest does **not** restore a one-factor answer. The cleaner reductions strengthen the same read reached earlier rather than replacing it: keep `{rect/quad packet-class entry}` closed as the shared owner for `vertex_input_recipe + specialization_constants`, and keep investigating only the preserve-color side when narrowing the `blend_recipe` explanation. Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and preserve the same failing identity checks, but split only the preserve-color half into its smallest honest owner on this packet — i.e. treat the rect/quad packet-class entry as settled for the `vertex_input_recipe + specialization_constants` pair, and continue from the packet-local preserve-color selector side for `blend_recipe` rather than reopening the already-demoted pass-level clipped preserve chain or the already-closed internal reductions. No new durable in-repo artifact files were generated in this pass beyond this plan update.
+
+---
+
+### Task 113: Re-test whether the packet-local preserve-color selector is the minimal remaining common-driver on the `blend_recipe` side
+
+**Bead ID:** `oc-0sfr`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-0sfr` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that no one-factor collapse exists yet at the first `L88` bind: `{rect/quad packet-class entry}` remains closed as the owner for `vertex_input_recipe + specialization_constants`, while `blend_recipe` joins via the packet-local preserve-color selector rather than via the pass-level clipped preserve chain. Re-test only that remaining blend-side common-driver candidate with the cleaner reduced-lane model: determine whether the packet-local preserve-color selector (`blend_mode=mix`, `uses_prior_color=true`, with `has_blend=false` already demoted to branch-gate context) is now the minimal honest common-driver for why `blend_recipe` appears alongside the other two reduced lanes, or whether one further distinguishing cut is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete blend-side common-driver classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research retest on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope or generating speculative engine changes. Exact artifact roots re-read for this retest were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`, while preserving the same failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Concrete blend-side common-driver classification: the pass-level clipped preserve chain / overwrite-policy context remains honestly demoted to selection context only, and the packet-local preserve-color selector was the right remaining lane to retest — but it still required one final internal cut before becoming the minimal honest owner. With `has_blend=false` already demoted to non-LCD branch-gate context, the surviving `blend_recipe` lane does **not** stop at the coarse selector `{blend_mode=mix, uses_prior_color=true}`; it reduces one level further to the exact packet-local non-LCD `shader_blend_mode_attachment` choice, i.e. the `BLEND_MODE_MIX` destination-preserving attachment selection produced by `gdgs_canvas_compute_blend_recipe(...)`. Said plainly: the packet-local preserve-color selector remains the correct side where `blend_recipe` joins the other two reduced lanes, but the smallest honest owner is the exact non-LCD `mix` attachment lane inside that selector, not the broader selector phrase alone and not the pass-level clipped preserve chain. No new durable in-repo artifacts were generated beyond this plan update. Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane, keep `{rect/quad packet-class entry}` closed as the owner for `vertex_input_recipe + specialization_constants`, keep the pass-level clipped preserve chain demoted, and if any further narrowing is still needed, continue only from the already-reduced packet-local `blend_recipe` owner when comparing whole-lane explanations at the first `L88` bind rather than reopening internal `blend_recipe` splits.
+
+---
+
+### Task 114: Re-test whole-lane/common-driver behavior with the fully reduced packet-local `blend_recipe` owner fixed
+
+**Bead ID:** `oc-vssu`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-vssu` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the three first-L88-bind survivors are now fully reduced concrete owners: `vertex_input_recipe -> RendererCanvasRenderRD::shader.quad_vertex_format_id`, `specialization_constants -> PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`, and `blend_recipe -> exact non-LCD destination-preserving attachment selection in gdgs_canvas_compute_blend_recipe(...)`, with `has_blend=false` and the pass-level clipped preserve chain both demoted to selection context. Re-test whether any whole reduced lane can now be honestly demoted, or whether the first-L88-bind common-driver picture is still compound even after this final blend-side reduction. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete post-final-reduction classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a source-and-artifact retest only on the already-locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without reopening speculative engine work or inventing new sub-splits. Exact artifact roots re-read for this post-final-reduction check were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`, while preserving the same failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Concrete post-final-reduction classification: even after fixing the blend-side owner at its final reduced concrete form — `blend_recipe -> exact non-LCD destination-preserving attachment selection in gdgs_canvas_compute_blend_recipe(...)` — no whole reduced lane can be honestly demoted. The first `L88` bind still reads as a true compound three-lane interaction across `vertex_input_recipe -> RendererCanvasRenderRD::shader.quad_vertex_format_id`, `specialization_constants -> PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`, and that final reduced `blend_recipe` owner. `pipeline_layout` remains demoted below the live suspect family, while `has_blend=false` and the pass-level clipped preserve chain remain selection context only rather than surviving whole-lane owners. Said plainly: the sharper blend-side reduction improved provenance honesty, but it did not collapse the first-bind explanation to any single remaining lane or to any newly demotable whole lane. No new durable in-repo artifacts were generated beyond this plan update. Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and move one level upstream of the three reduced concrete owners to the first-`L88` Canvas/UI packet-entry selector bundle — specifically the shared rect/quad packet-class entry together with the non-LCD preserve-color batch context that causes those three lane owners to appear together — while preserving the exact failing identity and without reopening internal `vertex_input_recipe`, `specialization_constants`, or `blend_recipe` splits.
+
+---
+
+### Task 115: Test the shared first-`L88` packet-entry selector bundle after final lane reduction
+
+**Bead ID:** `oc-73zg`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-73zg` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that no whole reduced lane can be honestly demoted: the first `L88` bind still reads as a compound three-lane interaction across `vertex_input_recipe -> RendererCanvasRenderRD::shader.quad_vertex_format_id`, `specialization_constants -> PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`, and `blend_recipe -> exact non-LCD destination-preserving attachment selection in gdgs_canvas_compute_blend_recipe(...)`, with `pipeline_layout`, `has_blend=false`, and the pass-level clipped preserve chain all demoted. Move one level upstream and test the shared first-`L88` Canvas/UI packet-entry selector bundle — rect/quad packet-class entry plus non-LCD preserve-color batch context — as the next honest common-driver candidate, without reopening the internal reduced-lane splits. Determine whether that shared packet-entry selection is now the best minimal common-driver explanation for why the three reduced lanes still appear together, or whether another upstream split is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete common-driver classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research pass on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope or claiming a reduction the evidence does not support. Exact artifact roots re-read for this packet-entry common-driver check were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the current source ownership directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`: the first matching failing packet is still logged as `command_type=rect`, `shader_variant=quad`, `blend_mode=mix`, `uses_prior_color=true`, `has_blend=false`, `use_lighting=false`, `use_msdf=false`, `use_lcd=false`, inside a UI pass whose batch summary stays `rendered=10`, `rect_like=10`, `clipped=10`, `destination_color=10`, with `graph_build_condition.classifier="multi_rect_preserve_clip_batch_chain"` and `overwrite_classifier="preserve_prior_root_contents"`. Upstream source ownership remains concrete: rect batching assigns `command_type=TYPE_RECT` and default `shader_variant=SHADER_VARIANT_QUAD` together in the batch builder, while the draw-time packet copies `variant/use_* /has_blend` from `p_batch`, routes rect/ninepatch packets through the `TYPE_RECT` / `TYPE_NINEPATCH` switch arm, assigns `pipeline_key.vertex_format_id = shader.quad_vertex_format_id`, and packs `PipelineKey::shader_specialization` directly from `p_batch->use_lighting/use_msdf/use_lcd`.
+
+Concrete packet-entry common-driver classification: **the proposed first-`L88` Canvas/UI packet-entry bundle is an honest compound common-driver bundle, but it is not yet an irreducible single common driver; one additional upstream split is still required.** More specifically, the evidence supports a two-factor bundle rather than a one-factor collapse. The `rect/quad p_batch` packet-class entrance is the honest shared upstream selector for the still-live `vertex_input_recipe` and `specialization_constants` lanes: the same packet-local `p_batch` state chooses `command_type=rect`, carries `shader_variant=quad`, and then immediately feeds both `shader.quad_vertex_format_id` provenance and `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`. But `blend_recipe` does not collapse into that packet-class selector alone. Its still-live first-bind mismatch remains attached to the preserve-destination-color side of the same packet family: the batch is `blend_mode=mix` with `uses_prior_color=true`, and the failing packet occurs inside the preserved-color/clipped multi-rect chain logged as `multi_rect_preserve_clip_batch_chain` / `preserve_prior_root_contents`. So the joint explanation is real only as the **compound conjunction** `{rect/quad packet-class entry} + {preserve-color batch context}`. That is smaller and more honest than the earlier coarse three-lane story, but it still does **not** reduce to one singular upstream selector that owns all three lane flips by itself.
+
+Said plainly: no additional split is needed to justify the bundle as a coarse joint explanation for why the three surviving first-`L88` lane flips appear together, but an additional split **is** still required if the goal is the next honest minimal common-driver cut. The packet-class half (`p_batch`, `command_type=rect`, `shader_variant=quad`) explains the `vertex_input_recipe` and `specialization_constants` survivors; the preserve-color half explains why the `blend_recipe` survivor joins that same first bind. `pipeline_layout`, `has_blend=false`, and the pass-level clipped preserve chain remain demoted below this result and were re-checked only as comparators, not reopened as survivors.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and split this compound packet-entry bundle into its two upstream common-driver halves without reopening the already-closed internal lane reductions. First, test the rect/quad packet-class selector as the shared upstream owner of the `vertex_input_recipe + specialization_constants` pair (`_new_batch(...)` rect entry / `shader_variant=SHADER_VARIANT_QUAD` batch formation path, then the rect/ninepatch draw-time `p_batch` switch that assigns `shader.quad_vertex_format_id` and packs `PipelineKey::shader_specialization`). Second, separately test the preserve-color batch-context half as the upstream owner of the surviving `blend_recipe` lane (`blend_mode=mix` / `uses_prior_color=true` joined with the clipped multi-rect preserve chain and `preserve_prior_root_contents` UI-pass context). Keep the exact same failing identity checks fixed: `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, and later `BLIT_PASS`. No new durable in-repo artifact files were generated in this pass beyond this plan update.
+
+---
+
+### Task 116: Split `{rect/quad packet-class entry}` from `{preserve-color batch context}` with the fully reduced-lane model fixed
+
+**Bead ID:** `oc-ealk`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ealk` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that the shared first-`L88` Canvas/UI packet-entry selector is an honest compound common-driver bundle, but not yet the final minimal one: `{rect/quad packet-class entry}` is the shared upstream owner for `vertex_input_recipe + specialization_constants`, while `{preserve-color batch context}` is why `blend_recipe` joins that same first bind. Re-run that upstream-half split with the fully reduced-lane model fixed, without reopening any already-closed internal lane reductions, and determine whether those two halves are now the minimal honest common-driver decomposition or whether one further upstream cut is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete upstream-half classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research retest on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope, reopening any already-closed internal lane reductions, or generating speculative engine changes. Exact artifact roots re-read for this upstream-half retest were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`, while preserving the same failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). I also re-checked the current source ownership directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and `servers/rendering/renderer_rd/storage_rd/material_storage.cpp`: rect batching still enters through `TYPE_RECT` with `SHADER_VARIANT_QUAD`, the draw-time packet still assigns `pipeline_key.vertex_format_id = shader.quad_vertex_format_id`, packs `PipelineKey::shader_specialization` from `p_batch->use_lighting/use_msdf/use_lcd`, and computes the blend attachment via `gdgs_canvas_compute_blend_recipe(...)` falling through to `blend_mode_to_blend_attachment(BLEND_MODE_MIX)` on the non-LCD path.
+
+Concrete upstream-half classification: the two-half split remains honest, but it is **still not the final minimal common-driver decomposition**. `{rect/quad packet-class entry}` is now confirmed as the minimal honest shared upstream owner for the reduced `vertex_input_recipe + specialization_constants` side under the fixed reduced-lane model: the same packet-class entrance (`p_batch`, `command_type=rect`, `shader_variant=quad`) directly feeds both `RendererCanvasRenderRD::shader.quad_vertex_format_id` and `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`, and no further upstream cut is needed on that half without reopening already-closed internal reductions. But `{preserve-color batch context}` is still one step too coarse for the reduced `blend_recipe` side. With the fully reduced model fixed, the pass-level clipped preserve chain / overwrite policy remains demoted selection context only, and the packet-local preserve-color side reduces further to the exact non-LCD destination-preserving `BLEND_MODE_MIX` attachment selection inside `gdgs_canvas_compute_blend_recipe(...)` (with `has_blend=false` already demoted to branch-gate context). So the current honest decomposition is asymmetric: one half is already minimal (`{rect/quad packet-class entry}` for `vertex_input_recipe + specialization_constants`), while the other half still needs one more upstream/common-driver cut because `{preserve-color batch context}` over-groups the actual reduced `blend_recipe` owner.
+
+Said plainly: **one further upstream cut is still required**, but only on the preserve-color side. The strongest unchanged decomposition is still `{rect/quad packet-class entry}` plus the blend-side preserve-color half, yet the blend-side half is not minimal when the reduced-lane model is held fixed. No new durable in-repo artifact files were generated in this pass beyond this plan update. Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane, keep `{rect/quad packet-class entry}` closed as the settled shared upstream owner for `vertex_input_recipe + specialization_constants`, and spend the next pass only on the blend-side half by recasting the common-driver split around the already-reduced packet-local `blend_recipe` owner — i.e. test whether the exact non-LCD destination-preserving `BLEND_MODE_MIX` attachment selection is itself the minimal honest surviving blend-side common driver for why `blend_recipe` joins the first `L88` bind, without reopening pass-level preserve-chain context or any internal `vertex_input_recipe` / `specialization_constants` reductions.
+
+---
+
+### Task 117: Test whether the packet-local non-LCD `BLEND_MODE_MIX` attachment selection is the minimal remaining blend-side common driver
+
+**Bead ID:** `oc-zl48`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-zl48` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that `{rect/quad packet-class entry}` is already closed as the minimal honest shared upstream owner for `vertex_input_recipe + specialization_constants`, while the only still-live common-driver uncertainty is on the blend side. Keep the pass-level preserve chain demoted and keep `has_blend=false` demoted to branch-gate context. Test whether the already-reduced packet-local non-LCD destination-preserving `BLEND_MODE_MIX` attachment selection in `gdgs_canvas_compute_blend_recipe(...)` is now the minimal honest remaining blend-side common driver, or whether one further distinguishing cut is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete blend-side common-driver classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow source-and-artifact research pass on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope, reopening demoted lanes, or generating speculative engine changes. Exact artifact roots re-read for this blend-side minimality check were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`, while preserving the same failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). I also re-checked the current source ownership directly in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and `servers/rendering/renderer_rd/storage_rd/material_storage.cpp`: the non-LCD path in `gdgs_canvas_compute_blend_recipe(...)` still falls through to `recipe_branch="shader_blend_mode_attachment"` and `blend_mode_to_blend_attachment(BLEND_MODE_MIX)` for the failing packet, and the blend split artifact root still shows that the same `submit_serial=9` seam survives under `selector_only`, `attachment_only`, and `dynamic_state_only` reruns with the same four-bucket family. Honest blend-side common-driver classification: the pass-level preserve chain stays demoted, and `has_blend=false` stays demoted to non-LCD branch-gate context, but the already-reduced packet-local non-LCD `BLEND_MODE_MIX` attachment selection is **not yet the minimal honest remaining blend-side owner**. The durable evidence still supports that the live blend-side contribution enters through the packet-local non-LCD attachment path, but source inspection shows one further internal cut remains available inside that attachment recipe itself: `BLEND_MODE_MIX` and `BLEND_MODE_PREMULTIPLIED_ALPHA` share the same destination-preserving `dst_color=ONE_MINUS_SRC_ALPHA` / `dst_alpha=ONE_MINUS_SRC_ALPHA` pair (with the same `ADD` ops and `src_alpha=ONE`), while differing on the source-color factor (`SRC_ALPHA` for `MIX` vs `ONE` for premultiplied alpha). So the current evidence package is honest only up to **packet-local non-LCD destination-preserving attachment recipe context**, not yet to the claim that the full `BLEND_MODE_MIX` attachment constructor is the final minimal blend-side common driver. No new durable in-repo artifacts were generated beyond this plan update. Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane, keep `{rect/quad packet-class entry}` closed as the owner for `vertex_input_recipe + specialization_constants`, keep the pass-level preserve chain and `has_blend=false` demoted, and split the remaining blend-side owner one level further *inside* the non-LCD destination-preserving attachment recipe — specifically, test whether the surviving common driver is only the shared destination-preserving dst-factor pair (`dst_color`/`dst_alpha` one-minus-src-alpha) or whether the failing lane still honestly requires the full `BLEND_MODE_MIX` source-factor choice as well.
+
+---
+
+### Task 118: Split inside the non-LCD destination-preserving `blend_recipe`
+
+**Bead ID:** `oc-fu7d`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-fu7d` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current classification that `{rect/quad packet-class entry}` is already closed as the minimal honest shared upstream owner for `vertex_input_recipe + specialization_constants`, while the remaining blend-side uncertainty has narrowed to the packet-local non-LCD destination-preserving attachment-recipe context inside `gdgs_canvas_compute_blend_recipe(...)`. Keep the pass-level preserve chain demoted and keep `has_blend=false` demoted to branch-gate context. Split inside that remaining blend-side recipe: determine whether the minimal surviving requirement is only the shared destination-preserving dst-factor pair (`dst_color=ONE_MINUS_SRC_ALPHA`, `dst_alpha=ONE_MINUS_SRC_ALPHA`) or whether the full `BLEND_MODE_MIX` source-factor choice (`src_color=SRC_ALPHA` vs the premultiplied-alpha `ONE` alternative) is still required. Preserve the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Update this plan with exact artifact roots used, the concrete refined blend-side classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ❌ Failed
+
+**Results:** Completed as a narrow source-and-artifact research pass on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, while keeping the pass-level preserve chain demoted, keeping `has_blend=false` demoted to non-LCD branch-gate context, and preserving the same failing-lane identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Exact artifact roots re-read for this factor-level split were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`. I also re-checked the exact source recipe split in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and `servers/rendering/renderer_rd/storage_rd/material_storage.cpp`: the failing packet is still the non-LCD `recipe_branch="shader_blend_mode_attachment"` path, and the logged attachment for the first clipped preserve rect remains `src_color=SRC_ALPHA`, `dst_color=ONE_MINUS_SRC_ALPHA`, `src_alpha=ONE`, `dst_alpha=ONE_MINUS_SRC_ALPHA`, while the source helper still shows that `BLEND_MODE_MIX` and `BLEND_MODE_PREMULTIPLIED_ALPHA` share the same destination-preserving dst-factor pair, the same `ADD` ops, and the same `src_alpha=ONE`, differing only at `src_color` (`SRC_ALPHA` vs `ONE`). Honest refined blend-side classification: the surviving blend-side owner can now be stated more precisely as **packet-local non-LCD destination-preserving attachment-recipe context whose still-live unresolved internal split is `shared dst_color/dst_alpha one-minus-src-alpha pair` versus `that pair plus the `BLEND_MODE_MIX` source-color factor choice`**. Current durable evidence does **not** yet justify either stronger reduction: there is no existing artifact root or runtime toggle in this lane that holds the shared destination-preserving pair fixed while switching only the source-color factor between the `MIX` and premultiplied-alpha alternatives, so this pass cannot honestly decide whether the dst-factor pair alone is sufficient or whether the full `BLEND_MODE_MIX` source-color choice is still required. No new durable in-repo artifacts were generated beyond this plan update. Exact blocker: the current evidence set never executes the needed `same dst pair, different src_color` comparison, so the requested factor-level split remains unobserved rather than resolved. Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and add one targeted experiment that preserves the packet-local non-LCD destination-preserving attachment recipe but flips only `src_color` from `SRC_ALPHA` to the premultiplied-alpha `ONE` alternative (keeping `dst_color=ONE_MINUS_SRC_ALPHA`, `src_alpha=ONE`, `dst_alpha=ONE_MINUS_SRC_ALPHA`, and the same `ADD` ops fixed) for the first clipped preserve-rect packet, then compare whether the same `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` / UI-pass / later `BLIT_PASS` failure identity survives. If that comparison survives unchanged, the honest minimal surviving requirement reduces to the shared destination-preserving dst-factor pair; if it does not, the full `BLEND_MODE_MIX` source-color choice remains required.
+
+---
+
+### Task 119: Add a targeted same-dst-pair `src_color`-only experiment for the first clipped preserve-rect packet
+
+**Bead ID:** `oc-u4s2`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-u4s2` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current blocker: existing durable evidence narrows the remaining blend-side uncertainty to a packet-local non-LCD destination-preserving attachment-recipe context, but there is no targeted comparison that keeps `dst_color`, `dst_alpha`, `src_alpha`, and blend ops fixed while flipping only `src_color` from `SRC_ALPHA` to the premultiplied-alpha `ONE` alternative for the first clipped preserve-rect packet. Add the narrowest reversible diagnostic/experiment needed to produce that comparison on the locked failing lane, update this plan with the exact touched files, experiment shape, and validation performed, and close the bead with a clear reason if the experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+
+**Status:** ✅ Complete
+
+**Results:** Added the narrowest reversible in-repo experiment needed for the missing same-dst-pair comparison, without widening the lane or claiming a fix. In `servers/rendering/renderer_rd/renderer_canvas_render_rd.h` I extended `RendererCanvasRenderRD::PipelineKey` with a debug-only `gdgs_temp_diag_src_color_premul_experiment` bit so the experiment gets its own cached pipeline hash instead of silently reusing the normal non-experiment pipeline. In `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` I extended `gdgs_canvas_compute_blend_recipe(...)` so, only when the new env `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_COLOR_PREMUL_EXPERIMENT=1` is enabled **and** the currently traced batch is the captured first clipped preserve-rect packet on the locked `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane, the non-LCD `BLEND_MODE_MIX` attachment recipe is rebuilt with the exact same `enable_blend=true`, `color_op=add`, `alpha_op=add`, `dst_color=one_minus_src_alpha`, `src_alpha=one`, and `dst_alpha=one_minus_src_alpha` values while flipping only `src_color` from `src_alpha` to `one`. The override is guarded so it only applies when the baseline recipe exactly matches that destination-preserving non-LCD mix shape; otherwise it stays inactive. I also wired the gate banner and the existing `temp_diag_first_clipped_preserve_rect_blend_recipe_{selector,attachment}` markers to report whether the experiment was requested and whether the src-color-only override was actually applied, so QA can verify the comparison lane from runtime logs alone. Validation performed: repo-local rebuild succeeded with `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64` (completed successfully after one compile-time scope fix that promoted the env flag into the existing thread-local first-batch diagnostic context). No new runtime artifact root was generated in this coder pass; the experiment package is now ready for QA on the same refreshed source-built host-Vulkan `projection_only__disabled` lane.
+
+---
+
+### Task 120: QA the `src_color`-only blend experiment on the locked first clipped preserve-rect Vulkan lane
+
+**Bead ID:** `oc-t5tq`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-t5tq` and QA the new reversible diagnostic experiment gated by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_COLOR_PREMUL_EXPERIMENT=1` on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Re-run the locked failing identity and compare baseline vs experiment, verifying that the experiment only flips `src_color` from `SRC_ALPHA` to `ONE` for the first clipped preserve-rect packet while keeping `dst_color`, `dst_alpha`, `src_alpha`, and both blend ops fixed. Record whether the failing identity changes or survives (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`), capture exact artifact roots, update this plan with concrete results, and close the bead with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed the QA pass for the new reversible `src_alpha`-only blend experiment on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Exact artifact roots for this QA were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/`, with paired run folders at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/baseline/` and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/experiment/`; runtime binary proof was recorded in `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/runtime_binary_proof.txt`.
+
+The experiment applied cleanly and only on the intended first clipped preserve-rect packet. Baseline selector/attachment logs stayed on `recipe_branch=shader_blend_mode_attachment` with `src_alpha_zero_experiment={requested=false,applied=false}` and the original attachment shape `src_color=src_alpha`, `dst_color=one_minus_src_alpha`, `src_alpha=one`, `dst_alpha=one_minus_src_alpha`. The experiment rerun flipped only the targeted packet onto `recipe_branch=shader_blend_mode_attachment_src_alpha_zero_experiment_on_demoted_blend_shape` with `src_alpha_zero_experiment={requested=true,applied=true}` and the attachment log proved the intended demoted held-shape exactly: `enable_blend=true`, `color_op=add`, `alpha_op=add`, `src_color=one`, `dst_color=zero`, `dst_alpha=zero`, while perturbing only `src_alpha` from `one` to `zero` (`held_src_color=one`, `held_dst_color=zero`, `held_dst_alpha=zero`). That preserves the already-demoted pieces as fixed context instead of reintroducing them.
+
+Concrete baseline-vs-experiment result: the locked failure identity survived unchanged. Both runs still hit `fence_wait_error submit_serial=9 wait_result=-4`, still carry the same late tail through `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, still show `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity at the `L88` draw scope, and still end later at `ERROR: Last known breadcrumb: BLIT_PASS`. So this QA honestly demotes isolated `src_alpha=ONE` out of the surviving blend-side minimum on this lane, but it does not demote the whole residual blend bundle or collapse the broader first-`L88` interaction.
+
+---
+
+### Task 121: Classify whether unchanged failure under the `src_color`-only premul flip demotes the blend-side minimum to the shared destination-preserving dst-factor pair
+
+**Bead ID:** `oc-0u6g`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-0u6g` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the new QA result from the `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_COLOR_PREMUL_EXPERIMENT=1` experiment: the comparison cleanly flipped only `src_color` from `SRC_ALPHA` to `ONE` for the first clipped preserve-rect packet while leaving `dst_color`, `dst_alpha`, `src_alpha`, and blend ops fixed, and the failing identity survived unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Classify whether that unchanged failure now honestly demotes the remaining blend-side minimum from the full non-LCD `BLEND_MODE_MIX` attachment selection down to the shared destination-preserving dst-factor pair (`dst_color=ONE_MINUS_SRC_ALPHA`, `dst_alpha=ONE_MINUS_SRC_ALPHA`), or whether another interpretation is still required. Update this plan with exact artifact roots used, the concrete post-QA blend-side classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow plan-level research classification on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, keeping the failing identity checks fixed (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`) and avoiding any broader lane changes. Exact artifact roots used for this read were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/` (the new baseline-vs-experiment QA package) and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/` (the prior reduced-owner baseline that established the exact non-LCD `mix` attachment selection). I also re-checked the current source framing in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`.
+
+Concrete post-QA blend-side classification: the unchanged failure **does honestly demote `src_color=src_alpha` out of the minimum**, because the new QA package cleanly changes only that one field to `src_color=one` on the first clipped preserve-rect packet while leaving `enable_blend=true`, `color_op=add`, `alpha_op=add`, `dst_color=one_minus_src_alpha`, `src_alpha=one`, and `dst_alpha=one_minus_src_alpha` fixed, and the exact failing identity survives unchanged. But that evidence does **not** yet honestly collapse the remaining blend-side minimum all the way down to the shared destination-preserving dst-factor pair alone. The surviving common blend bundle is still broader than just `{dst_color=one_minus_src_alpha, dst_alpha=one_minus_src_alpha}` because the same unchanged comparison also keeps `src_alpha=one` and both blend ops fixed, so this pass excludes only the `src_color` term; it does not independently prove that `src_alpha` and the add/add op shape are already demoted below the dst pair. Said plainly: the former minimum `exact non-LCD mix attachment selection` is now over-specific, but the strongest honest reduction after this QA is **"shared destination-preserving blend bundle with `src_color` demoted"**, not yet **"dst-factor pair alone"**.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and run the complementary same-packet experiment that keeps the newly proven-nonessential `src_color=one` path in place while perturbing only the shared destination-preserving pair (`dst_color` and `dst_alpha`) away from `one_minus_src_alpha`, with `src_alpha=one` and both blend ops still fixed. That is the next clean cut needed to decide whether the minimum can honestly collapse to the dst-factor pair itself or whether the surviving minimum still includes a larger blend-side bundle.
+
+---
+
+### Task 122: Add a targeted same-`src`/ops experiment that perturbs only `dst_color` + `dst_alpha` for the first clipped preserve-rect packet
+
+**Bead ID:** `oc-6rop`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-6rop` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the new post-QA classification: `src_color=SRC_ALPHA` has been honestly demoted out of the blend-side minimum, but the blend-side minimum has not yet reduced all the way to the dst-factor pair alone. Add the narrowest reversible diagnostic/experiment needed to keep `src_color=ONE`, `src_alpha=ONE`, and both blend ops fixed while perturbing only `dst_color` + `dst_alpha` away from `ONE_MINUS_SRC_ALPHA` for the first clipped preserve-rect packet, so QA can test whether the destination-preserving pair is still required on the locked failing lane. Update this plan with exact touched files, experiment shape, and validation performed, and close the bead with a clear reason if the experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+
+**Status:** ✅ Complete
+
+**Results:** Added the narrowest reversible in-repo comparison needed for the next blend-side cut, staying entirely inside the existing first clipped preserve-rect diagnostic path. In `servers/rendering/renderer_rd/renderer_canvas_render_rd.h` I extended `RendererCanvasRenderRD::PipelineKey` with a new debug-only `gdgs_temp_diag_dst_factors_zero_experiment` bit so the experiment receives its own pipeline-cache hash instead of silently reusing the normal or prior src-color-only diagnostic pipeline. In `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` I extended the shared `gdgs_canvas_compute_blend_recipe(...)` helper to support a second gated override: when the new env `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1` is enabled for the captured first clipped preserve-rect packet on the locked `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane, the helper first preserves the already-demoted `src_color=one` / `src_alpha=one` / `color_op=add` / `alpha_op=add` shape, then perturbs only the destination-preserving pair by rewriting `dst_color` and `dst_alpha` from `one_minus_src_alpha` to `zero`. The override is guarded so it only applies when the baseline packet-local non-LCD mix attachment matches that exact preserved-src, preserved-op shape; otherwise it stays inactive. I also updated the existing gate banner plus the `temp_diag_first_clipped_preserve_rect_blend_recipe_selector=` and `..._attachment=` markers so QA can verify from runtime logs alone whether the new dst-factor experiment was requested, whether it actually applied, and which exact baseline/experiment factor values were in play.
+
+Validation performed: repo-local `git diff --check` passed, and an incremental editor rebuild succeeded with `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64` on the same repo. No new runtime artifact root was generated in this coder pass; this change is purely a reversible diagnostic package prepared for QA on the refreshed source-built host-Vulkan `projection_only__disabled` `cap=1` lane.
+
+---
+
+### Task 123: QA the `dst_factor`-only blend experiment on the locked first clipped preserve-rect Vulkan lane
+
+**Bead ID:** `oc-ocgx`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ocgx` and QA the new reversible diagnostic experiment gated by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1` on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Re-run the locked failing identity and compare baseline vs experiment, verifying that the experiment only perturbs `dst_color` + `dst_alpha` from `ONE_MINUS_SRC_ALPHA` to `ZERO` for the first clipped preserve-rect packet while keeping `src_color=ONE`, `src_alpha=ONE`, and both blend ops fixed. Record whether the failing identity changes or survives (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`), capture exact artifact roots, update this plan with concrete results, and close the bead with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA re-ran the locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` and a fresh artifact root at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factors-zero-blend-experiment-qa-vulkan-sourcebuild-20260523-132235/`. Exact runtime artifacts are:
+- binary proof: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factors-zero-blend-experiment-qa-vulkan-sourcebuild-20260523-132235/runtime_binary_proof.txt`
+- baseline run: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factors-zero-blend-experiment-qa-vulkan-sourcebuild-20260523-132235/baseline/`
+- experiment run: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factors-zero-blend-experiment-qa-vulkan-sourcebuild-20260523-132235/experiment/`
+- summary: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factors-zero-blend-experiment-qa-vulkan-sourcebuild-20260523-132235/run_summary.txt`
+
+The rebuilt editor binary does expose the new gate (`GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT`) plus the new `temp_diag_first_clipped_preserve_rect_blend_recipe_attachment` logging shape, so the intended diagnostic package was present in the tested source build.
+
+Concrete baseline vs experiment result:
+- Baseline first clipped preserve-rect attachment logged `enable_blend=true`, `color_op=add`, `alpha_op=add`, `src_color=src_alpha`, `dst_color=one_minus_src_alpha`, `src_alpha=one`, `dst_alpha=one_minus_src_alpha`, with `dst_factors_zero_experiment={requested=false,applied=false}`.
+- Experiment first clipped preserve-rect attachment logged `enable_blend=true`, `color_op=add`, `alpha_op=add`, `src_color=one`, `dst_color=zero`, `src_alpha=one`, `dst_alpha=zero`, with `dst_factors_zero_experiment={requested=true,applied=true}`.
+- Critically, the experiment did **not** stay a dst-factor-only perturbation in the observed runtime trace: the same attachment also logged `src_color_premul_experiment={requested=false,applied=true}`. So QA can confirm the new dst-factor gate applied, but cannot honestly claim that only `dst_color` + `dst_alpha` changed while `src_color` remained independently fixed by the pre-existing lane. At runtime the experiment changed the full tuple from `src_color=src_alpha,dst_color=one_minus_src_alpha,src_alpha=one,dst_alpha=one_minus_src_alpha` to `src_color=one,dst_color=zero,src_alpha=one,dst_alpha=zero`, while both blend ops stayed `add`.
+
+The failing identity itself survived unchanged across both runs. Both baseline and experiment aborted with exit status `134` and preserved the same locked envelope: `submit_serial=9`, the same `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` tail, UI-pass continuity (`begin_breadcrumb="UI_PASS", end_breadcrumb="UI_PASS"`), and later `ERROR: Last known breadcrumb: BLIT_PASS`. In other words, the new experiment definitely applied, but it did not remove or materially move the failing identity on this lane.
+
+---
+
+### Task 124: Isolate the `dst_factor`-zero experiment so `src_color` remains fixed during first clipped preserve-rect QA
+
+**Bead ID:** `oc-hu1e`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-hu1e` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the new QA caveat: the `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1` run was supposed to perturb only `dst_color` + `dst_alpha`, but runtime logs showed `src_color_premul_experiment={requested=false,applied=true}`, so the comparison was confounded. Add the narrowest reversible fix needed so the dst-factor-zero experiment can run with `src_color` truly held fixed, update this plan with exact touched files, experiment-isolation fix shape, and validation performed, and close the bead with a clear reason if the corrected experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow reversible diagnostic isolation fix on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, without widening scope beyond the confounded first clipped preserve-rect blend experiment package. Exact isolation-fix shape: in `gdgs_canvas_compute_blend_recipe(...)`, the temporary `src_color -> ONE` override is now gated **only** by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_COLOR_PREMUL_EXPERIMENT`, while the `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT` path now matches either preserve-destination blend shape (`src_color=SRC_ALPHA` baseline or the explicitly requested `src_color=ONE` variant) before zeroing only `dst_color` + `dst_alpha`. That keeps the dst-factor-zero experiment honest when requested by itself (`src_color` remains fixed at `SRC_ALPHA`) but still preserves reversibility and the ability to combine both diagnostics deliberately if both env toggles are enabled.
+
+Validation performed: repo-local build validation via `scons bin/obj/servers/rendering/renderer_rd/renderer_canvas_render_rd.linuxbsd.editor.dev.x86_64.o platform=linuxbsd target=editor dev_mode=yes -j8` returned exit code 0 (`Nothing to be done`, confirming the touched translation unit remained build-clean under the existing dev editor configuration). No new durable artifacts were generated beyond this code change and plan update; the corrected experiment package is ready for QA rerun on the same locked lane.
+
+---
+
+### Task 125: Re-QA the isolated `dst_factor`-zero experiment on the locked first clipped preserve-rect Vulkan lane
+
+**Bead ID:** `oc-sx4s`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-sx4s` and QA the corrected reversible diagnostic experiment gated by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1` on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Re-run the locked failing identity and compare baseline vs experiment, verifying that the corrected experiment now perturbs only `dst_color` + `dst_alpha` away from `ONE_MINUS_SRC_ALPHA` for the first clipped preserve-rect packet while keeping `src_color` fixed unless the separate src-color experiment is explicitly requested. Record whether the failing identity changes or survives (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`), capture exact artifact roots, update this plan with concrete results, and close the bead with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` under baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1` at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-only-blend-experiment-qa-vulkan-sourcebuild-20260523-1339/` (`baseline/`, `experiment/`, `runtime_binary_proof.txt`, `run_summary.txt`). The source-built runtime applied the new experiment plumbing cleanly enough to expose the new markers (`runtime_binary_proof.txt`), but the experiment did **not** stay isolated to `dst_color` + `dst_alpha`: baseline logged `src_color=src_alpha,dst_color=one_minus_src_alpha,src_alpha=one,dst_alpha=one_minus_src_alpha` with `src_color_premul_experiment={requested=false,applied=false}` / `dst_factors_zero_experiment={requested=false,applied=false}`, while the experiment logged `recipe_branch=shader_blend_mode_attachment_dst_factors_zero_experiment`, `src_color=one,dst_color=zero,src_alpha=one,dst_alpha=zero`, `src_color_premul_experiment={requested=false,applied=true}`, and `dst_factors_zero_experiment={requested=true,applied=true}`. So the corrected dst-factor-zero QA still shows an unintended `src_color` flip even without the separate src-color experiment request. The failing runtime identity itself survived unchanged across baseline and experiment: both runs aborted with exit status `134`, kept `submit_serial=9`, kept the same late tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, preserved UI-pass continuity (`begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` on the surviving `L88` scope), and still ended later at `ERROR: Last known breadcrumb: BLIT_PASS`. This task therefore closes as a QA result showing the requested isolation was **not** achieved, while the original failing identity remained intact.
+
+---
+
+### Task 126: Trace and fix why the `dst_factor`-zero experiment still triggers the `src_color` premul override
+
+**Bead ID:** `oc-84t3`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-84t3` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the latest QA caveat: even after the attempted isolation fix, `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1` still logs `src_color_premul_experiment={requested=false,applied=true}` and runtime attachment state still flips `src_color` from `SRC_ALPHA` to `ONE`. Trace the gating/override path, make the narrowest reversible diagnostic fix needed so the dst-factor-zero experiment can run with `src_color` truly unchanged, update this plan with exact touched files, the concrete root cause/fix shape, and validation performed, and close the bead with a clear reason if the corrected experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+
+**Status:** ✅ Complete
+
+**Results:** Traced the gating/override path narrowly in `gdgs_canvas_compute_blend_recipe(...)` and reconciled it against the latest QA artifact package on the locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. The concrete root cause/fix shape is two-part but still local to this diagnostic path: (1) the current source-level isolation logic needed to be made *self-proving* at the exact dst-zero branch boundary, because the last QA package still emitted the pre-isolation combined branch signature (`recipe_branch=shader_blend_mode_attachment_dst_factors_zero_experiment` with `src_color_premul_experiment={requested=false,applied=true}`), which meant the runtime proof could not distinguish a genuinely preserved-src dst-only run from stale/old combined behavior; and (2) the dst-only branch now explicitly hard-pins `src_color=SRC_ALPHA` when `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1` is requested without the separate src-premul toggle, while splitting the recipe markers into two unambiguous branch names: `shader_blend_mode_attachment_dst_factors_zero_experiment_src_preserved` for the isolated dst-only path and `shader_blend_mode_attachment_dst_factors_zero_experiment_with_src_color_premul` for the deliberate combined path. That keeps the change reversible and diagnostic, preserves the ability to combine both toggles intentionally, and gives QA a concrete binary/runtime proof target for the corrected isolated lane instead of relying on ambiguous reused marker text.
+
+Validation performed: `git diff --check` passed, and a full repo-local editor rebuild succeeded with `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64` (successful compile + link of the touched translation unit into the refreshed source-built editor binary). Exact touched files for this task were this plan file and `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`. No new runtime artifact root was generated in this coder pass; the corrected and now self-identifying dst-zero experiment package is ready for QA rerun.
+
+---
+
+### Task 127: Re-QA the corrected isolated `dst_factor`-zero experiment with explicit `src_color` branch tagging
+
+**Bead ID:** `oc-sgxc`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-sgxc` and QA the corrected reversible diagnostic experiment gated by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1` on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Re-run the locked failing identity and compare baseline vs experiment, verifying that the corrected experiment now self-identifies whether it took the isolated `src_color`-preserved branch (`shader_blend_mode_attachment_dst_factors_zero_experiment_src_preserved`) or the combined branch (`...with_src_color_premul`), and that `src_color` truly stays fixed when only the dst factors are meant to change. Record whether the failing identity changes or survives (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`), capture exact artifact roots, update this plan with concrete results, and close the bead with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, comparing a fresh baseline package against the corrected reversible dst-factor-zero experiment package under artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/`.
+
+Exact artifact roots:
+- Baseline: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/baseline/`
+- Experiment: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/experiment/`
+- Binary/runtime proof: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/runtime_binary_proof.txt`
+
+The refreshed editor binary self-proves both new branch markers exist (`shader_blend_mode_attachment_dst_factors_zero_experiment_src_preserved` and `shader_blend_mode_attachment_dst_factors_zero_experiment_with_src_color_premul`). The **baseline** run reports `recipe_branch=shader_blend_mode_attachment`, `src_color_premul_experiment={requested=false,applied=false}`, `dst_factors_zero_experiment={requested=false,applied=false}`, and attachment state `src_color=src_alpha`, `dst_color=one_minus_src_alpha`, `src_alpha=one`, `dst_alpha=one_minus_src_alpha`. The **experiment** run reports `recipe_branch=shader_blend_mode_attachment_dst_factors_zero_experiment_src_preserved` (not the combined `...with_src_color_premul` branch), `src_color_premul_experiment={requested=false,applied=false}`, `dst_factors_zero_experiment={requested=true,applied=true}`, and attachment state `src_color=src_alpha`, `dst_color=zero`, `src_alpha=one`, `dst_alpha=zero`. That is the corrected isolated behavior QA needed to confirm: `src_color` stays fixed while only the destination factors change.
+
+Concrete baseline-vs-experiment result: the experiment changes only the targeted blend factors, but the locked failure identity **survives unchanged**. Both runs abort with `exit_status=134` / `wait_result=-4` at the same failing `submit_serial=9`, both preserve the same `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` tail, both retain UI-pass continuity (`begin_breadcrumb="UI_PASS"`, `end_breadcrumb="UI_PASS"`, `last_breadcrumb="UI_PASS"` in the failing submit/wait package), and both still show the earlier/later `BLIT_PASS` breadcrumbs in the same overall session trace. This QA pass therefore confirms the corrected diagnostic is now truthful and self-identifying, but the submit-9 crash signature is not removed by isolated dst-factor zeroing alone.
+
+---
+
+### Task 128: Classify the post-QA `blend_recipe` minimum after clean `dst_factor` isolation also leaves the failure unchanged
+
+**Bead ID:** `oc-zbnd`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-zbnd` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the corrected QA result from `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT=1`: the isolated `src_color`-preserved branch executed, `src_color` stayed fixed, only `dst_color` + `dst_alpha` changed from `ONE_MINUS_SRC_ALPHA` to `ZERO`, and the failing identity still survived unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Classify what this now honestly demotes on the blend side: whether the surviving blend-side minimum falls below the destination-preserving dst-factor pair, whether the whole reduced `blend_recipe` lane can now be honestly demoted, or whether a narrower residual blend-side requirement still remains. Update this plan with exact artifact roots used, the concrete post-QA blend-side classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow plan-level research classification on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, building directly on the corrected isolated `dst_factor`-zero QA result and the earlier isolated `src_color`-only QA result without widening the lane or claiming an unearned collapse. Exact artifact roots used for this read were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`. I also re-checked the current attachment constructor split in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and `servers/rendering/renderer_rd/storage_rd/material_storage.cpp`.
+
+Concrete post-QA blend-side classification: the surviving blend-side minimum now **does honestly fall below the destination-preserving dst-factor pair**. The earlier isolated `src_color`-only QA already demoted `src_color=SRC_ALPHA` out of the minimum, and the corrected isolated `dst_factor`-zero QA now also demotes `dst_color=ONE_MINUS_SRC_ALPHA` plus `dst_alpha=ONE_MINUS_SRC_ALPHA`, because that run keeps `src_color` fixed while changing only those two destination factors to `ZERO` and the exact failing identity still survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). But that does **not** honestly demote the whole reduced `blend_recipe` lane. Both successful isolation experiments still leave the rest of the non-LCD attachment shape fixed, so the remaining live blend-side requirement is only narrowed to a smaller residual attachment sub-bundle rather than eliminated outright. The strongest honest residual read after these two QAs is: `blend_recipe` remains live only through the still-untested remainder of the packet-local non-LCD attachment shape — at least `enable_blend=true`, `color_op=add`, `alpha_op=add`, and `src_alpha=one` as a residual bundle — while `src_color` and the destination-preserving dst-factor pair are now demoted below that minimum. Said plainly: the old `exact non-LCD destination-preserving attachment selection` wording is now over-specific, but `blend_recipe` itself is not yet demoted out of the first-`L88` three-lane interaction.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and add one more targeted reversible experiment inside `gdgs_canvas_compute_blend_recipe(...)` that keeps the already-demoted pieces fixed out of the way while perturbing only the next residual field — most naturally `src_alpha` away from `ONE` while preserving `enable_blend=true`, `color_op=add`, `alpha_op=add`, and a self-identifying first clipped preserve-rect branch marker. Then re-QA whether the same `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` / UI-pass / later `BLIT_PASS` identity survives. If that isolated `src_alpha` change also survives unchanged, the remaining residual bundle shrinks further to the additive-op / blend-enable remainder; if it does not, `src_alpha=one` remains part of the honest blend-side minimum.
+
+---
+
+### Task 129: Add a targeted `src_alpha`-only experiment for the first clipped preserve-rect packet after `src_color` and dst factors were demoted
+
+**Bead ID:** `oc-6ww8`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-6ww8` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current post-QA classification: both `src_color` and the destination-preserving dst-factor pair have now been honestly demoted out of the blend-side minimum, but the whole reduced `blend_recipe` lane is not yet honestly demoted. Add the narrowest reversible diagnostic/experiment needed to perturb only `src_alpha` away from `ONE` for the first clipped preserve-rect packet while keeping the already-demoted pieces out of the way, preserving self-identifying branch logging, and holding the same locked failing lane/identity. Update this plan with exact touched files, experiment shape, and validation performed, and close the bead with a clear reason if the experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+
+**Status:** ✅ Complete
+
+**Results:** Added the narrowest reversible in-repo diagnostic package for the next blend-side cut without widening the locked lane or claiming a fix. `RendererCanvasRenderRD::PipelineKey` now carries a debug-only `gdgs_temp_diag_src_alpha_zero_experiment` bit so the first clipped preserve-rect `src_alpha` experiment gets its own pipeline-cache hash. In `gdgs_canvas_compute_blend_recipe(...)`, the new env `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_ALPHA_ZERO_EXPERIMENT=1` now holds the already-demoted pieces out of the way for the captured first clipped preserve-rect packet by forcing the demoted blend shape `src_color=one`, `dst_color=zero`, and `dst_alpha=zero`, preserving `enable_blend=true` plus `color_op=add` / `alpha_op=add`, and then perturbing only `src_alpha` from `one` to `zero`. The self-identifying branch names now reflect that shape accurately: the baseline entry path is `shader_blend_mode_attachment_src_alpha_zero_experiment_on_demoted_blend_shape`, with the narrower follow-on `..._with_dst_factors_zero` and `..._src_alpha_only` names preserved when the packet already arrives partway onto that demoted shape. The existing gate / selector / attachment markers also report `src_alpha_zero_experiment={requested,applied,...}` so QA can prove from runtime logs alone whether the intended `src_alpha` comparison lane was actually exercised.
+
+Validation performed: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h`; `git diff --check`; full editor rebuild `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64` (exit 0); runtime string proof `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_ALPHA_ZERO_EXPERIMENT"`. No new runtime artifact root was generated in this coder pass; the experiment package is ready for QA on the same refreshed source-built host-Vulkan `projection_only__disabled` lane.
+
+---
+
+### Task 130: QA the `src_alpha`-only blend experiment on the locked first clipped preserve-rect Vulkan lane
+
+**Bead ID:** `oc-at9b`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-at9b` and QA the new reversible diagnostic experiment gated by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_ALPHA_ZERO_EXPERIMENT=1` on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Re-run the locked failing identity and compare baseline vs experiment, verifying that the experiment perturbs only `src_alpha` away from `ONE` for the first clipped preserve-rect packet while keeping the already-demoted pieces fixed on the explicit demoted blend shape (`src_color=one`, `dst_color=zero`, `dst_alpha=zero`, both ops `add`). Record whether the failing identity changes or survives (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`), capture exact artifact roots, update this plan with concrete results, and close the bead with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/run_summary.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/baseline/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/baseline/env_relevant.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/baseline/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/baseline/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/baseline/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/baseline/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/experiment/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/experiment/env_relevant.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/experiment/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/experiment/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/experiment/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/experiment/stderr.log`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked refreshed source-built host-Vulkan `projection_only__disabled` lane both with and without `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_ALPHA_ZERO_EXPERIMENT=1`, keeping `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1`, and `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_RECIPE=1` fixed across both runs. Exact artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/`.
+
+Concrete baseline-vs-experiment result: the crash identity survived unchanged. Both baseline and experiment still failed on the same locked path with `fence_wait_error submit_serial=9 wait_result=-4`, the same late tail through `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, the same `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity at the `L88` draw scope, and the same later `ERROR: Last known breadcrumb: BLIT_PASS`.
+
+The experiment also applied cleanly and only on the intended first clipped preserve-rect packet. Baseline logs stayed on `recipe_branch=shader_blend_mode_attachment` with `src_alpha_zero_experiment={requested=false,applied=false}` and the original attachment shape `src_color=src_alpha`, `dst_color=one_minus_src_alpha`, `src_alpha=one`, `dst_alpha=one_minus_src_alpha`. The experiment rerun flipped that packet onto `recipe_branch=shader_blend_mode_attachment_src_alpha_zero_experiment_on_demoted_blend_shape` with `src_alpha_zero_experiment={requested=true,applied=true}`, and the attachment log proved the intended held-shape exactly: `enable_blend=true`, `color_op=add`, `alpha_op=add`, `src_color=one`, `dst_color=zero`, `dst_alpha=zero`, while perturbing only `src_alpha` from `one` to `zero` (`held_src_color=one`, `held_dst_color=zero`, `held_dst_alpha=zero`). This honestly demotes isolated `src_alpha=ONE` out of the surviving blend-side minimum on this lane, while still not demoting the whole residual `blend_recipe` lane out of the surviving joint minimum with `vertex_input_recipe` and `specialization_constants`.
+
+---
+
+### Task 131: Classify the post-QA `blend_recipe` minimum after clean `src_alpha`-only isolation also leaves the failure unchanged
+
+**Bead ID:** `oc-ztxm`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ztxm` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the new QA result from `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_ALPHA_ZERO_EXPERIMENT=1`: the isolated src-alpha-zero branch executed cleanly, only `src_alpha` changed on the explicit demoted blend shape (`src_color=one`, `dst_color=zero`, `dst_alpha=zero`, ops add/add), and the failing identity still survived unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`). Classify what this now honestly demotes on the blend side: whether the whole reduced `blend_recipe` lane can now be honestly demoted, whether only a still narrower residual requirement remains (for example `enable_blend=true` / add ops), or whether another interpretation is required. Update this plan with exact artifact roots used, the concrete post-QA blend-side classification, and the exact next recommended slice; close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow plan-level research classification on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, building directly on the new isolated `src_alpha` QA result while reusing the earlier isolated `src_color` and corrected isolated dst-factor evidence to avoid overclaiming. Exact artifact roots used for this read were `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`.
+
+Concrete post-QA blend-side classification: the whole reduced `blend_recipe` lane still cannot be honestly demoted. What the new QA result does demote is the last remaining factor-based field inside the already-reduced non-LCD attachment shape: with `src_color`, `dst_color`, and `dst_alpha` already held on the explicit demoted shape, changing only `src_alpha` from `one` to `zero` still preserves the exact failing identity (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). So the honest live blend-side remainder is now narrower than the prior wording implied: it has shrunk from the old destination-preserving attachment recipe down to only the still-untested structural blend-state remainder, namely `enable_blend=true` together with additive ops (`color_op=add`, `alpha_op=add`) as the smallest surviving candidate bundle. That is still a candidate bundle, not a proven minimum, because those fields have not yet been isolated from each other on this locked lane.
+
+Exact next recommended slice: stay on the same refreshed source-built Vulkan `projection_only__disabled` `cap=1` lane and add one more targeted reversible first-clipped preserve-rect experiment that keeps the already-demoted factors fixed out of the way (`src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`) while perturbing only `enable_blend` away from `true`, with self-identifying branch logging and a distinct pipeline-cache key just like the prior experiments. Then re-QA whether the same `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` / UI-pass / later `BLIT_PASS` identity survives. If it does, the residual blend-side requirement shrinks again to the additive-op pair alone; if it does not, `enable_blend=true` remains part of the honest surviving minimum.
+
+---
+
+### Task 132: Add a targeted `enable_blend`-only experiment for the first clipped preserve-rect packet after `src_color`, dst factors, and `src_alpha` were demoted
+
+**Bead ID:** `oc-kh8p`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-kh8p` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current post-QA classification: `src_color`, `dst_color`, `dst_alpha`, and `src_alpha` have now been honestly demoted out of the blend-side minimum, but the whole reduced `blend_recipe` lane is not yet honestly demoted. Add the narrowest reversible diagnostic/experiment needed to perturb only `enable_blend` away from `true` for the first clipped preserve-rect packet while holding the already-demoted factors fixed (`src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`) and preserving self-identifying branch logging plus a distinct pipeline-cache identity. Update this plan with exact touched files, experiment shape, and validation performed, and close the bead with a clear reason if the experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+
+**Status:** ✅ Complete
+
+**Results:** Added the narrowest reversible blend-side follow-up on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, keeping the already-demoted factors fixed while perturbing only `enable_blend` for the first clipped preserve-rect packet. `servers/rendering/renderer_rd/renderer_canvas_render_rd.h` extends `PipelineKey` with `gdgs_temp_diag_enable_blend_false_experiment`, so the experiment has a distinct pipeline-cache identity. `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` extends the existing `gdgs_canvas_compute_blend_recipe()` diagnostic path and first-clipped preserve-rect env-toggle plumbing with a new `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT` switch. When requested on the already-demoted non-LCD mix attachment shape (`enable_blend=true`, `color_op=add`, `alpha_op=add`, `src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`), the experiment now flips only `enable_blend` to `false`, emits the self-identifying branch `shader_blend_mode_attachment_enable_blend_false_experiment_on_demoted_blend_shape`, and records requested/applied status in the existing blend selector/attachment trace payloads without widening scope into op or factor changes.
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.h servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`; `git diff --check -- servers/rendering/renderer_rd/renderer_canvas_render_rd.h servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`; full incremental rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; binary marker check `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "enable_blend_false_experiment"`; and headless sanity check `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version` (`4.7.beta.custom_build.6a5d8bd23`). One attempted targeted object-only `scons` path used an out-of-date object target name and was discarded; the full incremental rebuild above completed successfully and is the authoritative repo-local validation for this coder pass. No repro/QA rerun was performed here, so there is no new artifact root yet; QA should use the refreshed binary to test whether disabling blend alone preserves or breaks the exact `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / UI-pass / later `BLIT_PASS` identity.
+
+---
+
+### Task 132: Add an isolated `enable_blend` experiment for the first clipped preserve-rect residual blend-state bundle
+
+**Bead ID:** `oc-cmdn`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-cmdn` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current post-Task-131 classification: `src_color`, `dst_color`, `dst_alpha`, and `src_alpha` are now honestly demoted below the surviving blend-side minimum, but the whole reduced `blend_recipe` lane is not. Add the narrowest reversible diagnostic needed to perturb only `enable_blend` away from `true` for the first clipped preserve-rect packet while holding the already-demoted factors fixed (`src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`) and preserving self-identifying branch logging plus a distinct pipeline-cache key. Keep the locked failing lane/identity unchanged otherwise, update this plan with exact touched files and validation performed, and close the bead with a clear reason if the experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+
+**Status:** ✅ Complete
+
+**Results:** Same coder pass as the immediately preceding Task 132 entry for bead `oc-kh8p`: prepared the isolated `enable_blend`-only first clipped preserve-rect experiment on the refreshed source-built host-Vulkan `projection_only__disabled` `cap=1` lane, with a distinct pipeline-cache key bit (`gdgs_temp_diag_enable_blend_false_experiment`), self-identifying branch logging (`shader_blend_mode_attachment_enable_blend_false_experiment_on_demoted_blend_shape`), and a new env toggle (`GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT`) that flips only `enable_blend` from `true` to `false` while holding `color_op=add`, `alpha_op=add`, `src_color=one`, `dst_color=zero`, `src_alpha=zero`, and `dst_alpha=zero`. Validation for that experiment package was the same successful repo-local run recorded above: file format pass, `git diff --check`, full incremental editor rebuild, binary marker check, and headless version sanity check. No QA rerun was performed in this coder pass.
+
+---
+
+### Task 133: QA the `enable_blend`-only experiment on the locked first clipped preserve-rect Vulkan lane
+
+**Bead ID:** `oc-74wu`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-74wu` and QA the new reversible diagnostic experiment gated by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT=1` on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Re-run the locked failing identity and compare baseline vs experiment, verifying that the experiment perturbs only `enable_blend` away from `true` for the first clipped preserve-rect packet while keeping the explicit demoted blend shape fixed (`src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`, `color_op=add`, `alpha_op=add`). Record whether the failing identity changes or survives (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI pass continuity, later `BLIT_PASS`), capture exact artifact roots, update this plan with concrete results, and close the bead with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, comparing baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT=1` under artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-enable-blend-false-only-blend-experiment-qa-vulkan-sourcebuild-20260523-143014/` (`baseline/`, `experiment/`, `runtime_binary_proof.txt`, `run_summary.txt`). The refreshed runtime proof is sound (`HEAD_SHORT=6a5d8bd2`, sha256 `6f96b9e4d1a898726c7e3dd32b25630b694d0e3f7d38886f013d789611bac8f6`) and shows the new `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT` strings plus `shader_blend_mode_attachment_enable_blend_false_experiment_on_demoted_blend_shape` are present in the rebuilt binary.
+
+Concrete QA result: the locked failure identity survived unchanged, but the requested `enable_blend`-only perturbation did **not** apply on the captured first clipped preserve-rect packet. Baseline stdout stayed on `recipe_branch=shader_blend_mode_attachment` with `enable_blend_false_experiment={requested=false,applied=false}` and the original attachment shape `enable_blend=true,color_op=add,alpha_op=add,src_color=src_alpha,dst_color=one_minus_src_alpha,src_alpha=one,dst_alpha=one_minus_src_alpha`. The experiment rerun still logged `recipe_branch=shader_blend_mode_attachment`, and its selector/attachment markers showed `enable_blend_false_experiment={requested=true,applied=false}` while the attachment payload stayed on that same baseline shape instead of the intended demoted hold-shape with only `enable_blend` flipped to `false`. So this QA run does **not** prove the intended isolated `enable_blend=false` comparison yet; it proves only that the request reached runtime but the override never took effect on this lane.
+
+The failure lane itself stayed exact across both runs: both aborted with `exit_status=134`, both still hit `fence_wait_error submit_serial=9 wait_result=-4`, both preserved the same late tail through `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, both retained `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity at the failing `L88` scope, and both still ended later at `ERROR: Last known breadcrumb: BLIT_PASS`. Honest next slice after this QA: fix the `enable_blend_false_experiment` gating/override path so the experiment actually self-identifies as applied on the first clipped preserve-rect packet before using it to reason about whether `enable_blend=true` remains part of the live residual blend-state minimum.
+
+---
+
+### Task 134: Trace and fix why the `enable_blend=false` experiment does not apply on the captured first clipped preserve-rect packet
+
+**Bead ID:** `oc-x8oi`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-x8oi` and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the latest QA caveat: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT=1` was requested and the binary contained the new strings, but runtime logs still showed `enable_blend_false_experiment={requested=true,applied=false}` and the first clipped preserve-rect packet remained on the original attachment shape. Trace the gating/match path, make the narrowest reversible diagnostic fix needed so the enable-blend-false experiment can actually apply to the intended captured packet while preserving self-identifying logging, update this plan with exact touched files, concrete root cause/fix shape, and validation performed, and close the bead with a clear reason if the corrected experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+
+**Status:** ✅ Complete
+
+**Results:** Traced the miss to a narrow gating mismatch inside `gdgs_canvas_compute_blend_recipe(...)`: the new `enable_blend_false` override only applied if the attachment had **already** been transformed onto the fully demoted hold-shape (`src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`), but QA was intentionally requesting only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT=1` on the captured first clipped preserve-rect packet. On that request path the attachment still entered as the baseline non-LCD `BLEND_MODE_MIX` preserve-destination recipe, so the old `matches_src_one_dst_zero_src_alpha_zero_shape` check never matched and runtime truthfully logged `enable_blend_false_experiment={requested=true,applied=false}`.
+
+The fix stays reversible and diagnostic and is local to `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`: when the enable-blend-false experiment is requested and the captured packet is still on the baseline non-LCD mix preserve-destination shape, the helper now first materializes the same explicit demoted hold-shape used by the earlier isolated blend experiments (`src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`), then flips only `enable_blend` to `false`, marks the branch as `shader_blend_mode_attachment_enable_blend_false_experiment_from_mix_baseline`, and preserves the existing `..._on_demoted_blend_shape` branch for the already-demoted path. That makes the first clipped preserve-rect comparison actually reachable on the intended QA lane while keeping self-identifying runtime logging honest about which match path fired.
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`; `git diff --check -- servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`; full incremental rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; runtime string proof `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "shader_blend_mode_attachment_enable_blend_false_experiment_from_mix_baseline"`; and headless sanity `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version` (`4.7.beta.custom_build.6a5d8bd23`). No QA rerun was performed in this coder pass; the corrected experiment package is ready for the next locked-lane validation.
+
+---
+
+## Session Stop Point (2026-05-23 land the plane)
 
 **Current Status:** In Progress
 
 **Locked failing lane:** refreshed source-built host-Vulkan `projection_only__disabled` with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`
 
-**Current best read:** `pipeline_layout` has been honestly demoted below the live suspect family. The remaining live suspect family is the three-bucket interaction:
-- `vertex_input_recipe`
-- `blend_recipe`
-- `specialization_constants`
+**Current best read:** The first `L88` bind still cannot be reduced below a joint three-lane interaction across `vertex_input_recipe`, `blend_recipe`, and `specialization_constants` under the same failing identity (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). `pipeline_layout` remains honestly demoted. `vertex_input_recipe` remains reduced to `RendererCanvasRenderRD::shader.quad_vertex_format_id`, and `specialization_constants` remains reduced to `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`. On the blend side, isolated QA has now honestly demoted `src_color`, `dst_color`, `dst_alpha`, and `src_alpha` out of the surviving minimum. The remaining blend-side candidate is the still-untested structural remainder centered on `enable_blend=true` together with additive ops (`color_op=add`, `alpha_op=add`). That candidate is not yet proven because the first `enable_blend=false` QA request never actually applied; the corrective coder patch for that gating/match bug is now in and validated.
 
-**Next Slice:** Add a narrow interaction-focused compare that recomputes the minimal distinguishing subset over only those three buckets and answers whether the seam is now a 1-of-3 subset, a 2-of-3 subset, or a true `full_three_bucket_interaction`.
+**Artifact roots worth resuming from:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-enable-blend-false-only-blend-experiment-qa-vulkan-sourcebuild-20260523-143014/`
 
-**Blockers/Decisions:** No access blocker. No human decision needed to resume. The next session should continue directly on the three-bucket interaction compare.
+**Next Slice:** Re-QA the corrected `enable_blend=false` experiment on the same locked lane using the new branch tagging from Task 134 (`shader_blend_mode_attachment_enable_blend_false_experiment_from_mix_baseline` vs `..._on_demoted_blend_shape`). The goal is to confirm the override actually applies to the captured first clipped preserve-rect packet while keeping the already-demoted factors fixed, then check whether the exact same `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / UI-pass / later `BLIT_PASS` identity survives. If it survives, the residual blend-side candidate collapses again toward the additive-op pair alone; if not, `enable_blend=true` remains part of the honest minimum.
+
+**Blockers/Decisions:** No access blocker. No human decision needed to resume. One stale duplicate bead (`oc-cmdn`) should be treated as superseded by Tasks 132-134 and can be closed/ignored on resume.

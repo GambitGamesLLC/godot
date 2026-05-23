@@ -155,10 +155,14 @@ const char *gdgs_canvas_blend_op_name(RD::BlendOperation p_op) {
 	}
 }
 
-void gdgs_canvas_compute_blend_recipe(RendererRD::MaterialStorage::ShaderData::BlendMode p_blend_mode, bool p_lcd_blend, RD::PipelineColorBlendState::Attachment &r_attachment, uint32_t &r_dynamic_state_flags, const char *&r_recipe_branch) {
+void gdgs_canvas_compute_blend_recipe(RendererRD::MaterialStorage::ShaderData::BlendMode p_blend_mode, bool p_lcd_blend, bool p_force_src_color_premul_experiment, bool p_force_dst_factors_zero_experiment, bool p_force_src_alpha_zero_experiment, bool p_force_enable_blend_false_experiment, RD::PipelineColorBlendState::Attachment &r_attachment, uint32_t &r_dynamic_state_flags, const char *&r_recipe_branch, bool &r_src_color_premul_override_applied, bool &r_dst_factors_zero_override_applied, bool &r_src_alpha_zero_override_applied, bool &r_enable_blend_false_override_applied) {
 	r_attachment = RD::PipelineColorBlendState::Attachment();
 	r_dynamic_state_flags = 0;
 	r_recipe_branch = p_lcd_blend ? "lcd_blend_override" : "shader_blend_mode_attachment";
+	r_src_color_premul_override_applied = false;
+	r_dst_factors_zero_override_applied = false;
+	r_src_alpha_zero_override_applied = false;
+	r_enable_blend_false_override_applied = false;
 
 	if (p_lcd_blend) {
 		r_attachment.enable_blend = true;
@@ -171,6 +175,67 @@ void gdgs_canvas_compute_blend_recipe(RendererRD::MaterialStorage::ShaderData::B
 		r_dynamic_state_flags = RD::DYNAMIC_STATE_BLEND_CONSTANTS;
 	} else {
 		r_attachment = RendererRD::MaterialStorage::ShaderData::blend_mode_to_blend_attachment(p_blend_mode);
+		const bool matches_mix_preserve_dst_shape = p_blend_mode == RendererRD::MaterialStorage::ShaderData::BLEND_MODE_MIX && r_attachment.enable_blend && r_attachment.color_blend_op == RD::BLEND_OP_ADD && r_attachment.alpha_blend_op == RD::BLEND_OP_ADD && r_attachment.src_color_blend_factor == RD::BLEND_FACTOR_SRC_ALPHA && r_attachment.dst_color_blend_factor == RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA && r_attachment.src_alpha_blend_factor == RD::BLEND_FACTOR_ONE && r_attachment.dst_alpha_blend_factor == RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		if (p_force_src_color_premul_experiment && matches_mix_preserve_dst_shape) {
+			r_attachment.src_color_blend_factor = RD::BLEND_FACTOR_ONE;
+			r_recipe_branch = "shader_blend_mode_attachment_src_color_premul_experiment";
+			r_src_color_premul_override_applied = true;
+		}
+
+		const bool matches_src_one_preserve_dst_shape = p_blend_mode == RendererRD::MaterialStorage::ShaderData::BLEND_MODE_MIX && r_attachment.enable_blend && r_attachment.color_blend_op == RD::BLEND_OP_ADD && r_attachment.alpha_blend_op == RD::BLEND_OP_ADD && r_attachment.src_color_blend_factor == RD::BLEND_FACTOR_ONE && r_attachment.dst_color_blend_factor == RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA && r_attachment.src_alpha_blend_factor == RD::BLEND_FACTOR_ONE && r_attachment.dst_alpha_blend_factor == RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		if (p_force_dst_factors_zero_experiment) {
+			if (!p_force_src_color_premul_experiment && matches_mix_preserve_dst_shape) {
+				r_attachment.src_color_blend_factor = RD::BLEND_FACTOR_SRC_ALPHA;
+				r_attachment.dst_color_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.dst_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_recipe_branch = "shader_blend_mode_attachment_dst_factors_zero_experiment_src_preserved";
+				r_dst_factors_zero_override_applied = true;
+			} else if (matches_src_one_preserve_dst_shape) {
+				r_attachment.dst_color_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.dst_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_recipe_branch = "shader_blend_mode_attachment_dst_factors_zero_experiment_with_src_color_premul";
+				r_dst_factors_zero_override_applied = true;
+			}
+		}
+
+		const bool matches_src_one_dst_zero_shape = p_blend_mode == RendererRD::MaterialStorage::ShaderData::BLEND_MODE_MIX && r_attachment.enable_blend && r_attachment.color_blend_op == RD::BLEND_OP_ADD && r_attachment.alpha_blend_op == RD::BLEND_OP_ADD && r_attachment.src_color_blend_factor == RD::BLEND_FACTOR_ONE && r_attachment.dst_color_blend_factor == RD::BLEND_FACTOR_ZERO && r_attachment.src_alpha_blend_factor == RD::BLEND_FACTOR_ONE && r_attachment.dst_alpha_blend_factor == RD::BLEND_FACTOR_ZERO;
+		if (p_force_src_alpha_zero_experiment) {
+			if (matches_mix_preserve_dst_shape) {
+				r_attachment.src_color_blend_factor = RD::BLEND_FACTOR_ONE;
+				r_attachment.dst_color_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.src_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.dst_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_recipe_branch = "shader_blend_mode_attachment_src_alpha_zero_experiment_on_demoted_blend_shape";
+				r_src_alpha_zero_override_applied = true;
+			} else if (matches_src_one_preserve_dst_shape) {
+				r_attachment.dst_color_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.src_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.dst_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_recipe_branch = "shader_blend_mode_attachment_src_alpha_zero_experiment_with_dst_factors_zero";
+				r_src_alpha_zero_override_applied = true;
+			} else if (matches_src_one_dst_zero_shape) {
+				r_attachment.src_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_recipe_branch = "shader_blend_mode_attachment_src_alpha_zero_experiment_src_alpha_only";
+				r_src_alpha_zero_override_applied = true;
+			}
+		}
+
+		const bool matches_src_one_dst_zero_src_alpha_zero_shape = p_blend_mode == RendererRD::MaterialStorage::ShaderData::BLEND_MODE_MIX && r_attachment.enable_blend && r_attachment.color_blend_op == RD::BLEND_OP_ADD && r_attachment.alpha_blend_op == RD::BLEND_OP_ADD && r_attachment.src_color_blend_factor == RD::BLEND_FACTOR_ONE && r_attachment.dst_color_blend_factor == RD::BLEND_FACTOR_ZERO && r_attachment.src_alpha_blend_factor == RD::BLEND_FACTOR_ZERO && r_attachment.dst_alpha_blend_factor == RD::BLEND_FACTOR_ZERO;
+		if (p_force_enable_blend_false_experiment) {
+			if (matches_mix_preserve_dst_shape) {
+				r_attachment.src_color_blend_factor = RD::BLEND_FACTOR_ONE;
+				r_attachment.dst_color_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.src_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.dst_alpha_blend_factor = RD::BLEND_FACTOR_ZERO;
+				r_attachment.enable_blend = false;
+				r_recipe_branch = "shader_blend_mode_attachment_enable_blend_false_experiment_from_mix_baseline";
+				r_enable_blend_false_override_applied = true;
+			} else if (matches_src_one_dst_zero_src_alpha_zero_shape) {
+				r_attachment.enable_blend = false;
+				r_recipe_branch = "shader_blend_mode_attachment_enable_blend_false_experiment_on_demoted_blend_shape";
+				r_enable_blend_false_override_applied = true;
+			}
+		}
 	}
 }
 
@@ -328,6 +393,10 @@ thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_constants_tra
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_src_color_premul_experiment_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_dst_factors_zero_experiment_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_src_alpha_zero_experiment_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_enable_blend_false_experiment_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_trace_enabled = false;
@@ -1843,8 +1912,16 @@ void RendererCanvasRenderRD::CanvasShaderData::_create_pipeline(PipelineKey p_pi
 	RD::PipelineColorBlendState::Attachment attachment;
 	uint32_t dynamic_state_flags = 0;
 	const char *blend_recipe_branch = nullptr;
-	gdgs_canvas_compute_blend_recipe(blend_mode_rd, p_pipeline_key.lcd_blend, attachment, dynamic_state_flags, blend_recipe_branch);
+	bool src_color_premul_override_applied = false;
+	bool dst_factors_zero_override_applied = false;
+	bool src_alpha_zero_override_applied = false;
+	bool enable_blend_false_override_applied = false;
+	gdgs_canvas_compute_blend_recipe(blend_mode_rd, p_pipeline_key.lcd_blend, p_pipeline_key.gdgs_temp_diag_src_color_premul_experiment != 0, p_pipeline_key.gdgs_temp_diag_dst_factors_zero_experiment != 0, p_pipeline_key.gdgs_temp_diag_src_alpha_zero_experiment != 0, p_pipeline_key.gdgs_temp_diag_enable_blend_false_experiment != 0, attachment, dynamic_state_flags, blend_recipe_branch, src_color_premul_override_applied, dst_factors_zero_override_applied, src_alpha_zero_override_applied, enable_blend_false_override_applied);
 	(void)blend_recipe_branch;
+	(void)src_color_premul_override_applied;
+	(void)dst_factors_zero_override_applied;
+	(void)src_alpha_zero_override_applied;
+	(void)enable_blend_false_override_applied;
 
 	blend_state.attachments.push_back(attachment);
 
@@ -2711,6 +2788,10 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	const bool gdgs_temp_diag_first_rect_trace_blend_recipe_selector = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_RECIPE_SELECTOR");
 	const bool gdgs_temp_diag_first_rect_trace_blend_recipe_attachment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_RECIPE_ATTACHMENT");
 	const bool gdgs_temp_diag_first_rect_trace_blend_recipe_dynamic_state = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_BLEND_RECIPE_DYNAMIC_STATE");
+	const bool gdgs_temp_diag_first_rect_src_color_premul_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_COLOR_PREMUL_EXPERIMENT");
+	const bool gdgs_temp_diag_first_rect_dst_factors_zero_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_DST_FACTORS_ZERO_EXPERIMENT");
+	const bool gdgs_temp_diag_first_rect_src_alpha_zero_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SRC_ALPHA_ZERO_EXPERIMENT");
+	const bool gdgs_temp_diag_first_rect_enable_blend_false_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT");
 	const bool gdgs_temp_diag_first_rect_trace_vertex_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_BIND");
 	const bool gdgs_temp_diag_first_rect_trace_index_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_INDEX_BIND");
 	const bool gdgs_temp_diag_first_rect_trace_vertex_input_recipe = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_INPUT_RECIPE");
@@ -2740,6 +2821,10 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_trace_enabled = gdgs_temp_diag_first_rect_trace_blend_recipe || gdgs_temp_diag_first_rect_trace_blend_recipe_selector;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_trace_enabled = gdgs_temp_diag_first_rect_trace_blend_recipe || gdgs_temp_diag_first_rect_trace_blend_recipe_attachment;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_trace_enabled = gdgs_temp_diag_first_rect_trace_blend_recipe || gdgs_temp_diag_first_rect_trace_blend_recipe_dynamic_state;
+	gdgs_temp_diag_first_clipped_preserve_rect_src_color_premul_experiment_enabled = gdgs_temp_diag_first_rect_src_color_premul_experiment;
+	gdgs_temp_diag_first_clipped_preserve_rect_dst_factors_zero_experiment_enabled = gdgs_temp_diag_first_rect_dst_factors_zero_experiment;
+	gdgs_temp_diag_first_clipped_preserve_rect_src_alpha_zero_experiment_enabled = gdgs_temp_diag_first_rect_src_alpha_zero_experiment;
+	gdgs_temp_diag_first_clipped_preserve_rect_enable_blend_false_experiment_enabled = gdgs_temp_diag_first_rect_enable_blend_false_experiment;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_vertex_bind;
 	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_index_bind;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_trace_enabled = gdgs_temp_diag_first_rect_trace_vertex_input_recipe || gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout;
@@ -2791,8 +2876,8 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode = RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
-	if (gdgs_temp_diag_rect_preserve_clip_gate_active || gdgs_temp_diag_first_rect_trace_any) {
-		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s,trace_scissor=%s,trace_uniform_pipeline=%s,trace_draw_binding=%s,trace_uniform_bind=%s,trace_pipeline_bind=%s,trace_blend_constants=%s,trace_blend_recipe=%s,trace_blend_recipe_selector=%s,trace_blend_recipe_attachment=%s,trace_blend_recipe_dynamic_state=%s,trace_vertex_bind=%s,trace_index_bind=%s,trace_vertex_input_recipe=%s,trace_vertex_input_binding_layout=%s,trace_vertex_input_attribute_layout=%s,trace_vertex_input_provenance=%s,trace_specialization_constants=%s,trace_specialization_constants_selector=%s,trace_specialization_constants_packing=%s,trace_specialization_constants_provenance=%s,trace_pipeline_layout=%s,trace_pipeline_layout_descriptor_shape=%s,trace_pipeline_layout_push_constant_shape=%s,trace_pipeline_layout_provenance=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false", gdgs_temp_diag_first_rect_trace ? "true" : "false", gdgs_temp_diag_first_rect_trace_scissor ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_pipeline ? "true" : "false", gdgs_temp_diag_first_rect_trace_draw_binding ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_constants ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_selector ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_attachment ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_dynamic_state ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_index_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_recipe ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_attribute_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_provenance ? "true" : "false", gdgs_temp_diag_first_rect_trace_specialization_constants ? "true" : "false", gdgs_temp_diag_first_rect_trace_specialization_constants_selector ? "true" : "false", gdgs_temp_diag_first_rect_trace_specialization_constants_packing ? "true" : "false", gdgs_temp_diag_first_rect_trace_specialization_constants_provenance ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_layout_descriptor_shape ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_layout_push_constant_shape ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_layout_provenance ? "true" : "false"));
+	if (gdgs_temp_diag_rect_preserve_clip_gate_active || gdgs_temp_diag_first_rect_trace_any || gdgs_temp_diag_first_rect_src_color_premul_experiment || gdgs_temp_diag_first_rect_dst_factors_zero_experiment || gdgs_temp_diag_first_rect_src_alpha_zero_experiment || gdgs_temp_diag_first_rect_enable_blend_false_experiment) {
+		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s,trace_scissor=%s,trace_uniform_pipeline=%s,trace_draw_binding=%s,trace_uniform_bind=%s,trace_pipeline_bind=%s,trace_blend_constants=%s,trace_blend_recipe=%s,trace_blend_recipe_selector=%s,trace_blend_recipe_attachment=%s,trace_blend_recipe_dynamic_state=%s,trace_vertex_bind=%s,trace_index_bind=%s,trace_vertex_input_recipe=%s,trace_vertex_input_binding_layout=%s,trace_vertex_input_attribute_layout=%s,trace_vertex_input_provenance=%s,trace_specialization_constants=%s,trace_specialization_constants_selector=%s,trace_specialization_constants_packing=%s,trace_specialization_constants_provenance=%s,trace_pipeline_layout=%s,trace_pipeline_layout_descriptor_shape=%s,trace_pipeline_layout_push_constant_shape=%s,trace_pipeline_layout_provenance=%s,src_color_premul_experiment=%s,dst_factors_zero_experiment=%s,src_alpha_zero_experiment=%s,enable_blend_false_experiment=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false", gdgs_temp_diag_first_rect_trace ? "true" : "false", gdgs_temp_diag_first_rect_trace_scissor ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_pipeline ? "true" : "false", gdgs_temp_diag_first_rect_trace_draw_binding ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_constants ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_selector ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_attachment ? "true" : "false", gdgs_temp_diag_first_rect_trace_blend_recipe_dynamic_state ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_index_bind ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_recipe ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_binding_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_attribute_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_vertex_input_provenance ? "true" : "false", gdgs_temp_diag_first_rect_trace_specialization_constants ? "true" : "false", gdgs_temp_diag_first_rect_trace_specialization_constants_selector ? "true" : "false", gdgs_temp_diag_first_rect_trace_specialization_constants_packing ? "true" : "false", gdgs_temp_diag_first_rect_trace_specialization_constants_provenance ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_layout ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_layout_descriptor_shape ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_layout_push_constant_shape ? "true" : "false", gdgs_temp_diag_first_rect_trace_pipeline_layout_provenance ? "true" : "false", gdgs_temp_diag_first_rect_src_color_premul_experiment ? "true" : "false", gdgs_temp_diag_first_rect_dst_factors_zero_experiment ? "true" : "false", gdgs_temp_diag_first_rect_src_alpha_zero_experiment ? "true" : "false", gdgs_temp_diag_first_rect_enable_blend_false_experiment ? "true" : "false"));
 	}
 
 	Item *current_clip = nullptr;
@@ -2954,6 +3039,10 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_src_color_premul_experiment_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_dst_factors_zero_experiment_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_src_alpha_zero_experiment_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_enable_blend_false_experiment_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout_trace_enabled = false;
@@ -3737,6 +3826,10 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 	pipeline_key.shader_specialization.use_msdf = p_batch->use_msdf;
 	pipeline_key.shader_specialization.use_lcd = p_batch->use_lcd;
 	pipeline_key.lcd_blend = p_batch->has_blend;
+	pipeline_key.gdgs_temp_diag_src_color_premul_experiment = gdgs_temp_diag_first_clipped_preserve_rect_src_color_premul_experiment_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch ? 1 : 0;
+	pipeline_key.gdgs_temp_diag_dst_factors_zero_experiment = gdgs_temp_diag_first_clipped_preserve_rect_dst_factors_zero_experiment_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch ? 1 : 0;
+	pipeline_key.gdgs_temp_diag_src_alpha_zero_experiment = gdgs_temp_diag_first_clipped_preserve_rect_src_alpha_zero_experiment_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch ? 1 : 0;
+	pipeline_key.gdgs_temp_diag_enable_blend_false_experiment = gdgs_temp_diag_first_clipped_preserve_rect_enable_blend_false_experiment_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch ? 1 : 0;
 
 	switch (p_batch->command_type) {
 		case Item::Command::TYPE_RECT:
@@ -3856,11 +3949,15 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 			RD::PipelineColorBlendState::Attachment gdgs_blend_recipe_attachment;
 			uint32_t gdgs_blend_recipe_dynamic_state_flags = 0;
 			const char *gdgs_blend_recipe_branch = nullptr;
-			gdgs_canvas_compute_blend_recipe(gdgs_blend_mode_rd, p_batch->has_blend, gdgs_blend_recipe_attachment, gdgs_blend_recipe_dynamic_state_flags, gdgs_blend_recipe_branch);
+			bool gdgs_blend_recipe_src_color_premul_override_applied = false;
+			bool gdgs_blend_recipe_dst_factors_zero_override_applied = false;
+			bool gdgs_blend_recipe_src_alpha_zero_override_applied = false;
+			bool gdgs_blend_recipe_enable_blend_false_override_applied = false;
+			gdgs_canvas_compute_blend_recipe(gdgs_blend_mode_rd, p_batch->has_blend, pipeline_key.gdgs_temp_diag_src_color_premul_experiment != 0, pipeline_key.gdgs_temp_diag_dst_factors_zero_experiment != 0, pipeline_key.gdgs_temp_diag_src_alpha_zero_experiment != 0, pipeline_key.gdgs_temp_diag_enable_blend_false_experiment != 0, gdgs_blend_recipe_attachment, gdgs_blend_recipe_dynamic_state_flags, gdgs_blend_recipe_branch, gdgs_blend_recipe_src_color_premul_override_applied, gdgs_blend_recipe_dst_factors_zero_override_applied, gdgs_blend_recipe_src_alpha_zero_override_applied, gdgs_blend_recipe_enable_blend_false_override_applied);
 			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch) {
 				if (gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_bucket_logged) {
 					gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_selector_bucket_logged = true;
-					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_selector={batch_index=%d,match_ordinal=%d,setup_stage=blend_recipe_selector,shader_blend_mode=%s,uses_prior_color=%s,use_lcd=%s,has_blend=%s,recipe_branch=%s,pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s}}",
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_selector={batch_index=%d,match_ordinal=%d,setup_stage=blend_recipe_selector,shader_blend_mode=%s,uses_prior_color=%s,use_lcd=%s,has_blend=%s,recipe_branch=%s,src_color_premul_experiment={requested=%s,applied=%s},dst_factors_zero_experiment={requested=%s,applied=%s},src_alpha_zero_experiment={requested=%s,applied=%s},enable_blend_false_experiment={requested=%s,applied=%s},pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s}}",
 							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
 							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
 							gdgs_canvas_blend_mode_name(gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode),
@@ -3868,6 +3965,14 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 							p_batch->use_lcd ? "true" : "false",
 							p_batch->has_blend ? "true" : "false",
 							gdgs_blend_recipe_branch,
+							pipeline_key.gdgs_temp_diag_src_color_premul_experiment != 0 ? "true" : "false",
+							gdgs_blend_recipe_src_color_premul_override_applied ? "true" : "false",
+							pipeline_key.gdgs_temp_diag_dst_factors_zero_experiment != 0 ? "true" : "false",
+							gdgs_blend_recipe_dst_factors_zero_override_applied ? "true" : "false",
+							pipeline_key.gdgs_temp_diag_src_alpha_zero_experiment != 0 ? "true" : "false",
+							gdgs_blend_recipe_src_alpha_zero_override_applied ? "true" : "false",
+							pipeline_key.gdgs_temp_diag_enable_blend_false_experiment != 0 ? "true" : "false",
+							gdgs_blend_recipe_enable_blend_false_override_applied ? "true" : "false",
 							gdgs_rid_to_string(pipeline),
 							(int)shader.quad_vertex_format_id,
 							gdgs_canvas_render_primitive_name(p_batch->render_primitive),
@@ -3875,7 +3980,7 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 				}
 				if (gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_bucket_logged) {
 					gdgs_temp_diag_first_clipped_preserve_rect_blend_recipe_attachment_bucket_logged = true;
-					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_attachment={batch_index=%d,match_ordinal=%d,setup_stage=blend_recipe_attachment,enable_blend=%s,color_op=%s,alpha_op=%s,src_color=%s,dst_color=%s,src_alpha=%s,dst_alpha=%s,write_mask={r=%s,g=%s,b=%s,a=%s}}",
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_attachment={batch_index=%d,match_ordinal=%d,setup_stage=blend_recipe_attachment,enable_blend=%s,color_op=%s,alpha_op=%s,src_color=%s,dst_color=%s,src_alpha=%s,dst_alpha=%s,src_color_premul_experiment={requested=%s,applied=%s,baseline_src_color=src_alpha,experiment_src_color=one},dst_factors_zero_experiment={requested=%s,applied=%s,baseline_dst_color=one_minus_src_alpha,baseline_dst_alpha=one_minus_src_alpha,experiment_dst_color=zero,experiment_dst_alpha=zero},src_alpha_zero_experiment={requested=%s,applied=%s,baseline_src_alpha=one,experiment_src_alpha=zero,held_src_color=one,held_dst_color=zero,held_dst_alpha=zero},enable_blend_false_experiment={requested=%s,applied=%s,baseline_enable_blend=true,experiment_enable_blend=false,held_color_op=add,held_alpha_op=add,held_src_color=one,held_dst_color=zero,held_src_alpha=zero,held_dst_alpha=zero},write_mask={r=%s,g=%s,b=%s,a=%s}}",
 							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
 							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
 							gdgs_blend_recipe_attachment.enable_blend ? "true" : "false",
@@ -3885,6 +3990,14 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 							gdgs_canvas_blend_factor_name(gdgs_blend_recipe_attachment.dst_color_blend_factor),
 							gdgs_canvas_blend_factor_name(gdgs_blend_recipe_attachment.src_alpha_blend_factor),
 							gdgs_canvas_blend_factor_name(gdgs_blend_recipe_attachment.dst_alpha_blend_factor),
+							pipeline_key.gdgs_temp_diag_src_color_premul_experiment != 0 ? "true" : "false",
+							gdgs_blend_recipe_src_color_premul_override_applied ? "true" : "false",
+							pipeline_key.gdgs_temp_diag_dst_factors_zero_experiment != 0 ? "true" : "false",
+							gdgs_blend_recipe_dst_factors_zero_override_applied ? "true" : "false",
+							pipeline_key.gdgs_temp_diag_src_alpha_zero_experiment != 0 ? "true" : "false",
+							gdgs_blend_recipe_src_alpha_zero_override_applied ? "true" : "false",
+							pipeline_key.gdgs_temp_diag_enable_blend_false_experiment != 0 ? "true" : "false",
+							gdgs_blend_recipe_enable_blend_false_override_applied ? "true" : "false",
 							gdgs_blend_recipe_attachment.write_r ? "true" : "false",
 							gdgs_blend_recipe_attachment.write_g ? "true" : "false",
 							gdgs_blend_recipe_attachment.write_b ? "true" : "false",

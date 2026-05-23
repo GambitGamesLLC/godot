@@ -132,6 +132,10 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 		RD::RenderPrimitive render_primitive = RD::RENDER_PRIMITIVE_MAX;
 		ShaderSpecialization shader_specialization = {};
 		uint32_t lcd_blend = 0;
+		uint32_t gdgs_temp_diag_src_color_premul_experiment = 0;
+		uint32_t gdgs_temp_diag_dst_factors_zero_experiment = 0;
+		uint32_t gdgs_temp_diag_src_alpha_zero_experiment = 0;
+		uint32_t gdgs_temp_diag_enable_blend_false_experiment = 0;
 		uint32_t ubershader = 0;
 
 		uint32_t hash() const {
@@ -141,6 +145,10 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 			h = hash_murmur3_one_32(render_primitive, h);
 			h = hash_murmur3_one_32(shader_specialization.packed_0, h);
 			h = hash_murmur3_one_32(lcd_blend, h);
+			h = hash_murmur3_one_32(gdgs_temp_diag_src_color_premul_experiment, h);
+			h = hash_murmur3_one_32(gdgs_temp_diag_dst_factors_zero_experiment, h);
+			h = hash_murmur3_one_32(gdgs_temp_diag_src_alpha_zero_experiment, h);
+			h = hash_murmur3_one_32(gdgs_temp_diag_enable_blend_false_experiment, h);
 			h = hash_murmur3_one_32(ubershader, h);
 			return hash_fmix32(h);
 		}
