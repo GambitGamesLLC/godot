@@ -4104,16 +4104,110 @@ QA recipe for the next pass:
    - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}`
 5. Use the existing Vulkan-side `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` corroboration only to confirm the crash stayed on the same one-batch lane while these new canvas-side markers identify whether the first kept batch metadata or its immediate pre-draw setup looks like the sharper discriminator.
 
+### Task 154: QA the first-kept clipped preserve-color rect trace on the source-built failing lane
+
+**Bead ID:** `oc-4xg`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-4xg` on start and stay tightly scoped to the same rebuilt source-built host-Vulkan `projection_only__disabled` staged repro lane. Reuse the existing failing `cap=1` lane, enable `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE=1` together with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, keep `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` and the same Vulkan corroboration envs already used on this lane, then capture the exact `temp_diag_clipped_preserve_rect_gate`, `temp_diag_first_clipped_preserve_rect_batch`, `temp_diag_first_clipped_preserve_rect_prereq`, and `temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}` markers. Confirm whether the run still stays on the same one-batch failing `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` lane, update this plan with the artifact root and the exact read on whether the sharper discriminator now points more at first-batch content/parameters or immediate pre-draw prerequisite state, and close the bead when complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-20260522-1954/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-20260522-1954/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-20260522-1954/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/exit_status.txt`
+
+**Status:** ✅ Complete
+
+**Results:**
+- First attempt at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-20260522-1954/` proved the seam setup was right but also exposed a stale-binary issue: `renderer_canvas_render_rd.cpp` already contained the new `first_trace` logging, while `bin/godot.linuxbsd.editor.dev.x86_64` was older than commit `d0c49c56`, so the gate line came out without `first_trace=true` and the new batch/prereq markers never emitted.
+- After relinking the source-built editor with `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`, reran the exact same lane at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/` and captured the requested markers:
+  - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=1,only_first=false,skip_first=false,first_trace=true}`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_batch={batch_index=0,match_ordinal=1,command_type=rect,shader_variant=quad,render_primitive=triangles,instance_start=0,instance_count=27,clip_rect={x=16.000000,y=16.000000,w=504.000000,h=460.000000},material=null,texture=10617159155716,blend_mode=mix,uses_prior_color=true,has_blend=false,use_lcd=false,use_msdf=false,use_lighting=false,flags=0x0,texpixel_size={x=0.003906,y=0.003906},command={rect={x=-1.000000,y=3.000000,w=14.000000,h=16.000000},source={x=1.000000,y=1.000000,w=14.000000,h=16.000000},flags=0x1,texture=10617159155716,outline=0.000000,px_range=1.000000,modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}}}`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_prereq={batch_index=0,match_ordinal=1,setup_stage=pre_l88_draw,scissor={changed=true,enabled=true,rect={x=16.000000,y=16.000000,w=504.000000,h=460.000000}},material_uniform_set=none,batch_uniform_set=11338713661474,shader_blend_mode=mix,pipeline={rid=11343008628747,vertex_format=2,render_primitive=triangles,shader_variant=quad,use_lighting=false,use_msdf=false,use_lcd=false,lcd_blend=false},push_constant={batch_flags=0x0,specular_shininess=4294967295.000000,msdf={px_range=1.000000,outline=0.000000},color_texture_pixel_size={x=0.003906,y=0.003906}},draw_binding={instance_buffer=11325828759567,instance_start=0,instance_count=27,vertex_offset=0,index_array=665719930881,blend_constants=none}}`
+  - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}`
+- The one-batch failing signature held exactly: the run still aborted on Vulkan `submit_serial=9`, and the corroboration log still ended on the same `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` tail.
+- Read on the sharper discriminator: the **first kept batch content itself looks mundane and tightly bounded** (single rect command, small 14x16 source/dest, no material, no exotic flags), so this pass points **more at immediate pre-draw prerequisite state** than at unique first-batch content/parameters. The most suspicious surviving seam inside this narrowed slice is the exact `pre_l88_draw` reestablishment package: scissor flip to the 16/16/504/460 clip, `batch_uniform_set` selection, and the instanced/indexed draw bindings that become live immediately before the failing first kept draw.
+
+### Task 155: Audit the first-kept clipped preserve-color rect trace QA rerun
+
+**Bead ID:** `oc-4ar`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-4ar` on start and independently audit the new first-kept clipped preserve-color rect trace QA rerun. Confirm the run actually used the rebuilt source-built host-Vulkan `projection_only__disabled` `cap=1` lane with first-trace enabled, verify the emitted `temp_diag_clipped_preserve_rect_gate`, `temp_diag_first_clipped_preserve_rect_batch`, `temp_diag_first_clipped_preserve_rect_prereq`, and `temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}` markers against the durable artifacts, confirm the same one-batch `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` / exit `134` failure signature held, then state whether the evidence more honestly points at first-batch content or immediate pre-draw prerequisite state. Update this plan and close the bead with a clear reason if the audit holds.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/exit_status.txt`
+
+**Status:** ✅ Complete
+
+**Results:** Independent audit confirmed the **rerun** artifact package at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/` is the valid evidence set; the earlier `1954` attempt remains only a stale-binary setup proof and must not be treated as the decisive run. `exact_command.txt` shows the intended rebuilt source-built host-Vulkan lane was used directly from `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `--rendering-driver vulkan`, the staged case `projection_only__disabled`, and both required envs enabled: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE=1` and `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. `stdout.log` contains the requested canvas markers exactly and in-order: `temp_diag_clipped_preserve_rect_gate={cap=1,only_first=false,skip_first=false,first_trace=true}`, `temp_diag_first_clipped_preserve_rect_batch={...}`, `temp_diag_first_clipped_preserve_rect_prereq={...}`, and `temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}`. The same failing signature also held in the rerun artifacts: `exit_status.txt` is `134`, the Vulkan wait failure is still `submit_serial=9`, and the command-summary tail still ends on `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`. Audit verdict: QA’s conclusion holds, with one precision note — the honest discriminator is no longer “something anywhere in the ten-batch family,” nor even uniquely the first rect payload; the stronger read is that the surviving seam more likely lives in the **immediate pre-draw prerequisite packet** (`scissor` reestablishment, `batch_uniform_set` / pipeline packet, and draw-binding package) that becomes live right before the first kept `L88` draw. Recommended next coder slice: split **multiple** buckets inside `temp_diag_first_clipped_preserve_rect_prereq` rather than choosing only one up front — isolate scissor state, uniform-set/pipeline pairing, and draw-binding package as separately attributable sub-seams on the same `cap=1` lane.
+
 ### Landing-the-plane handoff
 
-**Stopping point:** The live failing seam is now the first surviving member of the failing-only `multi_rect_preserve_clip_batch_chain` (or prerequisite work that remains when only that first member is kept), still feeding the `submit_serial=9` / `Command Graph (L88) (Draw)` failure path. The broader chain-length hypothesis is now demoted.
+**Stopping point:** The live failing seam is still the first surviving member of the failing-only `multi_rect_preserve_clip_batch_chain`, but the sharper discriminator now leans toward the **immediate pre-draw setup packet** that `L88` rebuilds for that first kept clipped preserve-color rect rather than the rect payload itself.
 
-**Best current one-line read:** the ordinal gate proved that `L88` scales one-for-one with the clipped preserve-color rect batch count, but the crash still survives at `cap=1`, so later clipped rects and the full ten-batch chain are not required for the device-loss signature.
+**Best current one-line read:** `cap=1` plus first-batch tracing kept the same `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` crash lane, and the captured first kept rect looks ordinary enough that the better next seam is the `pre_l88_draw` prerequisite state (scissor/uniform-set/pipeline-binding packet), not later clipped rects or broader chain length.
 
-**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-clipped-preserve-rect-cap-sweep-vulkan-sourcebuild-rerun-20260522-193020/`
+**Best artifact to resume from next session:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/`
 
-**Best next move:** keep the investigation on the same clipped preserve-color rect seam, but stop treating ordinal chain length as the likely trigger. The next coder/audit slice should instrument the **first surviving kept matching batch itself** (or the immediate prerequisite state it depends on before `L88` records that first kept draw) rather than spending more QA time on later-batch selectors.
+**Best next move:** keep the investigation on this exact clipped preserve-color rect seam and add the next reversible diagnostic inside the same `cap=1` lane that splits the `temp_diag_first_clipped_preserve_rect_prereq` packet into narrower ownership buckets — specifically, isolate whether the failing edge tracks the scissor reestablishment, the `batch_uniform_set`/pipeline pairing, or the instance/index draw-binding package immediately before the first kept draw.
 
 ---
 
-*Updated on 2026-05-22 (partial; stopping point advanced from Tonemap overwrite/load-op attribution to the narrower clipped preserve-color rect-chain seam, with the next experiment defined as an ordinal threshold/first-vs-later batch split inside `RendererCanvasRenderRD::_render_batch_items()`) *
+*Updated on 2026-05-22 (partial; stopping point advanced from the first-kept clipped preserve rect content/prereq split to the narrower read that the surviving crash discriminator now points more at the immediate pre-draw prerequisite packet on the same one-batch `L88` lane.) *
+
+---
+
+### Task 75: Split the cap=1 clipped preserve-color rect prereq seam inside `RendererCanvasRenderRD`
+
+**Bead ID:** `oc-wls`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-wls` and stay inside `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` unless a tiny adjacent seam is strictly required. Add reversible attribution for the same cap=1 clipped preserve-color rect lane so QA can isolate three immediate pre-L88 prerequisite buckets separately for the first kept matching batch: scissor reestablishment, `batch_uniform_set` / pipeline pairing, and the draw-binding package (instance/index bindings). Reuse the existing temporary env-gate style, prefer sharp honest discriminators over broad logging, update this plan with exact files touched plus the precise QA recipe, run repo-local validation, commit/push the Godot repo updates, and close bead `oc-wls` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this slice entirely inside `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and extended the existing temporary clipped-preserve-rect diagnostic lane instead of opening a broader theory. The first kept matching batch selector now activates from either the legacy `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE` gate or the new per-bucket gates, and the gate banner now reports all three new bucket toggles so QA can confirm exactly which attribution path is armed. Added three new narrow log markers for the first kept clipped preserve-color rect batch on the cap=1 lane: `temp_diag_first_clipped_preserve_rect_scissor=` at the scissor reestablishment seam, `temp_diag_first_clipped_preserve_rect_uniform_pipeline=` at the `batch_uniform_set` / render-pipeline pairing seam, and `temp_diag_first_clipped_preserve_rect_draw_binding=` at the instance/index binding seam. The pipeline bucket now records whether the cached batch uniform set had to be rebound, alongside the material uniform set, shader blend mode, and the exact bound pipeline packet; the draw-binding bucket now reports the instance buffer, instance-start/count, byte offset, index array, and whether blend constants were applied; the scissor bucket honestly reports whether the scissor was actually reestablished on that batch or simply inherited unchanged. The old combined `temp_diag_first_clipped_preserve_rect_prereq=` bundle remains available only behind the legacy `..._TRACE` env gate, so QA can still compare old-versus-new output without changing default behavior.
+
+Validation run: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`; `git diff --check`; and targeted compile `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/renderer_rd/renderer_canvas_render_rd.linuxbsd.editor.dev.x86_64.o` (passed). Landed on the active instrumentation branch in this task’s commit and is ready for the next QA pass against the refreshed source-built editor.
+
+Precise QA recipe for the next pass:
+- Build/use the refreshed source-built editor from `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`.
+- Keep the existing cap=1 clipped preserve-color harness lane enabled with:
+  - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`
+- Turn on exactly one bucket at a time for the first pass, then combine as needed:
+  - scissor only: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_SCISSOR=1`
+  - uniform/pipeline only: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_UNIFORM_PIPELINE=1`
+  - draw-binding only: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_DRAW_BINDING=1`
+  - optional legacy combined control for comparison: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE=1`
+- Run the same projection-only failing source-built repro (`projection_only + disabled`) and capture which of these markers still appears immediately before the later `fence_wait_error submit_serial=9 wait_result=-4` / `BLIT_PASS` envelope:
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_scissor=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_uniform_pipeline=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_draw_binding=`
+- Compare the bucket outputs across reruns to see which prerequisite bucket remains the tightest surviving seam on the cap=1 lane.

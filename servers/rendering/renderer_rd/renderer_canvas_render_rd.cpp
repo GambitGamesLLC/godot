@@ -188,13 +188,22 @@ String gdgs_rid_to_string(RID p_rid) {
 }
 
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_trace_active = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_combined_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_scissor_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_trace_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_enabled = false;
 thread_local const void *gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr = nullptr;
 thread_local int gdgs_temp_diag_first_clipped_preserve_rect_batch_index = -1;
 thread_local int gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal = -1;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_scissor_changed = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_scissor_enabled = false;
 thread_local Rect2 gdgs_temp_diag_first_clipped_preserve_rect_scissor_rect;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_scissor_bucket_logged = false;
 thread_local uint64_t gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set = 0;
+thread_local uint64_t gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set = 0;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged = false;
 thread_local int gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode = RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
@@ -2527,22 +2536,35 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	const bool gdgs_temp_diag_rect_preserve_clip_skip_first = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_SKIP_FIRST");
 	const bool gdgs_temp_diag_rect_preserve_clip_gate_active = gdgs_temp_diag_rect_preserve_clip_cap >= 0 || gdgs_temp_diag_rect_preserve_clip_only_first || gdgs_temp_diag_rect_preserve_clip_skip_first;
 	const bool gdgs_temp_diag_first_rect_trace = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE");
+	const bool gdgs_temp_diag_first_rect_trace_scissor = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_SCISSOR");
+	const bool gdgs_temp_diag_first_rect_trace_uniform_pipeline = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_UNIFORM_PIPELINE");
+	const bool gdgs_temp_diag_first_rect_trace_draw_binding = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_DRAW_BINDING");
+	const bool gdgs_temp_diag_first_rect_trace_any = gdgs_temp_diag_first_rect_trace || gdgs_temp_diag_first_rect_trace_scissor || gdgs_temp_diag_first_rect_trace_uniform_pipeline || gdgs_temp_diag_first_rect_trace_draw_binding;
 	int gdgs_temp_diag_rect_preserve_clip_match_count = 0;
 	int gdgs_temp_diag_rect_preserve_clip_skipped_count = 0;
 
-	gdgs_temp_diag_first_clipped_preserve_rect_trace_active = gdgs_temp_diag_first_rect_trace;
+	gdgs_temp_diag_first_clipped_preserve_rect_trace_active = gdgs_temp_diag_first_rect_trace_any;
+	gdgs_temp_diag_first_clipped_preserve_rect_combined_trace_enabled = gdgs_temp_diag_first_rect_trace;
+	gdgs_temp_diag_first_clipped_preserve_rect_scissor_trace_enabled = gdgs_temp_diag_first_rect_trace_scissor;
+	gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_trace_enabled = gdgs_temp_diag_first_rect_trace_uniform_pipeline;
+	gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_enabled = gdgs_temp_diag_first_rect_trace_draw_binding;
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr = nullptr;
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_index = -1;
 	gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal = -1;
 	gdgs_temp_diag_first_clipped_preserve_rect_scissor_changed = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_scissor_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_scissor_rect = Rect2();
+	gdgs_temp_diag_first_clipped_preserve_rect_scissor_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set = 0;
+	gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set = 0;
+	gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode = RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
-	if (gdgs_temp_diag_rect_preserve_clip_gate_active || gdgs_temp_diag_first_rect_trace) {
-		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false", gdgs_temp_diag_first_rect_trace ? "true" : "false"));
+	if (gdgs_temp_diag_rect_preserve_clip_gate_active || gdgs_temp_diag_first_rect_trace_any) {
+		print_line(vformat("[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={cap=%d,only_first=%s,skip_first=%s,first_trace=%s,trace_scissor=%s,trace_uniform_pipeline=%s,trace_draw_binding=%s}", gdgs_temp_diag_rect_preserve_clip_cap, gdgs_temp_diag_rect_preserve_clip_only_first ? "true" : "false", gdgs_temp_diag_rect_preserve_clip_skip_first ? "true" : "false", gdgs_temp_diag_first_rect_trace ? "true" : "false", gdgs_temp_diag_first_rect_trace_scissor ? "true" : "false", gdgs_temp_diag_first_rect_trace_uniform_pipeline ? "true" : "false", gdgs_temp_diag_first_rect_trace_draw_binding ? "true" : "false"));
 	}
 
 	Item *current_clip = nullptr;
@@ -2556,7 +2578,7 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 		}
 
 		bool gdgs_temp_diag_rect_preserve_clip_match = false;
-		if (gdgs_temp_diag_rect_preserve_clip_gate_active || gdgs_temp_diag_first_rect_trace) {
+		if (gdgs_temp_diag_rect_preserve_clip_gate_active || gdgs_temp_diag_first_rect_trace_any) {
 			const bool gdgs_temp_diag_rect_like = current_batch->command_type == Item::Command::TYPE_RECT || current_batch->command_type == Item::Command::TYPE_NINEPATCH;
 			const CanvasShaderData *batch_shader_data = current_batch->material_data && current_batch->material_data->shader_data && current_batch->material_data->shader_data->version.is_valid() && current_batch->material_data->shader_data->is_valid() ? current_batch->material_data->shader_data : shader.default_version_data;
 			const int batch_blend_mode = batch_shader_data ? batch_shader_data->blend_mode : RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
@@ -2581,7 +2603,7 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 				continue;
 			}
 
-			if (gdgs_temp_diag_first_rect_trace && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == nullptr) {
+			if (gdgs_temp_diag_first_rect_trace_any && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == nullptr) {
 				const CanvasShaderData *batch_shader_data = current_batch->material_data && current_batch->material_data->shader_data && current_batch->material_data->shader_data->version.is_valid() && current_batch->material_data->shader_data->is_valid() ? current_batch->material_data->shader_data : shader.default_version_data;
 				const int batch_blend_mode = batch_shader_data ? batch_shader_data->blend_mode : RendererRD::MaterialStorage::ShaderData::BLEND_MODE_DISABLED;
 				String command_detail = "none";
@@ -2633,6 +2655,15 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 				RD::get_singleton()->draw_list_disable_scissor(draw_list);
 			}
 		}
+		if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_scissor_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == current_batch && !gdgs_temp_diag_first_clipped_preserve_rect_scissor_bucket_logged) {
+			gdgs_temp_diag_first_clipped_preserve_rect_scissor_bucket_logged = true;
+			print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_scissor={batch_index=%d,match_ordinal=%d,setup_stage=scissor_reestablishment,reestablished=%s,scissor_state_after={enabled=%s,rect=%s}}",
+					gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+					gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+					gdgs_scissor_changed_for_batch ? "true" : "false",
+					gdgs_scissor_enabled_for_batch ? "true" : "false",
+					gdgs_scissor_enabled_for_batch ? gdgs_rect2_to_string(gdgs_scissor_rect_for_batch) : String("none")));
+		}
 
 		CanvasShaderData *shader_data = shader.default_version_data;
 		CanvasMaterialData *material_data = current_batch->material_data;
@@ -2649,7 +2680,7 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 			}
 		}
 
-		if (gdgs_temp_diag_first_rect_trace && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == current_batch && !gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged) {
+		if (gdgs_temp_diag_first_rect_trace_any && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == current_batch && !gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged) {
 			gdgs_temp_diag_first_clipped_preserve_rect_scissor_changed = gdgs_scissor_changed_for_batch;
 			gdgs_temp_diag_first_clipped_preserve_rect_scissor_enabled = gdgs_scissor_enabled_for_batch;
 			gdgs_temp_diag_first_clipped_preserve_rect_scissor_rect = gdgs_scissor_rect_for_batch;
@@ -2667,9 +2698,18 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	RD::get_singleton()->draw_list_end();
 
 	gdgs_temp_diag_first_clipped_preserve_rect_trace_active = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_combined_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_scissor_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_trace_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr = nullptr;
 	gdgs_temp_diag_first_clipped_preserve_rect_batch_index = -1;
 	gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal = -1;
+	gdgs_temp_diag_first_clipped_preserve_rect_scissor_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set = 0;
+	gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 
 	state.current_batch_index = 0;
@@ -3375,7 +3415,12 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 			}
 		}
 
-		if (state.current_batch_uniform_set != *uniform_set) {
+		const bool gdgs_batch_uniform_set_rebound = state.current_batch_uniform_set != *uniform_set;
+		if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch) {
+			gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set = uniform_set->is_valid() ? uniform_set->get_id() : 0;
+			gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound = gdgs_batch_uniform_set_rebound;
+		}
+		if (gdgs_batch_uniform_set_rebound) {
 			state.current_batch_uniform_set = *uniform_set;
 			RD::get_singleton()->draw_list_bind_uniform_set(p_draw_list, *uniform_set, BATCH_UNIFORM_SET);
 		}
@@ -3399,6 +3444,24 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 			pipeline_key.vertex_format_id = shader.quad_vertex_format_id;
 			pipeline = _get_pipeline_specialization_or_ubershader(p_shader_data, pipeline_key, push_constant);
 			RD::get_singleton()->draw_list_bind_render_pipeline(p_draw_list, pipeline);
+			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged) {
+				gdgs_temp_diag_first_clipped_preserve_rect_uniform_pipeline_bucket_logged = true;
+				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_uniform_pipeline={batch_index=%d,match_ordinal=%d,setup_stage=batch_uniform_set_pipeline_pairing,material_uniform_set=%s,batch_uniform_set={rid=%s,rebound=%s},shader_blend_mode=%s,pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s,use_lighting=%s,use_msdf=%s,use_lcd=%s,lcd_blend=%s}}",
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+						gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+						gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set != 0 ? itos(gdgs_temp_diag_first_clipped_preserve_rect_material_uniform_set) : String("none"),
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set != 0 ? itos(gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set) : String("none"),
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_uniform_set_rebound ? "true" : "false",
+						gdgs_canvas_blend_mode_name(gdgs_temp_diag_first_clipped_preserve_rect_shader_blend_mode),
+						gdgs_rid_to_string(pipeline),
+						(int)shader.quad_vertex_format_id,
+						gdgs_canvas_render_primitive_name(p_batch->render_primitive),
+						gdgs_canvas_shader_variant_name(p_batch->shader_variant),
+						p_batch->use_lighting ? "true" : "false",
+						p_batch->use_msdf ? "true" : "false",
+						p_batch->use_lcd ? "true" : "false",
+						p_batch->has_blend ? "true" : "false"));
+			}
 			if (p_batch->has_blend) {
 				RD::get_singleton()->draw_list_set_blend_constants(p_draw_list, p_batch->modulate);
 			}
@@ -3408,7 +3471,19 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 			FixedVector<uint64_t, 1> vo = { uint64_t(p_batch->start) * sizeof(InstanceData) };
 			RD::get_singleton()->draw_list_bind_vertex_buffers_format(p_draw_list, shader.quad_vertex_format_id, 1, vb, vo);
 			RD::get_singleton()->draw_list_bind_index_array(p_draw_list, shader.quad_index_array);
-			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged) {
+			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged) {
+				gdgs_temp_diag_first_clipped_preserve_rect_draw_binding_bucket_logged = true;
+				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_draw_binding={batch_index=%d,match_ordinal=%d,setup_stage=draw_binding_package,instance_buffer=%s,instance_start=%d,instance_count=%d,vertex_offset_bytes=%d,index_array=%s,blend_constants_applied=%s}",
+						gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
+						gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
+						gdgs_rid_to_string(p_batch->instance_buffer),
+						p_batch->start,
+						p_batch->instance_count,
+						(int)vo[0],
+						gdgs_rid_to_string(shader.quad_index_array),
+						p_batch->has_blend ? "true" : "false"));
+			}
+			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_combined_trace_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch && !gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged) {
 				gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = true;
 				print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_prereq={batch_index=%d,match_ordinal=%d,setup_stage=pre_l88_draw,scissor={changed=%s,enabled=%s,rect=%s},material_uniform_set=%s,batch_uniform_set=%s,shader_blend_mode=%s,pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s,use_lighting=%s,use_msdf=%s,use_lcd=%s,lcd_blend=%s},push_constant={batch_flags=0x%x,specular_shininess=%f,msdf={px_range=%f,outline=%f},color_texture_pixel_size={x=%f,y=%f}},draw_binding={instance_buffer=%s,instance_start=%d,instance_count=%d,vertex_offset=%d,index_array=%s,blend_constants=%s}}",
 						gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
