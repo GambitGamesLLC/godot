@@ -4457,3 +4457,70 @@ Precise QA recipe for the next pass:
   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_attachment=`
   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_blend_recipe_dynamic_state=`
 - Keep the existing Vulkan lane identity check unchanged: the crash should still remain `submit_serial=9`, command-summary tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and final breadcrumb `BLIT_PASS` while QA compares whether the surviving changed-bucket family narrows below the current four-bucket set after the blend-recipe split.
+
+### Task 85: QA the split `blend_recipe` instrumentation on the locked cap=1 Vulkan lane
+
+**Bead ID:** `oc-9sma`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** Reuse the refreshed source-built host-Vulkan `projection_only__disabled` cap=1 failing lane and run the next narrowed QA pass for the split `blend_recipe` instrumentation from commit `b3f95f55`. Keep `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1` and `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` enabled for every run; verify the runtime gate banner exposes the selected `trace_blend_recipe*` field before trusting the result; run one-at-a-time proofs for `...TRACE_BLEND_RECIPE_SELECTOR=1`, `...TRACE_BLEND_RECIPE_ATTACHMENT=1`, `...TRACE_BLEND_RECIPE_DYNAMIC_STATE=1`, and optional combined control `...TRACE_BLEND_RECIPE=1`; capture the new marker(s); confirm whether the unchanged failure identity stays `submit_serial=9`, tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, breadcrumb `BLIT_PASS`; update this plan with artifact roots and the exact conclusion; and close bead `oc-9sma` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/selector_only/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/attachment_only/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/dynamic_state_only/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/combined_recipe_control/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Verified the refreshed source-built editor before trusting runtime results: `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` carried the new gate banner fields plus the new selector / attachment / dynamic-state trace strings, with binary proof captured in `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/runtime_binary_proof.txt` (`sha256=f88c4f5e6677fce644efa88c7b6775069168c49ea62b09b9279833ace3151fe9`, mtime `2026-05-22 21:02:19 -0400`). Then ran four one-at-a-time host-Vulkan proofs on the same `projection_only__disabled` cap=1 lane using `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs`, with per-run commands/env/stdout/stderr stored under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/`.
+
+Gate-banner proof held for every run before the crash envelope: `selector_only` showed `trace_blend_recipe_selector=true`; `attachment_only` showed `trace_blend_recipe_attachment=true`; `dynamic_state_only` showed `trace_blend_recipe_dynamic_state=true`; and `combined_recipe_control` showed `trace_blend_recipe=true` while emitting all three per-batch markers. Observed markers were stable and internally consistent across runs: selector-only reported `shader_blend_mode=mix`, `uses_prior_color=true`, `use_lcd=false`, `has_blend=false`, `recipe_branch=shader_blend_mode_attachment`; attachment-only reported `enable_blend=true`, `color_op=add`, `alpha_op=add`, `src_color=src_alpha`, `dst_color=one_minus_src_alpha`, `src_alpha=one`, `dst_alpha=one_minus_src_alpha`; dynamic-state-only reported `dynamic_state_flags=0x0`, `blend_constants_dynamic=false`, `blend_constants_applied=false`, `blend_constants_value=none`; and the combined control reproduced all three marker payloads together without changing the crash lane.
+
+The unchanged failure signature held in all four runs: each exited `134`, each preserved `queue_submit submit_serial=9`, each preserved the same command-summary tail ending `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and each still terminated on `ERROR: Last known breadcrumb: BLIT_PASS`. Exact QA conclusion: the finer split improved observability inside `blend_recipe`, but it still did not narrow the surviving family below the same four-bucket interaction. Every run continued to report `minimal_changed_bucket_candidates=[["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]]` with `surviving_changed_bucket_count=4`. Exact recommended next slice: stay on this same refreshed source-built host-Vulkan `projection_only__disabled` cap=1 lane and split the next still-shared bucket family—`specialization_constants` is the cleanest next target—while keeping the identical gate proof plus the same `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / `BLIT_PASS` identity checks.
+
+### Task 86: Split the surviving `specialization_constants` family on the locked cap=1 Vulkan lane
+
+**Bead ID:** `oc-o7ma`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-o7ma` and stay inside `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` unless a tiny adjacent seam is strictly required. Starting from the verified `blend_recipe` QA rerun where the surviving family still remained `minimal_changed_bucket_candidates=[["vertex_input_recipe", "blend_recipe", "specialization_constants", "pipeline_layout"]]`, split `specialization_constants` more finely on the same refreshed source-built host-Vulkan `projection_only__disabled` cap=1 lane. Keep the instrumentation reversible, default-off, and env-gated in the existing diagnostic style; prefer honest separation between the specialization selector booleans, the packed constant payload, and the local provenance visible in this path for the first kept clipped preserve-color rect batch; run repo-local validation plus targeted compile / refresh as needed; update this plan with exact files touched and a precise QA recipe; commit/push the Godot repo updates; and close bead `oc-o7ma` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Kept this slice entirely inside `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` and split the still-shared `specialization_constants` family without widening the lane or changing renderer behavior. The existing gate banner now exposes four new default-off env toggles: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_SPECIALIZATION_CONSTANTS=1` (family switch), `...TRACE_SPECIALIZATION_CONSTANTS_SELECTOR=1`, `...TRACE_SPECIALIZATION_CONSTANTS_PACKING=1`, and `...TRACE_SPECIALIZATION_CONSTANTS_PROVENANCE=1`. On the first kept clipped preserve-color rect batch, the rect/ninepatch path now emits exactly-once markers that separate: `temp_diag_first_clipped_preserve_rect_specialization_constants_selector=` for the active boolean selectors (`use_lighting`, `use_msdf`, `use_lcd`) plus a simple selector-class count; `temp_diag_first_clipped_preserve_rect_specialization_constants_packing=` for the actual encoded specialization constant payload (`constant_id=0`, `constant_type=int`, `packed_0`, and the bit layout/encoded values); and `temp_diag_first_clipped_preserve_rect_specialization_constants_provenance=` for the visible assignment/provenance in this path (`PipelineKey::shader_specialization <- batch.use_*`, plus local push-constant/pipeline context). This keeps the next QA pass focused on the surviving `specialization_constants` family itself instead of reopening already-demoted bind or recipe families.
+
+Validation run: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`; `git diff --check -- servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`; targeted compile `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/renderer_rd/renderer_canvas_render_rd.linuxbsd.editor.dev.x86_64.o`; refreshed editor relink `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; runtime string proof `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "temp_diag_first_clipped_preserve_rect_specialization_constants_selector="`; and headless sanity check `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version`.
+
+Precise QA recipe for the next pass:
+- Use the refreshed source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` on the same source-built host-Vulkan `projection_only__disabled` failing lane.
+- Keep the stable lane envs unchanged in every run:
+  - `GODOT_GDGS_DEBUG_UI_PASS_ORIGIN=1`
+  - `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`
+- For proving runs, arm exactly one of these at a time:
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_SPECIALIZATION_CONSTANTS_SELECTOR=1`
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_SPECIALIZATION_CONSTANTS_PACKING=1`
+  - `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_SPECIALIZATION_CONSTANTS_PROVENANCE=1`
+- Optional combined control: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_SPECIALIZATION_CONSTANTS=1` should flip all three specialization gate fields to `true` and emit all three markers once on the same first kept batch.
+- Before trusting a run, confirm the gate banner exposes the chosen field(s): `trace_specialization_constants=`, `trace_specialization_constants_selector=`, `trace_specialization_constants_packing=`, and/or `trace_specialization_constants_provenance=`.
+- Capture which new marker(s) appear immediately before the unchanged failure envelope:
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_selector=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_packing=`
+  - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_provenance=`
+- Keep the existing Vulkan lane identity check unchanged: the crash should still remain `submit_serial=9`, command-summary tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, and final breadcrumb `BLIT_PASS` while QA compares whether the surviving changed-bucket family narrows below the current four-bucket set after the specialization-constants split.
