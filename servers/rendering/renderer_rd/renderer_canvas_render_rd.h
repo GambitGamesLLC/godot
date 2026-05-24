@@ -136,6 +136,8 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 		uint32_t gdgs_temp_diag_dst_factors_zero_experiment = 0;
 		uint32_t gdgs_temp_diag_src_alpha_zero_experiment = 0;
 		uint32_t gdgs_temp_diag_enable_blend_false_experiment = 0;
+		uint32_t gdgs_temp_diag_blend_ops_non_add_experiment = 0;
+		uint32_t gdgs_temp_diag_specialization_force_msdf_experiment = 0;
 		uint32_t ubershader = 0;
 
 		uint32_t hash() const {
@@ -149,6 +151,8 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 			h = hash_murmur3_one_32(gdgs_temp_diag_dst_factors_zero_experiment, h);
 			h = hash_murmur3_one_32(gdgs_temp_diag_src_alpha_zero_experiment, h);
 			h = hash_murmur3_one_32(gdgs_temp_diag_enable_blend_false_experiment, h);
+			h = hash_murmur3_one_32(gdgs_temp_diag_blend_ops_non_add_experiment, h);
+			h = hash_murmur3_one_32(gdgs_temp_diag_specialization_force_msdf_experiment, h);
 			h = hash_murmur3_one_32(ubershader, h);
 			return hash_fmix32(h);
 		}
@@ -196,6 +200,7 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 		RID quad_index_buffer;
 		RID quad_index_array;
 		RD::VertexFormatID quad_vertex_format_id;
+		RD::VertexFormatID gdgs_temp_diag_quad_vertex_format_id_duplicate;
 		RD::VertexFormatID primitive_vertex_format_id;
 		ShaderCompiler compiler;
 		uint32_t pipeline_compilations[RSE::PIPELINE_SOURCE_MAX] = {};

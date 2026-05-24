@@ -5785,20 +5785,845 @@ Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `py
 
 ---
 
+### Task 135: Re-QA the corrected `enable_blend=false` experiment on the locked first clipped preserve-rect Vulkan lane
+
+**Bead ID:** `oc-cg87`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-cg87` and re-QA the corrected `enable_blend=false` experiment on the locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Use the rebuilt binary from the current repo state. Compare baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT=1`. Prove from runtime logs/artifacts whether the corrected override now actually applies on the captured first clipped preserve-rect packet, with self-identifying branch tagging (`shader_blend_mode_attachment_enable_blend_false_experiment_from_mix_baseline` vs `..._on_demoted_blend_shape`) and the already-demoted factors held fixed. Then determine whether the exact same failing identity survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Save durable artifact roots under the existing 2026-05-23 repro area, update this plan with concrete results, and close the bead with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA rebuilt the editor from the current repo state and reran the locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, comparing baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT=1` under artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-enable-blend-false-corrected-qa-vulkan-sourcebuild-20260523-150121/` (`baseline/`, `experiment/`, `runtime_binary_proof.txt`, `run_summary.txt`). The runtime proof is sound for the rebuilt binary from the current repo state: `HEAD_SHORT=35e41223`, sha256 `8dc05abd37c00c5ea41fbd9df0825cbe9df5568e77b113c7e55fefa2e610714f`, with both self-identifying strings present: `shader_blend_mode_attachment_enable_blend_false_experiment_from_mix_baseline` and `shader_blend_mode_attachment_enable_blend_false_experiment_on_demoted_blend_shape`.
+
+Concrete QA result: the corrected override now **does** apply on the captured first clipped preserve-rect packet. Baseline stayed on `recipe_branch=shader_blend_mode_attachment` with `enable_blend_false_experiment={requested=false,applied=false}` and the original attachment shape `enable_blend=true,color_op=add,alpha_op=add,src_color=src_alpha,dst_color=one_minus_src_alpha,src_alpha=one,dst_alpha=one_minus_src_alpha`. The experiment rerun self-identified as `recipe_branch=shader_blend_mode_attachment_enable_blend_false_experiment_from_mix_baseline`, logged `enable_blend_false_experiment={requested=true,applied=true}`, and the captured attachment flipped to the intended held demoted shape with only the narrowed blend structure preserved: `enable_blend=false,color_op=add,alpha_op=add,src_color=one,dst_color=zero,src_alpha=zero,dst_alpha=zero`.
+
+The locked failure identity itself survived unchanged across both runs even after that corrected override applied: both runs aborted with `exit_status=134`, both still hit `fence_wait_error submit_serial=9 wait_result=-4`, both still contained the same late tail through `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, both still preserved `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity at the failing `L88` scope, and both still ended later at `ERROR: Last known breadcrumb: BLIT_PASS`. Honest QA conclusion: `enable_blend=true` is now honestly demoted out of the surviving blend-side minimum on this lane. The remaining live blend-side residue is the additive-op pair (`color_op=add`, `alpha_op=add`) under the same locked `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / UI-pass / later `BLIT_PASS` identity.
+
+---
+
+### Task 136: Add an isolated additive-op-pair experiment for the first clipped preserve-rect residual blend-state bundle
+
+**Bead ID:** `oc-tbtt`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-tbtt` on start and stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Build directly on the current post-Task-135 classification: `src_color`, `dst_color`, `dst_alpha`, `src_alpha`, and `enable_blend` are now honestly demoted below the surviving blend-side minimum, leaving only the additive-op pair (`color_op=add`, `alpha_op=add`) live on the first clipped preserve-rect packet. Add the narrowest reversible diagnostic needed to perturb only that additive-op pair away from `add/add` while holding the already-demoted factor shape fixed (`enable_blend=false`, `src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`), preserve self-identifying branch logging plus a distinct pipeline-cache key, keep the locked failing lane/identity unchanged otherwise, update this plan with exact touched files and validation performed, and close the bead with a clear reason if the corrected experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the next narrowest reversible diagnostic on the same refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, keeping the already-demoted factor shape fixed while perturbing only the remaining additive-op pair for the first clipped preserve-rect packet. `servers/rendering/renderer_rd/renderer_canvas_render_rd.h` extends `PipelineKey` with `gdgs_temp_diag_blend_ops_non_add_experiment`, giving the experiment a distinct pipeline-cache identity. `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` extends the existing `gdgs_canvas_compute_blend_recipe()` diagnostic path and first-clipped preserve-rect env-toggle plumbing with a new `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_BLEND_OPS_NON_ADD_EXPERIMENT` switch. When requested on the captured non-LCD mix packet, the helper now materializes the same already-demoted hold-shape (`enable_blend=false`, `src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`) and perturbs only `color_op` + `alpha_op` from `add/add` to `reverse_subtract/reverse_subtract`, self-identifying as either `shader_blend_mode_attachment_blend_ops_non_add_experiment_from_mix_baseline` or `..._on_demoted_blend_shape` depending on which source shape matched. The gate banner and existing blend selector/attachment trace payloads now also report requested/applied status for `blend_ops_non_add_experiment`, with the attachment marker explicitly spelling out the held demoted factors plus the `add -> reverse_subtract` op change so QA can verify the exact experiment from runtime logs alone.
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h`; `git diff --check -- servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`; full editor rebuild `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64` (exit 0); and runtime string proof `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_BLEND_OPS_NON_ADD_EXPERIMENT"`. No new runtime artifact root was generated in this coder pass; the experiment package is ready for QA on the same locked lane.
+
+---
+
+### Task 137: QA the isolated additive-op-pair experiment on the first clipped preserve-rect packet
+
+**Bead ID:** `oc-2qw3`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-2qw3` at start with `bd update oc-2qw3 --status in_progress --json`. Stay strictly on the refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. QA the new reversible experiment gated by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_BLEND_OPS_NON_ADD_EXPERIMENT=1` by comparing baseline vs experiment on the same locked setup. Prove from runtime logs/artifacts that only `color_op` + `alpha_op` change from `add/add` to `reverse_subtract/reverse_subtract` while the already-demoted factor shape stays fixed (`enable_blend=false`, `src_color=one`, `dst_color=zero`, `src_alpha=zero`, `dst_alpha=zero`). Then determine whether the exact same failing identity survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Save durable artifact roots under the existing 2026-05-23 repro area, update this plan with a new task entry and concrete results, and close bead `oc-2qw3` with a clear reason if QA is complete. If the override does not apply or the lane changes unexpectedly, say exactly why with evidence. Do not widen scope into a new fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-ops-non-add-experiment-qa-vulkan-sourcebuild-20260523-1619/`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`, comparing baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_BLEND_OPS_NON_ADD_EXPERIMENT=1` under artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-ops-non-add-experiment-qa-vulkan-sourcebuild-20260523-1619/` (`baseline/`, `experiment/`, `runtime_binary_proof.txt`, `run_summary.txt`, `compact_compare.txt`). Runtime proof stayed on the expected rebuilt binary from the current repo state: `HEAD_SHORT=35e41223`, sha256 `ec2e2e4147bea088d0d7003e42acadc7953403f0619448232938c861f1415a99`, with the gating string `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_BLEND_OPS_NON_ADD_EXPERIMENT` and both self-identifying branch markers present in `runtime_binary_proof.txt`.
+
+Concrete QA result: the new override **does** apply on the captured first clipped preserve-rect packet, and the experiment is isolated exactly as intended. Baseline stayed at `selector.requested=false selector.applied=false`, with the original attachment shape `enable_blend=true color_op=add alpha_op=add src_color=src_alpha dst_color=one_minus_src_alpha src_alpha=one dst_alpha=one_minus_src_alpha`. The experiment rerun self-identified as `selector.requested=true selector.applied=true` and the captured attachment became `enable_blend=false color_op=reverse_subtract alpha_op=reverse_subtract src_color=one dst_color=zero src_alpha=zero dst_alpha=zero`. The `blend_ops_non_add_experiment={...}` trace explicitly preserved the already-demoted hold-shape (`held_enable_blend=false`, `held_src_color=one`, `held_dst_color=zero`, `held_src_alpha=zero`, `held_dst_alpha=zero`) while changing only `baseline_color_op=add`, `baseline_alpha_op=add` to `experiment_color_op=reverse_subtract`, `experiment_alpha_op=reverse_subtract`.
+
+The locked failure identity still survived unchanged across both runs after that op-pair override applied. Both baseline and experiment aborted with `exit_status=134`; both preserved `queue_submit submit_serial=9` and `fence_wait_error submit_serial=9`; both still carried the same late tail through `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`; both still preserved `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity at the failing `L88` scope; and both still ended later at `ERROR: Last known breadcrumb: BLIT_PASS`. Honest QA conclusion: the additive-op pair is now also honestly demoted out of the surviving blend-side minimum on this locked lane. No blend-state residue remains from this first clipped preserve-rect packet under the current isolated experiment ladder; the same failing identity persists unchanged.
+
+---
+
+### Task 138: Classify the surviving non-blend state after the first clipped preserve-rect blend ladder was exhausted
+
+**Bead ID:** `oc-mda7`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-mda7` at start and stay strictly on the locked refreshed source-built host-Vulkan `projection_only__disabled` lane with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`. Continue from Task 137's stop point without widening back into blend-state or into a fix. Using the current plan/history and the durable 2026-05-23 artifact roots, classify the exact surviving state after the first clipped preserve-rect blend ladder is exhausted, re-center on the remaining non-blend `vertex_input_recipe` / `specialization_constants` interaction at `Command Graph (L88) (Draw)`, and define the narrowest honest next coder/QA isolation slice on the same locked `submit_serial=9` seam. Update this plan with the concrete classification, artifact/reference context used, and the exact recommended next slice. Close bead `oc-mda7` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a planning/classification pass only, staying on the locked failing `submit_serial=9` seam at `Command Graph (L88) (Draw)` and explicitly **not** widening back into blend-state or into a fix. Artifact/reference context re-used for this stop-point classification: the locked source-built 2026-05-23 QA roots for the exhausted first-clipped preserve-rect blend ladder (`official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/`, `official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/`, `official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/`, `official-enable-blend-false-corrected-qa-vulkan-sourcebuild-20260523-150121/`, and `official-blend-ops-non-add-experiment-qa-vulkan-sourcebuild-20260523-1619/`), plus the earlier non-blend lane roots already cited in this plan for `vertex_input_recipe`, `specialization_constants`, and packet/provenance status (`official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/`, `official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/`, and `official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`).
+
+Concrete surviving-state classification after blend demotion: the first-`L88` packet no longer has an honest live blend-owned explanation on this locked lane. `pipeline_layout` remains demoted, and the entire first-clipped preserve-rect blend ladder is exhausted: isolated QA has now demoted `src_color`, `dst_color`, `dst_alpha`, `src_alpha`, `enable_blend`, and the additive-op pair while preserving the same failing identity (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). The exact surviving state is therefore a **non-blend two-lane interaction** at the first `L88` bind: `vertex_input_recipe` remains reduced to `RendererCanvasRenderRD::shader.quad_vertex_format_id`, and `specialization_constants` remains reduced to `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`. Under the current locked evidence, neither of those two reduced lanes has been honestly demoted as a whole lane after blend removal, and the failing seam should now be treated as the coupled `vertex_input_recipe + specialization_constants` packet-local remainder rather than as a three-lane or blend-tainted family.
+
+Narrowest honest next isolation slice: do **not** spend another pass on blend or on already-demoted pipeline-layout state. The next coder/QA slice should stay on the same locked source-built `projection_only__disabled` `cap=1` lane and isolate only the surviving non-blend pair at the first `L88` bind. The smallest honest follow-up is a paired non-blend demotion check that holds the exact `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / UI-pass / later `BLIT_PASS` identity fixed while asking one question: after blend demotion, can either reduced non-blend lane now be honestly demoted as a whole lane, or does the seam still require the joint `vertex_input_recipe + specialization_constants` interaction? Concretely, the next coder slice should add the narrowest reversible experiment or provenance toggle that perturbs only one of those two packet-local owners at a time on the captured first `L88` packet without reopening blend-state; the matching QA slice should compare baseline vs each isolated non-blend perturbation and classify whether the locked failure identity survives unchanged. If both isolated perturbations preserve the identity, the next honest planning step becomes the shared rect/quad packet-class owner for the pair; if either perturbation materially changes the identity, that lane remains part of the surviving minimum.
+
+---
+
+### Task 139: Add the first one-at-a-time non-blend isolation experiment on the surviving `specialization_constants` lane
+
+**Bead ID:** `oc-418l`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-418l` at start and stay strictly on the locked failing `submit_serial=9` seam at the captured first `Command Graph (L88) (Draw)` packet on the refreshed source-built `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. The blend ladder is exhausted; do not reopen blend-state or widen into a fix. Add the narrowest reversible diagnostic needed for the first one-at-a-time non-blend isolation experiment, choosing whichever single remaining lane (`vertex_input_recipe` or `specialization_constants`) can be most honestly perturbed in isolation first while keeping the other surviving lane fixed. Preserve self-identifying logging and distinct pipeline-cache identity as appropriate. Update this plan with the exact experiment shape, touched files, validation performed, and the exact next QA slice. Run relevant repo-local validation, then close bead `oc-418l` with a clear reason if the experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Chose the `specialization_constants` lane for the first one-at-a-time non-blend perturbation because it can be changed on the captured first clipped preserve-rect `L88` packet without reopening blend state and without changing the surviving `vertex_input_recipe` lane (`shader.quad_vertex_format_id`) at all. The new reversible experiment is opt-in and packet-local: `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1` now forces only the first kept clipped preserve-color rect packet to build/use a specialization payload with `use_msdf=true` while holding `use_lighting` and `use_lcd` at their original values. To preserve distinct pipeline-cache identity even if another real batch elsewhere already uses the same specialization bits, `PipelineKey` now carries `gdgs_temp_diag_specialization_force_msdf_experiment` in its hash path as an explicit diagnostic cache discriminator.
+
+Self-identifying logging stays seam-local and runtime-verifiable on the same locked lane. The gate banner now reports `specialization_force_msdf_experiment=true/false`, and the existing first-rect specialization selector / packing / provenance markers automatically arm when this experiment is requested. Those markers now spell out the exact baseline-vs-experiment change, including `requested/applied`, `baseline_use_msdf` vs `experiment_use_msdf`, `baseline_packed_0` vs the experiment `packed_0`, and the explicit cache-identity flag so QA can prove the perturbation is specialization-only and distinct from baseline.
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`:
+- `git diff --check -- servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+- `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT"`
+
+Exact next QA slice on the same locked lane:
+1. Reuse `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` on the refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` repro.
+2. Compare baseline vs experiment with the same lane identity envs, adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1` for the experiment run.
+3. In both runs, confirm the failure lane identity is still the locked seam under test: `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`.
+4. In the experiment run, prove the specialization-only perturbation from runtime logs:
+   - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={...,specialization_force_msdf_experiment=true}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_selector={...,specialization_force_msdf_experiment={requested=true,applied=true,...}}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_packing={...,baseline_packed_0=0x0,...,specialization_force_msdf_experiment={requested=true,applied=true,baseline_bit1=0,experiment_bit1=1}}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_provenance={...,cache_identity_flag=1,...}`
+5. Then classify the exact outcome narrowly: if the locked failure identity survives unchanged, `specialization_constants` becomes the next honest whole-lane demotion candidate and the follow-up should move to a one-at-a-time `vertex_input_recipe` perturbation; if the identity materially changes, `specialization_constants` remains live in the surviving minimum.
+
+---
+
+### Task 140: QA the specialization-only `use_msdf` experiment on the locked `submit_serial=9` seam
+
+**Bead ID:** `oc-3phz`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-3phz` at start and stay strictly on the locked failing `submit_serial=9` seam on the refreshed source-built `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. QA the specialization-only experiment by comparing baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1`. Prove from runtime logs/artifacts that only the first kept packet's specialization payload/cache identity changed (`use_msdf=false -> true`, `packed_0 0x0 -> 0x2`) while `vertex_input_recipe` stayed fixed. Then determine whether the exact same failing identity survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Save durable artifact roots under the existing 2026-05-23 repro area, update this plan with concrete results, and close bead `oc-3phz` with a clear reason if QA is complete. If the override does not apply or the lane changes unexpectedly, say exactly why with evidence. Do not widen scope into a new fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/compact_compare.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/baseline/env_relevant.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/baseline/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/baseline/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/baseline/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/experiment/env_relevant.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/experiment/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/experiment/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/experiment/stderr.log`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA completed on the same refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Durable artifacts live at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/` with per-run envs, exact commands, stdout/stderr, runtime-binary proof, a compact compare, and machine-readable extracts.
+
+The specialization-only override **did apply** on the first kept clipped preserve-rect packet and stayed narrow. Baseline runtime markers showed `specialization_force_msdf_experiment=false`, `use_msdf=false`, and `packed_0=0x0`; the experiment run showed `specialization_force_msdf_experiment=true`, `requested=true`, `applied=true`, `baseline_use_msdf=false`, `experiment_use_msdf=true`, and `packed_0=0x2` with `baseline_packed_0=0x0`. The first kept packet's `vertex_input_recipe` stayed fixed in both runs: the explicit vertex provenance marker remained `recipe_owner=RendererCanvasRenderRD::shader.quad_vertex_format_id` with `vertex_format=2`, and the first `CanvasShaderRD:0` pipeline excerpts held `vertex_input_recipe_hash="0xaf2a1c78"` constant while only specialization identity changed from baseline `specialization_constant_hash="0x6273dcb1"`, `specialization_constant_value_hash="0xc5247e53"`, preview `bits="0x0",value=0` to experiment `specialization_constant_hash="0xbfcbce98"`, `specialization_constant_value_hash="0xa18293e9"`, preview `bits="0x2",value=2`.
+
+The exact same failing identity survived unchanged in both runs. `run_summary.tsv` shows `submit_serial=9`, `fence_wait_error submit_serial=9`, and later `BLIT_PASS` in both baseline and experiment. The `submit_serial=9` command summaries in both runs keep the same late-tail path ending `Tonemap (L87) (Draw) > Command Graph (L88) (Draw)`, and both logs preserve the same `Command Graph (L88) (Draw)` UI-pass continuity (`begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"`). That keeps the seam locked while honestly demoting this specialization-only perturbation from the surviving minimum.
+
+One runtime caveat showed up identically in both runs: the new `temp_diag_first_clipped_preserve_rect_specialization_constants_provenance` print never emitted because the format string currently trips `unsupported format character` at `%u`, so the provenance marker is absent from stdout even though the binary contains the marker string (`runtime_binary_proof.txt`) and the selector/packing/hash evidence above is sufficient to prove the override applied. That log-format bug did **not** change the lane identity; it only prevented the expected provenance line from printing.
+
+Exact next QA slice from this result: move to the one-at-a-time `vertex_input_recipe` perturbation on the same locked `submit_serial=9` seam, keeping the freshly-demoted specialization lane fixed.
+
+---
+
+### Task 141: Add the vertex-input-only duplicate-format perturbation on the locked first `L88` packet
+
+**Bead ID:** `oc-tu9x`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-tu9x` at start and stay strictly on the same locked failing `submit_serial=9` seam on the refreshed source-built `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. The specialization lane is already demoted; do not reopen it and do not widen into a fix. Add the narrowest reversible diagnostic needed for the one-at-a-time `vertex_input_recipe` perturbation on the captured first `Command Graph (L88) (Draw)` packet while holding the freshly-demoted specialization lane fixed. Preserve self-identifying logging and distinct pipeline-cache identity as appropriate. Update this plan with the exact experiment shape, touched files, validation performed, and the exact next QA slice. Run relevant repo-local validation, then close bead `oc-tu9x` with a clear reason if the experiment package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the narrowest reversible `vertex_input_recipe` perturbation without reopening any already-demoted lane. The new opt-in experiment `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1` swaps only the first kept clipped preserve-rect packet from `RendererCanvasRenderRD::shader.quad_vertex_format_id` to a duplicate vertex-format RID created from the exact same rect/ninepatch `InstanceData` layout. That keeps the same binding count, binding stride/frequency, attribute count, offsets, and formats while perturbing only the selected packet's `vertex_format_id` / pipeline-cache identity. The specialization lane stays fixed on its refreshed demoted baseline (`use_msdf` unchanged, no specialization override requested).
+
+Self-identifying logging remains seam-local and proves the perturbation shape at runtime. The gate banner now reports `vertex_input_duplicate_format_experiment=true/false`, the first-packet vertex-input trace buckets auto-arm when the experiment is requested, and the vertex-input provenance marker now prints `requested/applied`, the baseline format RID, the duplicate-format RID, the selected format RID, and `cache_identity_source=vertex_format_id`. The first kept packet's pipeline / vertex-bind / prereq logs now report the selected vertex format RID instead of hardcoding the baseline quad format, so QA can prove the experiment is vertex-input-only on the same locked seam.
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`:
+- `git diff --check -- servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
+- `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT"`
+
+Exact next QA slice on the same locked lane:
+1. Reuse `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` on the refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` repro.
+2. Compare baseline vs experiment with the same lane identity envs, adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1` for the experiment run.
+3. In both runs, confirm the failure lane identity is still the same locked seam under test: `submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`.
+4. In the experiment run, prove the perturbation is vertex-input-only from runtime logs:
+   - `[gdgs-canvas] temp_diag_clipped_preserve_rect_gate={...,vertex_input_duplicate_format_experiment=true}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout={...,vertex_format=<selected>,binding_count=1,...}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_input_attribute_layout={...,vertex_format=<selected>,attribute_count=8,...}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_vertex_input_provenance={...,vertex_input_duplicate_format_experiment={requested=true,applied=true,baseline_vertex_format=<baseline>,experiment_vertex_format=<duplicate>,selected_vertex_format=<duplicate>,layout_preserved=true,cache_identity_source=vertex_format_id}}`
+   - `[gdgs-canvas] temp_diag_first_clipped_preserve_rect_pipeline_layout_provenance={...,vertex_format_id=<duplicate>,...}` / first `CanvasShaderRD:0` pipeline excerpt showing the experiment run's `vertex_input_recipe_hash` changed while specialization fields remain fixed.
+5. Then classify the outcome narrowly: if the exact failing identity survives unchanged, `vertex_input_recipe` is honestly demoted from the surviving minimum; if the identity materially changes, `vertex_input_recipe` remains live in the minimum and the captured first-packet format selection becomes the next focal seam.
+
+---
+
+### Task 142: QA the vertex-input-only duplicate-format experiment on the locked `submit_serial=9` seam
+
+**Bead ID:** `oc-2xdr`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-2xdr` at start and stay strictly on the same locked failing `submit_serial=9` seam on the refreshed source-built `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. QA the new reversible experiment by comparing baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`. Prove from runtime logs/artifacts that only the selected vertex-format RID/cache identity changed for the captured first kept clipped preserve-rect packet while the specialization lane stayed fixed/demoted. Then determine whether the exact same failing identity survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Save durable artifact roots under the existing 2026-05-23 repro area, update this plan with a new task entry and concrete results, and close bead `oc-2xdr` with a clear reason if QA is complete. If the override does not apply or the lane changes unexpectedly, say exactly why with evidence. Do not widen scope into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/compact_compare.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/baseline/env_relevant.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/baseline/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/baseline/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/baseline/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/experiment/env_relevant.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/experiment/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/experiment/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/experiment/stderr.log`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA completed on the same refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Durable artifacts live at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/` with per-run envs, exact commands, stdout/stderr, runtime-binary proof, a compact compare, machine-readable extracts, and the top-level `run_summary.tsv`.
+
+The experiment gate **was requested but did not actually perturb the selected vertex-format RID/cache identity**. `runtime_binary_proof.txt` proves the refreshed source-built binary contains `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT`, and the experiment run's gate banner flipped to `vertex_input_duplicate_format_experiment=true`. But the decisive provenance marker shows `vertex_input_duplicate_format_experiment={requested=true,applied=false,baseline_vertex_format=2,experiment_vertex_format=2,selected_vertex_format=2,layout_preserved=true,cache_identity_source=vertex_format_id}`. Baseline reports the matching non-perturbed state `requested=false,applied=false,baseline_vertex_format=2,experiment_vertex_format=2,selected_vertex_format=2`. The binding-layout and attribute-layout markers also stayed byte-for-byte equivalent across runs (`binding_count=1`, `stride=128`, `attribute_count=8`, same offsets/formats/semantics), so the intended duplicate-format RID collapsed back to the baseline RID instead of producing a new cache identity.
+
+The specialization lane stayed fixed and honestly demoted in both runs. Baseline and experiment both report `specialization_force_msdf_experiment=false`, `use_msdf=false`, `packed_0=0x0`, and `baseline_bit1=0,experiment_bit1=0` in the specialization selector/packing markers, so this QA pass did not reopen the already-demoted specialization seam.
+
+The exact same failing identity also survived unchanged, but only on the unperturbed lane because the vertex-format override never applied. `run_summary.tsv` records exit `134`, `submit_serial=9`, `fence_wait_error submit_serial=9`, later `BLIT_PASS`, and nine `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` occurrences in both baseline and experiment. `identity_summary.json` and `compact_compare.txt` preserve the same late-tail path ending `Tonemap (L87) (Draw) > Command Graph (L88) (Draw)` for both runs.
+
+Why the override failed is now explicit from code + runtime evidence: the coder package builds `shader.gdgs_temp_diag_quad_vertex_format_id_duplicate` by calling `RD::get_singleton()->vertex_format_create(vf)` on the exact same `vf` used for `shader.quad_vertex_format_id`, and the runtime provenance proves both calls resolve to the same RID (`baseline_vertex_format=2`, `experiment_vertex_format=2`). So the requested experiment stayed reversible and seam-local, but it did **not** create a distinct vertex-input cache identity to test.
+
+Exact honest next slice: keep the same locked `submit_serial=9` seam and replace this no-op duplicate-format strategy with a new coder-only perturbation that still preserves layout semantics but provably yields a distinct selected `vertex_format_id`/cache identity before rerunning QA. Do not widen into a fix; the immediate problem is that the intended vertex-input-only experiment currently canonicalizes back to the baseline RID.
+
+---
+
+### Task 143: Replace the no-op duplicate-format tactic with a binding-slot alias vertex-input experiment
+
+**Bead ID:** `oc-ifvv`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ifvv` at start and stay strictly on the same locked failing `submit_serial=9` seam on the refreshed source-built `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. Build directly on the QA caveat: the duplicate-format experiment requested correctly but canonicalized back to the baseline RID, so `requested=true, applied=false` and `selected_vertex_format` stayed unchanged. Replace that no-op tactic with the narrowest reversible experiment that still preserves layout semantics but provably changes the selected `vertex_format_id` / cache identity for the captured first kept clipped preserve-rect packet. Keep the specialization lane fixed/demoted. Preserve self-identifying logging and runtime proof fields so QA can verify requested/applied, baseline vs experiment vertex-format RID, and selected RID. Update this plan with a new task entry containing the exact experiment shape, touched files, validation performed, and the exact next QA slice. Run relevant repo-local validation, then close bead `oc-ifvv` with a clear reason if the corrected vertex-input experiment package is ready for QA. Do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Replaced the no-op duplicate-format tactic with the narrowest reversible vertex-input perturbation that still preserves packet layout semantics while forcing a distinct `vertex_format_id` on the captured first kept clipped preserve-rect packet. Instead of calling `vertex_format_create(vf)` twice on the same binding-0 descriptor, the experiment path now builds the alternate format from the same rect/ninepatch `InstanceData` attribute offsets, formats, stride, and frequency but rebinds every attribute to explicit binding slot `1`. At draw time, the experiment binds the exact same instance buffer twice with the same byte offset and selects the alternate format RID only for the captured packet, so shader-visible attribute semantics stay unchanged while the selected vertex-format/cache identity must differ from the baseline binding-0 format. The runtime proof/logging was kept self-identifying and seam-local: the existing `vertex_input_duplicate_format_experiment={requested,applied,baseline_vertex_format,experiment_vertex_format,selected_vertex_format,...}` payload is preserved, and the vertex-bind / binding-layout / attribute-layout / provenance / prereq logs now also report `selected_binding_index`, `buffer_bind_count`, and `experiment_shape=binding1_alias_same_buffer` so QA can prove the experiment really switched to the binding-1 alias format rather than silently reusing the baseline RID.
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `python3 misc/scripts/file_format.py servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h`; `git diff --check -- servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.h`; full incremental rebuild `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64`; runtime marker proof `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "binding1_alias_same_buffer"`; and headless sanity check `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version` (`4.7.beta.custom_build.35e41223b`). No repro/QA rerun was performed in this coder pass, so there is no new artifact root yet.
+
+Exact next QA slice: rerun the same locked source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` package with and without `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`, and prove from runtime logs that the captured packet now reports `requested=true, applied=true`, `baseline_vertex_format != experiment_vertex_format`, `selected_vertex_format=<experiment>`, `selected_binding_index=1`, `buffer_bind_count=2`, and `experiment_shape=binding1_alias_same_buffer` while the specialization lane stays fixed/demoted. Then classify whether the exact same failing identity still survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`).
+
+---
+
+### Task 144: QA the corrected binding-slot-alias vertex-input experiment on the locked `submit_serial=9` seam
+
+**Bead ID:** `oc-5w46`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-5w46` on start and stay strictly on the same locked failing `submit_serial=9` seam on the refreshed source-built `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. QA the corrected reversible experiment by comparing baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`. Prove from runtime logs/artifacts that the captured first kept clipped preserve-rect packet now shows a real vertex-input perturbation: `requested=true, applied=true`, `baseline_vertex_format != experiment_vertex_format`, `selected_vertex_format=<experiment>`, `selected_binding_index=1`, `buffer_bind_count=2`, `experiment_shape=binding1_alias_same_buffer`, while the specialization lane stays fixed/demoted. Then determine whether the exact same failing identity survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Save durable artifact roots under the existing 2026-05-23 repro area, update this plan with a new task entry and concrete results, and close bead `oc-5w46` with a clear reason if QA is complete. If the override still does not apply or the lane changes unexpectedly, say exactly why with evidence. Do not widen scope into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/compact_compare.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/baseline/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/baseline/env_relevant.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/baseline/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/baseline/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/baseline/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/baseline/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/env_relevant.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/exact_command.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/stderr.log`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA completed on the same refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Durable artifacts live at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/` with per-run envs, exact commands, stdout/stderr, runtime-binary proof, a compact compare, and `run_summary.tsv`.
+
+The corrected experiment package is present in the rebuilt binary, but the runtime evidence shows the override still did **not** actually switch the captured packet onto a distinct vertex-format/cache identity. `runtime_binary_proof.txt` proves the refreshed binary contains the new binding-slot-alias strings (`binding1_alias_same_buffer`, `selected_binding_index=%d`, `buffer_bind_count=%d`, `layout_semantics=identical_instance_buffer_rebound_to_binding1`) and the experiment run's gate banner flipped to `vertex_input_duplicate_format_experiment=true`. But the decisive first-packet provenance line in `experiment/stdout.log` still reports `vertex_input_duplicate_format_experiment={requested=true,applied=false,baseline_vertex_format=2,experiment_vertex_format=2,selected_vertex_format=2,layout_preserved=true,layout_semantics=identical_instance_buffer_rebound_to_binding1,experiment_shape=baseline_binding0_single_buffer,cache_identity_source=vertex_format_id}`. The paired binding-layout and attribute-layout markers stayed on the baseline shape too: `binding_count=1`, `selected_binding_index=0`, and all attributes still bound to slot `0` on `vertex_format=2`. So the requested binding-1 alias format again collapsed back to the baseline RID/cache identity instead of yielding the promised `selected_binding_index=1`, `buffer_bind_count=2`, and `experiment_shape=binding1_alias_same_buffer` runtime state.
+
+The specialization lane stayed fixed and honestly demoted in both runs. Baseline and experiment both report `specialization_force_msdf_experiment={requested=false,applied=false,...}`, `use_msdf=false`, and `packed_0=0x0` in the specialization selector/packing markers, so this QA pass did not reopen the specialization seam.
+
+The exact same failing identity also survived unchanged, but again only on the still-unperturbed lane because the vertex-input override never applied. Both baseline and experiment aborted with signal `-6` / exit `134`, both still logged `queue_submit submit_serial=9` and `fence_wait_error submit_serial=9 wait_result=-4`, both preserved the same late render-pass tail through `Tonemap (L87) (Draw)` into `Command Graph (L88) (Draw)`, both kept `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity at the failing `L88` scope, and both still ended later on `ERROR: Last known breadcrumb: BLIT_PASS`.
+
+Exact honest next slice: stay on this same locked `submit_serial=9` seam, keep blend and specialization demoted, and hand the work back to coder to explain why the binding-slot-alias experiment still canonicalizes to `vertex_format=2` / binding slot `0` at runtime despite the new binary strings. Do not widen into a fix; the immediate blocker is still that the intended vertex-input-only perturbation does not actually apply on the captured first kept clipped preserve-rect packet.
+
+---
+
+### Task 145: Explain the binding-slot-alias cache collapse and preserve binding in vertex-format cache identity for the next QA slice
+
+**Bead ID:** `oc-3iaf`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-3iaf` on start and stay strictly on the same locked failing `submit_serial=9` seam on the refreshed source-built `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. Build directly on Task 144's QA caveat: the binding-slot-alias vertex-input experiment was requested and the binary strings were present, but runtime still showed `requested=true, applied=false`, `baseline_vertex_format=2`, `experiment_vertex_format=2`, `selected_vertex_format=2`, `selected_binding_index=0`, and `experiment_shape=baseline_binding0_single_buffer`. Narrow task only: trace and explain why the intended alias experiment still resolves to the baseline runtime identity on the captured first kept clipped preserve-rect packet, and make only the smallest reversible diagnostic change needed so the next QA can verify a real vertex-input perturbation. Keep specialization fixed/demoted. Update the plan with a new task entry containing the root cause, exact touched files, validation performed, and the exact next QA slice. Run relevant repo-local validation, then close bead `oc-3iaf` with a clear reason if the corrected package is ready for QA. Do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Root cause traced cleanly to the high-level RenderingDevice vertex-format cache, not to the Vulkan driver path and not to the renderer-side packet selection logic. `servers/rendering/rendering_device.cpp:3891-3944` still routes every `vertex_format_create()` call through `vertex_format_cache`, and `servers/rendering/rendering_device.h:750-792` previously defined `VertexDescriptionKey` equality/hash using only `location`, `offset`, `format`, `stride`, and `frequency`. The explicit `VertexAttribute.binding` field was omitted from both equality and hashing, so Task 143's binding-slot-alias descriptor (all attributes rebound from explicit slot `0` to explicit slot `1`) compared equal to the baseline descriptor before the driver was asked to create a new format. That is why Task 144's runtime kept reporting `baseline_vertex_format=2`, `experiment_vertex_format=2`, `selected_vertex_format=2`, `requested=true`, `applied=false`, `binding_count=1`, and `selected_binding_index=0`: the alias descriptor never survived the CPU-side cache key, so the experiment collapsed back to the baseline RID/cache identity upstream of Vulkan.
+
+The smallest reversible diagnostic correction was to preserve `VertexAttribute.binding` in `VertexDescriptionKey` equality and hashing. `servers/rendering/rendering_device.h` now compares `a.binding != b.binding` in `VertexDescriptionKey::operator==` and folds `vd.binding` into `VertexDescriptionKey::hash()`. This keeps the renderer/Vulkan experiment semantics unchanged while allowing the binding-1 alias descriptor to retain a distinct `vertex_format_id` / cache identity long enough for the next QA pass to observe whether the captured packet really moves onto `selected_binding_index=1` with `buffer_bind_count=2`. No wider behavioral fix was attempted.
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `python3 misc/scripts/file_format.py servers/rendering/rendering_device.h`; `git diff --check -- servers/rendering/rendering_device.h`; targeted check `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/rendering_device.linuxbsd.editor.x86_64.o`; full incremental rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and headless sanity check `./bin/godot.linuxbsd.editor.dev.x86_64 --headless --version` (`4.7.beta.custom_build.35e41223b`). No repro/QA rerun was performed in this coder pass, so there is no new artifact root yet.
+
+Exact next QA slice: rerun the same refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` package with and without `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`, using the rebuilt binary from this pass. Prove from runtime logs that the captured first kept clipped preserve-rect packet now shows a real vertex-input perturbation (`requested=true`, `applied=true`, `baseline_vertex_format != experiment_vertex_format`, `selected_vertex_format=<experiment>`, `selected_binding_index=1`, `buffer_bind_count=2`, `experiment_shape=binding1_alias_same_buffer`) while the specialization lane stays fixed/demoted, then classify whether the exact same failing identity still survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`).
+
+---
+
+### Task 146: Re-QA the binding-slot-alias vertex-input experiment after preserving `binding` in the CPU-side vertex-format cache key
+
+**Bead ID:** `oc-rt9g`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-rt9g` on start and continue the already-approved active plan from Task 145's stop point. Stay strictly on the same locked failing `submit_serial=9` seam on the refreshed source-built `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. QA the existing vertex-input alias experiment again by comparing baseline vs `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`, now that `VertexDescriptionKey` includes `binding` in the CPU-side cache identity. Prove from runtime logs/artifacts that the captured first kept clipped preserve-rect packet now shows a real vertex-input perturbation: `requested=true`, `applied=true`, distinct baseline/experiment vertex-format IDs, `selected_binding_index=1`, `buffer_bind_count=2`, `experiment_shape=binding1_alias_same_buffer`, while the specialization lane stays fixed/demoted. Then determine whether the exact same failing identity survives unchanged (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). Save durable artifact roots under the existing 2026-05-23 repro area, update this plan with a new task entry and concrete results, and close bead `oc-rt9g` with a clear reason if QA is complete. If the runtime still collapses back to baseline or a new lane change appears, say exactly why with evidence. Do not widen scope into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/baseline/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/baseline/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/baseline/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/baseline/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/experiment/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/experiment/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/experiment/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/experiment/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/runtime_binary_proof.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/compact_compare.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/baseline/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/baseline/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/baseline/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/baseline/stderr.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/experiment/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/experiment/exit_status.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/experiment/stdout.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/experiment/stderr.log`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA completed on the same refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Two artifact roots were saved under the existing 2026-05-23 repro area. The first root, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/`, documents a false start: it reused only the cap=1 lane and the experiment env, so the gate banner honestly showed `trace_vertex_input_recipe=false`, `trace_vertex_input_provenance=false`, and `trace_specialization_constants=false`; that run therefore could not emit the first-packet provenance markers needed to trust the result. The decisive traced rerun lives at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/` with `runtime_binary_proof.txt`, `run_summary.tsv`, `compact_compare.txt`, per-run contexts, and full stdout/stderr logs.
+
+The traced rerun proves the cache-key fix worked and the selected packet now shows a real runtime vertex-input perturbation. Baseline `baseline/stdout.log` reports `temp_diag_first_clipped_preserve_rect_vertex_input_provenance={...,vertex_format=2,...,vertex_input_duplicate_format_experiment={requested=false,applied=false,baseline_vertex_format=2,experiment_vertex_format=3,selected_vertex_format=2,layout_preserved=true,experiment_shape=baseline_binding0_single_buffer,cache_identity_source=vertex_format_id}}` and `temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout={...,vertex_format=2,binding_count=1,selected_binding_index=0,experiment_shape=baseline_binding0_single_buffer,...}`. The experiment `experiment/stdout.log` now cleanly flips to `temp_diag_first_clipped_preserve_rect_vertex_input_provenance={...,vertex_format=3,...,vertex_input_duplicate_format_experiment={requested=true,applied=true,baseline_vertex_format=2,experiment_vertex_format=3,selected_vertex_format=3,layout_preserved=true,experiment_shape=binding1_alias_same_buffer,cache_identity_source=vertex_format_id}}` and `temp_diag_first_clipped_preserve_rect_vertex_input_binding_layout={...,vertex_format=3,binding_count=2,selected_binding_index=1,experiment_shape=binding1_alias_same_buffer,bindings=[{binding=0,...,used_by_attributes=false},{binding=1,...,used_by_attributes=true}]}`. At the failing `Command Graph (L88) (Draw)` payload scope, the experiment also shows `vertex_buffer_binds=1,vertex_buffer_binding_total=2`, which is the runtime proof corresponding to the requested `buffer_bind_count=2` shape.
+
+The specialization lane stayed fixed and honestly demoted in both traced runs. Baseline and experiment both report `specialization_force_msdf_experiment={requested=false,applied=false,...}`, `use_msdf=false`, and `packed_0=0x0` in the first-packet specialization selector/packing markers, so the experiment remained vertex-input-only and did not reopen the specialization seam.
+
+The same outer failing identity survived unchanged even though the selected packet now truly perturbs inside the L88 draw payload. Both traced runs still aborted with exit `134` / signal `-6`, both still logged `fence_wait_begin submit_serial=9` followed by `fence_wait_error submit_serial=9 wait_result=-4`, both preserved the same late render tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, both kept `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity at the failing L88 scope, and both still report a later `BLIT_PASS` breadcrumb. So the cache fix successfully created the intended vertex-input perturbation, but that perturbation did not dislodge the locked failing seam.
+
+Exact honest next slice: hand the artifact set to an independent auditor on the same repo/plan so they can truth-check Task 146's runtime claims against the saved logs and decide whether bead-level QA is fully closed. If the broader investigation continues after audit, the next engineering slice is downstream of the CPU-side vertex-format cache, because QA now proved that a real vertex-input-only perturbation can reach the captured packet without breaking the surviving `submit_serial=9` crash identity.
+
+---
+
+### Task 147: Audit the post-cache-fix vertex-input-only perturbation evidence on the locked `submit_serial=9` seam
+
+**Bead ID:** `oc-7dfe`
+**SubAgent:** `primary`
+**Role:** `auditor`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-7dfe` on start and continue the already-approved active plan from Task 146's stop point. Audit the QA evidence for the vertex-input-only perturbation on the locked `submit_serial=9` seam, using the decisive traced artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/` and the false-start root only as a caveat. Confirm whether the experiment truly delivered a real vertex-input-only perturbation (`requested=true`, `applied=true`, baseline vertex format `2` vs experiment `3`, selected binding index `1`, buffer bind count `2`, specialization fixed/demoted) while leaving the same outer crash identity unchanged. Then classify the honest conclusion: whether `vertex_input_recipe` is now demoted on this locked lane and whether the seam should move downstream of the CPU-side vertex-format cache. Update this plan with a new task entry and concrete audit results, and close bead `oc-7dfe` with a clear reason if complete. Do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Independent audit completed against the saved QA artifacts, with the traced root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/` treated as decisive and the earlier `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/` root treated only as a caveat because its gate banner explicitly showed `trace_vertex_input_recipe=false`, `trace_vertex_input_provenance=false`, and `trace_specialization_constants=false`, so it could not independently prove the first-packet provenance claim.
+
+The decisive traced root does prove a real vertex-input-only perturbation reached the captured first kept clipped preserve-rect packet. In `baseline/stdout.log`, the first-packet provenance/binding markers stay at `vertex_format=2`, `requested=false`, `applied=false`, `baseline_vertex_format=2`, `experiment_vertex_format=3`, `selected_vertex_format=2`, `selected_binding_index=0`, and `binding_count=1`. In `experiment/stdout.log`, those same markers flip to `vertex_format=3`, `requested=true`, `applied=true`, `baseline_vertex_format=2`, `experiment_vertex_format=3`, `selected_vertex_format=3`, `selected_binding_index=1`, `binding_count=2`, and `experiment_shape=binding1_alias_same_buffer`, with bindings showing slot 0 unused and slot 1 consumed by attributes. The experiment-side L88 payload also records `vertex_buffer_binds=1` and `vertex_buffer_binding_total=2`, which is the runtime confirmation that the two-binding alias shape survived into the failing packet.
+
+The specialization lane stayed fixed/demoted, so the QA claim of a vertex-input-only perturbation holds. Both baseline and experiment report `specialization_force_msdf_experiment={requested=false,applied=false,...}`, `use_msdf=false`, and `packed_0=0x0` in the traced first-packet specialization selector/packing markers. That means the experiment changed the vertex-input recipe without reopening the specialization seam.
+
+The same outer crash identity also survived unchanged. The traced summary and logs keep `submit_serial=9`, `fence_wait_error submit_serial=9 wait_result=-4`, the same late draw tail through `Tonemap (L87) (Draw)` into `Command Graph (L88) (Draw)`, `begin_breadcrumb="UI_PASS",end_breadcrumb="UI_PASS"` continuity at the failing L88 scope, and a later `BLIT_PASS` breadcrumb. So the audit agrees with QA: the experiment genuinely perturbed vertex input on the locked lane, but that perturbation did not move the surviving crash envelope.
+
+Honest classification: on this locked lane, `vertex_input_recipe` is now demoted as the decisive crash seam for this specific first-packet test, because a real isolated vertex-input perturbation reached runtime and the same failure identity persisted. The next seam should therefore move downstream of the CPU-side vertex-format cache rather than remain inside it. This is not a code fix claim; it is an audit sign-off that Task 146's evidence package is internally consistent and sufficient to close bead `oc-7dfe`.
+
+---
+
+### Task 148: Classify the next downstream seam after the audited vertex-input and specialization-only perturbations
+
+**Bead ID:** `oc-krne`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-krne` on start and continue the already-approved active plan from Task 146/147's audit stop point. Stay strictly on the same locked failing `submit_serial=9` seam and do not reopen blend-state, specialization-internal, or vertex-input-cache questions. Using the current plan history plus the decisive 2026-05-23 QA/audit artifacts, classify the next honest downstream engineering seam now that the specialization-only and vertex-input-only perturbations are both demoted on this lane. Update this plan with the concrete classification, explain why the seam is downstream of those demoted surfaces, and recommend the narrowest next coder/QA slice without widening into a speculative fix. Close bead `oc-krne` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a plan/history classification pass only on the same locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane. Reused the already-approved durable evidence instead of widening scope: the decisive specialization-only QA root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/`, the decisive traced vertex-input QA/audit root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/`, and Task 147's audit result. Those artifacts jointly prove that both one-at-a-time non-blend perturbations reached the captured first `Command Graph (L88) (Draw)` packet for the locked `submit_serial=9` seam while the outer failure identity stayed unchanged.
+
+Concrete downstream-seam classification: the next honest target is **the first-L88 compiled render-pipeline realization / bind-consume seam downstream of the per-lane recipe owners**, not the already-demoted `vertex_input_recipe` cache path and not the already-demoted specialization assignment path. In source terms, that seam starts where the rect/ninepatch packet hands the populated `PipelineKey` to `CanvasShaderData::pipeline_hash_map.get_pipeline(...)` / `_create_pipeline(...)`, continues through `RD::render_pipeline_create(...)`, and is first consumed at the matching `RD::draw_list_bind_render_pipeline(...)` for the captured `Command Graph (L88)` draw. This is the next honest downstream seam because the two surviving upstream owners were each perturbed in isolation and still failed the same way: the specialization-only experiment changed only the first packet's specialization payload/cache identity (`use_msdf=false -> true`, `packed_0=0x0 -> 0x2`) while `vertex_input_recipe` stayed fixed, and the vertex-input-only experiment changed only the first packet's selected vertex-format/cache identity (`vertex_format 2 -> 3`, `selected_binding_index 0 -> 1`, `binding_count 1 -> 2`) while specialization stayed fixed/demoted. Both perturbations still preserved `submit_serial=9`, the same late tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity at the failing L88 scope, and the later `BLIT_PASS` breadcrumb. That means the next cut must ask what happens **after** those recipe/key inputs have already changed, not whether those inputs can be changed.
+
+Exact recommended next coder slice: add the narrowest default-off, env-gated instrumentation at the first-L88 pipeline realization/bind seam only. The instrumentation should log, for the captured first clipped preserve-rect packet and only when explicitly armed, whether baseline versus the already-existing specialization-only and vertex-input-only experiments reach (a) the same or different `PipelineKey` hash, (b) the same or different compiled pipeline RID returned by `pipeline_hash_map.get_pipeline(...)`, and (c) the same or different pipeline RID actually bound by the first `draw_list_bind_render_pipeline(...)` at `Command Graph (L88) (Draw)`. Keep the current experiments as the only perturbations; do not add a new state mutation yet.
+
+Exact recommended next QA slice: rerun only the already-proved specialization-only and traced vertex-input-only experiment packages with the new downstream pipeline-realization tracing enabled, while preserving the same locked failing identity checks (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). The QA question should be strictly binary: do those upstream perturbations already force distinct compiled/bound pipeline identities at the first L88 bind while the crash envelope remains unchanged, or do they collapse back onto one downstream pipeline identity despite distinct upstream packet markers? If they already bind distinct compiled pipelines and the crash still survives, the seam moves one step further downstream into post-bind command-buffer/GPU execution. If they collapse to one downstream pipeline identity, the live seam stays at the compiled-pipeline realization/cache boundary. This closes bead `oc-krne` because the plan now records the next honest downstream seam and a narrow coder/QA slice without reopening blend-state, specialization internals, or vertex-input-cache questions.
+
+---
+
+### Task 149: Add seam-local first-L88 pipeline realization/bind tracing for baseline vs specialization-only vs vertex-input-only comparison
+
+**Bead ID:** `oc-bkum`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-bkum` on start with `bd update oc-bkum --status in_progress --json`. Continue the already-approved active plan from Task 148's stop point. Stay strictly on the same locked failing `submit_serial=9` seam. Do not reopen blend-state, specialization, or vertex-input cache questions, and do not widen into a fix. Add default-off tracing only at the first-L88 compiled render-pipeline realization / bind-consume seam so QA can compare baseline vs the already-existing specialization-only and vertex-input-only experiments. The tracing should let QA answer whether those experiments reach the same or different: (1) `PipelineKey` hash, (2) compiled pipeline RID returned from `CanvasShaderData::pipeline_hash_map.get_pipeline(...)` / `_create_pipeline(...)`, and (3) pipeline RID actually bound at the first `draw_list_bind_render_pipeline(...)` for `Command Graph (L88) (Draw)`. Keep the package narrow, reversible, and seam-local. Update the plan with a new task entry containing exact touched files, tracing shape, validation performed, and the exact next QA slice. Run relevant repo-local validation, then close bead `oc-bkum` with a clear reason if the tracing package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a default-off seam-local trace lane gated by `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1` in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`, without widening beyond the locked first kept clipped preserve-rect `Command Graph (L88) (Draw)` packet. The new tracing shape is four narrowly scoped markers: `temp_diag_first_clipped_preserve_rect_pipeline_realization_request` logs the first-L88 `PipelineKey` hash plus the exact rect/ninepatch pipeline selectors before `CanvasShaderData::pipeline_hash_map.get_pipeline(...)`; `temp_diag_first_clipped_preserve_rect_pipeline_realization_create` logs only if `_create_pipeline(...)` actually realizes that same hash on the compilation path; `temp_diag_first_clipped_preserve_rect_pipeline_realization_result` logs the `get_pipeline(...)` return RID together with whether a create-path marker was observed and which compiled RID it produced; and `temp_diag_first_clipped_preserve_rect_pipeline_realization_bind_consume` logs the RID consumed by the first `RD::draw_list_bind_render_pipeline(...)` for that captured L88 draw. The hook stays reversible/default-off, reuses the existing first-rect gate, and does not mutate blend state, specialization selectors, or vertex-input recipe selection.
+
+Implementation detail worth carrying forward: the create marker is coordinated through a tiny shared in-process target record keyed by the first-L88 `PipelineKey` hash so the worker-side `_create_pipeline(...)` path can report the compiled RID back to the render-thread result marker when a cold compile actually happens. When the pipeline is already cached, QA should expect `pipeline_realization_result` to still emit the hash + returned RID while `create_path_observed=false` and `created_pipeline_rid=none`; that is the intended cache-hit signal, not a missing trace.
+
+**Validation performed:**
+- `scons -j8 platform=linuxbsd target=editor dev_build=yes`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION"`
+
+Both passed. The incremental source build recompiled `renderer_canvas_render_rd.cpp` and linked `bin/godot.linuxbsd.editor.dev.x86_64` successfully, and the binary contains the new env-gate string.
+
+**Exact next QA slice:** stay on the same refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane and compare three runs only: (1) baseline with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1`; (2) the existing specialization-only run adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1` on top of that trace gate; and (3) the existing vertex-input-only run adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1` on top of that trace gate. For each run, QA should capture and compare the first emitted `pipeline_realization_request`, optional `pipeline_realization_create`, `pipeline_realization_result`, and `pipeline_realization_bind_consume` markers, then answer exactly whether the specialization-only and vertex-input-only perturbations produce the same or different `PipelineKey` hashes, the same or different compiled pipeline RIDs, and the same or different first bound pipeline RID while the outer failure identity remains locked (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). This closes bead `oc-bkum` because the tracing package is compiled, default-off, seam-local, and ready for QA.
+
+---
+
+### Task 150: QA the first-L88 pipeline realization traces across baseline vs specialization-only vs vertex-input-only
+
+**Bead ID:** `oc-sziv`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-sziv` on start with `bd update oc-sziv --status in_progress --json`. Continue the already-approved active plan from Task 149's stop point. Stay strictly on the same locked source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane and do not widen into a fix. QA the new first-L88 pipeline realization tracing by running only these three cases with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1`: (1) baseline, (2) specialization-only plus `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1`, and (3) vertex-input-only plus `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`. Compare the first emitted `pipeline_realization_request`, `pipeline_realization_create`, `pipeline_realization_result`, and `pipeline_realization_bind_consume` markers to determine whether these already-demoted input perturbations reach the same or different `PipelineKey` hash, compiled pipeline RID, and bound pipeline RID for `Command Graph (L88) (Draw)`. Also confirm the outer crash identity remains locked (`submit_serial=9`, `Tonemap (L87) -> Command Graph (L88)`, UI-pass continuity, later `BLIT_PASS`). Save durable artifacts under the existing 2026-05-23 repro area, update the plan with a new task entry and concrete results, and close bead `oc-sziv` with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-pipeline-realization-qa-vulkan-sourcebuild-20260523-203643/`
+
+**Status:** ✅ Complete
+
+**Results:** QA completed on the same locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane, using only the three approved cases and the new `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1` trace gate. Durable artifacts were saved under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-pipeline-realization-qa-vulkan-sourcebuild-20260523-203643/`, including per-case `stdout.log`/`stderr.log`, the exact env/command captures, `pipeline_realization_summary.tsv`, `pipeline_realization_compare.txt`, `outer_crash_identity.json`, and `runtime_binary_proof.txt` proving the traced binary carried the new env gate.
+
+The first emitted `pipeline_realization_request` markers show that the already-demoted perturbations still do reach distinct first-L88 `PipelineKey` hashes, but they do **not** reach distinct compiled or bound pipeline RIDs on this lane. Baseline emitted `pipeline_hash=0x0f88ae32`, `vertex_format_id=2`, `specialization_packed_0=0x0`; specialization-only emitted `pipeline_hash=0xb43b3f40`, `vertex_format_id=2`, `specialization_packed_0=0x2`; vertex-input-only emitted `pipeline_hash=0x2b2ae760`, `vertex_format_id=3`, `specialization_packed_0=0x0`. So both one-at-a-time perturbations remained real and distinguishable at the `PipelineKey` request stage.
+
+Despite those distinct request hashes, all three cases converged immediately at realization/bind time. Each run emitted a `pipeline_realization_create` marker with the same `compiled_pipeline_rid=11343008628747`; each `pipeline_realization_result` reported the same `get_pipeline_rid=11343008628747` and `created_pipeline_rid=11343008628747`; and each `pipeline_realization_bind_consume` reported the same `bound_pipeline_rid=11343008628747` for the first `Command Graph (L88) (Draw)` bind. In short: different first-L88 `PipelineKey` hashes, same compiled pipeline RID, same returned pipeline RID, same bound pipeline RID.
+
+The outer crash identity also stayed locked in all three traced runs. Each case preserved `queue_submit submit_serial=9`, `fence_wait_error submit_serial=9 wait_result=-4`, the same late render tail through `Tonemap (L87) (Draw)` into `Command Graph (L88) (Draw)`, UI-pass continuity at the failing L88 scope (`begin_breadcrumb="UI_PASS", end_breadcrumb="UI_PASS"`), and a later `BLIT_PASS` breadcrumb. All three runs exited via the same abort path (exit `134` / signal `-6`).
+
+Honest QA conclusion: the already-demoted specialization-only and vertex-input-only perturbations remain distinct at the first-L88 request/key level, but they collapse back onto one downstream compiled/bound pipeline identity before the failing draw executes. That keeps the locked seam at or immediately around the compiled render-pipeline realization/cache/bind boundary rather than downstream GPU execution, and it closes bead `oc-sziv` as complete QA for the Task 149 trace package.
+
+---
+
+### Task 151: Research-classify where the first-L88 pipeline identity “collapse” is real versus artifact, and target the next honest seam
+
+**Bead ID:** `oc-41p3`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-41p3` on start with `bd update oc-41p3 --status in_progress --json`. Continue the already-approved active plan from Task 150's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Using the latest traced artifacts and current source, classify the next honest seam inside the first-L88 compiled pipeline realization/cache/bind identity collapse: explain where distinct upstream request keys (`pipeline_hash`, `vertex_format_id`, specialization bits) are converging to one downstream compiled/bound pipeline RID, and recommend the narrowest next coder/QA slice to prove that collapse mechanism. Update this plan with a new task entry and refreshed stop point, then close bead `oc-41p3` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Research tightened the Task 150 interpretation using both the exact 2026-05-23 traced artifact package and the current source. The key correction is that the apparent first-L88 identity collapse is **not yet honestly proven as an in-process cache alias at `pipeline_hash_map.get_pipeline(...)` or as an in-process compiled-pipeline reuse at the first `draw_list_bind_render_pipeline(...)`**. The three compared QA cases in `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-pipeline-realization-qa-vulkan-sourcebuild-20260523-203643/` are three separate fresh editor launches (`baseline/exact_command.txt`, `specialization_only/exact_command.txt`, `vertex_input_only/exact_command.txt`), so the repeated numeric RID `11343008628747` is only a **cross-process observation** unless source proves a stable identity below that number.
+
+Current source does not support an in-process collapse at the already-traced renderer cache layer. `PipelineHashMapRD` in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/pipeline_hash_map_rd.h` is keyed only by the supplied `uint32_t p_key_hash` (`RBMap<uint32_t, RID> hash_map`, `RBSet<uint32_t> compilation_set`, `HashMap<uint32_t, WorkerThreadPool::TaskID> compilation_tasks`), so the three distinct first-L88 request hashes already observed in Task 150 (`0x0f88ae32`, `0xb43b3f40`, `0x2b2ae760`) would occupy three distinct cache/task entries inside any single process. The same source walk also shows that `RendererCanvasRenderRD::CanvasShaderData::_create_pipeline(...)` in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` forwards the differing request owners downstream rather than canonicalizing them away there: it passes `p_pipeline_key.vertex_format_id`, `p_pipeline_key.shader_specialization.packed_0` (as specialization constant `0`), framebuffer format, primitive, and blend state into `RD::render_pipeline_create(...)`. From there, `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp` validates the request, translates the renderer vertex-format ID to a per-process `driver_vertex_format`, calls the driver `render_pipeline_create(...)`, and then allocates a fresh render-pipeline RID with `render_pipeline_owner.make_rid(pipeline)`. The Vulkan driver’s vertex-format path in `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp` also allocates a fresh `VertexFormatInfo` object per created driver vertex format; it does not obviously fold binding-0 versus binding-1 formats together at that layer.
+
+So the next honest seam is narrower than the old “compiled/bound RID collapse” wording implied. What Task 150 truly proves is: **distinct first-L88 request keys survive through the renderer request stage, and when each case is run in its own fresh process, the resulting traced renderer RID number looks the same.** Given the source above, the first place those distinct upstream owners can still honestly collapse is now one rung lower, at the renderer-to-RenderingDevice / driver-facing create-input translation layer or in the process-local RID allocator observation itself — not at the already-demoted `PipelineHashMapRD` key lookup. In other words, the live question is no longer “can different request keys reach the same first-L88 `pipeline_hash_map` entry?”; the live question is “when the first-L88 request reaches `RD::render_pipeline_create(...)`, do the driver-facing create inputs still differ and only the recycled process-local RID number matches, or do those requests already canonicalize to the same driver-facing create fingerprint before RID allocation?”
+
+**Exact recommended next coder slice:** add the narrowest default-off seam-local trace at `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp` (and only if necessary the Vulkan `render_pipeline_create(...)` callsite) keyed off the existing first-L88 trace target. The trace should emit, for the first captured clipped preserve-color rect packet only: a per-process `render_pipeline_create` ordinal; the incoming renderer `vertex_format_id`; the translated `driver_vertex_format` identity; specialization constant `0`; framebuffer/render-pass identifiers; shader RID/driver ID; and the newly allocated render-pipeline RID. Keep it read-only and default-off.
+
+**Exact recommended next QA slice:** rerun only the same three approved 2026-05-23 cases on the locked source-built host-Vulkan lane. The binary question should now be: do baseline vs specialization-only vs vertex-input-only already diverge at the driver-facing create fingerprint / create ordinal while only the final renderer RID number is numerically recycled across fresh processes, or do they canonicalize to the same driver-facing create fingerprint before `render_pipeline_owner.make_rid(...)` ever runs? If the driver-facing fingerprint already differs while the numeric RID repeats, the current “identity collapse” is proven to be a cross-process RID-observation artifact and the seam moves farther downstream into driver/GPU pipeline provenance. If the driver-facing fingerprint has already converged before RID allocation, the live seam stays exactly at the renderer-to-RenderingDevice translation layer.
+
+This closes bead `oc-41p3` because the plan now records the honest reinterpretation of Task 150, the exact source-backed collapse point that is still unproven, and the narrowest next coder/QA slice needed to prove the mechanism without widening into a fix.
+
+---
+
+### Task 152: Add first-L88 RD render-pipeline create fingerprint tracing at the renderer-to-RenderingDevice seam
+
+**Bead ID:** `oc-fssh`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-fssh` on start with `bd update oc-fssh --status in_progress --json`. Continue the already-approved active plan from Task 151's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Build directly on the new caveat: Task 150 compared three separate fresh editor launches, so matching compiled/bound pipeline RID numbers are not honest proof of an in-process cache alias yet. Add the narrowest default-off first-L88 tracing around `RD::render_pipeline_create(...)` in `servers/rendering/rendering_device.cpp` (and the Vulkan-side callsite only if genuinely needed) so QA can compare a per-process driver-facing create fingerprint across the same three approved runs. The tracing should log: per-process create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0` / packed value, framebuffer/render-pass IDs, shader RID/driver ID, and allocated render-pipeline RID for the captured first-L88 packet. Keep the package narrow, reversible, and seam-local; do not reopen blend-state, specialization internals, or CPU-side vertex-format cache. Update the plan with a new task entry containing exact touched files, tracing shape, validation performed, and the exact next QA slice. Run relevant repo-local validation, then close bead `oc-fssh` with a clear reason if the tracing package is ready for QA.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a default-off first-L88 RD-side create fingerprint trace without widening into the Vulkan driver or reopening any already-demoted seam. The existing `temp_diag_first_clipped_preserve_rect_pipeline_realization_request` marker in `servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp` now arms a tiny cross-file target for the exact first captured L88 request using the already-known request fingerprint (`pipeline_hash`, shader RID, framebuffer format ID, vertex format ID, primitive, render-pass index `0`, specialization packed value, batch index, and match ordinal). `servers/rendering/rendering_device.cpp` snapshots that target inside `RenderingDevice::render_pipeline_create(...)`, increments a per-process create ordinal, and emits a single RD marker only when the active call matches that exact armed first-L88 request. The new marker is `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...`, and its payload is intentionally narrow: `batch_index`, `match_ordinal`, `create_ordinal`, `pipeline_hash`, `shader_rid`, `shader_driver_id`, `framebuffer_format_id`, `driver_render_pass_id`, `render_pass_index`, `vertex_format_id`, `driver_vertex_format`, `specialization_constant_0`, and `allocated_render_pipeline_rid`.
+
+The package stays read-only, reversible, and seam-local. No Vulkan-side callsite changes were needed because the RD-side trace already exposes the exact translation boundary QA needs: the incoming renderer-owned IDs plus the translated driver-facing vertex-format/render-pass/shader identities and the freshly allocated process-local render-pipeline RID. The arm/disarm lifetime is also kept tight: the renderer resets the RD target alongside the existing first-L88 realization target, and the RD trace self-disarms immediately after the matched create marker is emitted.
+
+**Validation performed:**
+- `python3 misc/scripts/file_format.py servers/rendering/rendering_device.cpp servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `scons -j8 platform=linuxbsd target=editor dev_build=yes`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "temp_diag_first_clipped_preserve_rect_render_pipeline_create"`
+- `git diff --check`
+
+All four passed. The formatter completed cleanly, the incremental source build recompiled the touched rendering files and linked `bin/godot.linuxbsd.editor.dev.x86_64`, the resulting binary contains the new RD trace marker string, and `git diff --check` returned clean.
+
+**Exact next QA slice:** stay on the same locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane and rerun only the same three approved cases under the existing first-L88 realization gate: (1) baseline with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1`; (2) specialization-only adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1`; and (3) vertex-input-only adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`. For each run, QA should capture the existing canvas-side `pipeline_realization_request/result/bind_consume` markers plus the new RD-side `temp_diag_first_clipped_preserve_rect_render_pipeline_create` marker and answer one binary question: do baseline vs specialization-only vs vertex-input-only still diverge at the driver-facing create fingerprint / create ordinal while only the final renderer RID number is numerically recycled across fresh processes, or have they already canonicalized to the same driver-facing create fingerprint before `render_pipeline_owner.make_rid(...)` runs? This closes bead `oc-fssh` because the tracing package is compiled, default-off, seam-local, and ready for QA.
+
+---
+
+### Task 153: QA the first-L88 RD render-pipeline create fingerprint traces across baseline vs specialization-only vs vertex-input-only
+
+**Bead ID:** `oc-d74r`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-d74r` on start with `bd update oc-d74r --status in_progress --json`. Continue the already-approved active plan from Task 152's stop point. Stay strictly on the same locked source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane and do not widen into a fix. QA the new first-L88 RD-side create fingerprint tracing by rerunning only the same three approved fresh-launch cases under the existing first-L88 realization gate: (1) baseline, (2) specialization-only plus `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1`, and (3) vertex-input-only plus `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`, all with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1`. Capture the existing canvas-side `pipeline_realization_request/result/bind_consume` markers together with the new `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0`, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number is repeating across runs. Also confirm the outer crash identity remains locked (`submit_serial=9`, `Tonemap (L87) -> Command Graph (L88)`, UI-pass continuity, later `BLIT_PASS`). Save durable artifacts under the existing 2026-05-23 repro area, update this plan with a new task entry and concrete results, and close bead `oc-d74r` with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-qa-vulkan-sourcebuild-20260523-210423/`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the same three approved fresh-launch cases on the locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane, with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1` enabled in all three runs and the existing one-at-a-time experiment toggles applied only to the specialization-only and vertex-input-only cases. Durable artifacts were saved under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-qa-vulkan-sourcebuild-20260523-210423/`, including per-case `stdout.log` / `stderr.log`, `env.txt`, `exact_command.txt`, `exit_status.txt`, `runtime_binary_proof.txt`, `rd_create_fingerprint_summary.tsv`, `rd_create_fingerprint_compare.txt`, and `outer_crash_identity.json`.
+
+The canvas-side realization markers reproduced Task 150 exactly. Baseline again emitted `pipeline_hash=0x0f88ae32`, `vertex_format_id=2`, `specialization_packed_0=0x0`; specialization-only emitted `pipeline_hash=0xb43b3f40`, `vertex_format_id=2`, `specialization_packed_0=0x2`; and vertex-input-only emitted `pipeline_hash=0x2b2ae760`, `vertex_format_id=3`, `specialization_packed_0=0x0`. All three fresh launches again emitted the same first-L88 canvas-side realization/bind RIDs (`compiled_pipeline_rid=11343008628747`, `get_pipeline_rid=11343008628747`, `created_pipeline_rid=11343008628747`, `bound_pipeline_rid=11343008628747`), so the already-known cross-process numeric RID repetition remained reproducible.
+
+However, the new RD-side fingerprint marker did **not** emit a parseable create payload in any of the three runs. Instead, each fresh launch hit the same runtime print failure at the exact RD trace site: `ERROR: Formatting error in string "[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create={batch_index=%d,match_ordinal=%d,create_ordinal=%llu,pipeline_hash=0x%08x,shader_rid=%llu,shader_driver_id=%llu,framebuffer_format_id=%d,driver_render_pass_id=%llu,render_pass_index=%u,vertex_format_id=%d,driver_vertex_format=%llu,specialization_constant_0=0x%x,allocated_render_pipeline_rid=%llu}": unsupported format character.` Because that formatting bug fires before a concrete `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` payload is logged, this QA pass cannot honestly answer the intended binary question about whether divergence survives through `RenderingDevice::render_pipeline_create(...)` or whether only the process-local RID number is repeating across runs.
+
+The outer crash identity remained locked in all three reruns despite the missing RD payload. Every case preserved `queue_submit submit_serial=9`, `fence_wait_error submit_serial=9 wait_result=-4`, the same late tail through `Tonemap (L87) (Draw)` into `Command Graph (L88) (Draw)`, UI-pass continuity at the failing L88 scope, and a later `BLIT_PASS` breadcrumb. All three runs again exited via the same abort path (exit `134` / signal `-6`). Honest QA conclusion: this pass completes the requested rerun/evidence package, but it classifies the current Task 152 trace package as runtime-blocked by an RD print-formatting bug rather than resolving the RD-fingerprint question itself. The next honest slice is a narrow coder repair of that RD marker formatting so QA can rerun the same three cases and finally compare actual create ordinals / driver-facing fingerprints.
+
+---
+
+### Task 154: Repair the first-L88 RD render-pipeline create marker formatting bug
+
+**Bead ID:** `oc-rd4i`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-rd4i` on start with `bd update oc-rd4i --status in_progress --json`. Continue the already-approved active plan from Task 153's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Build directly on the QA blocker: the new `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker never emitted because the print site hits `unsupported format character`. Narrow task only: repair that RD marker formatting bug, keep the trace payload/shape intact, and make no broader logic changes. Update the plan with a new task entry containing the exact touched file(s), root cause, validation performed, and the unchanged next QA slice. Run relevant repo-local validation, then close bead `oc-rd4i` with a clear reason if the repaired tracing package is ready for the exact same three-run QA rerun.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Repaired only the runtime-broken RD marker formatting at the exact `temp_diag_first_clipped_preserve_rect_render_pipeline_create` print site in `servers/rendering/rendering_device.cpp`, with no broader logic change to the locked seam or the trace arming/matching behavior. Root cause matched the Task 153 QA blocker exactly: the marker string was fed through `vformat(...)` with unsupported specifiers for this call path (`0x%08x`, `%u`, and `0x%x`), so the trace aborted at print time with `unsupported format character` before any RD create fingerprint payload could be emitted. The repair kept the payload shape intact while changing only the formatting mechanics: `pipeline_hash` and `specialization_constant_0` are now preformatted into the same hex-string shape (`0x...`) and passed as `%s`, and `render_pass_index` is emitted via `%d` instead of `%u`. All other fields, field names, and the surrounding marker contract remain unchanged.
+
+**Validation performed:**
+- `python3 misc/scripts/file_format.py servers/rendering/rendering_device.cpp`
+- `git diff --check`
+- `scons -j8 platform=linuxbsd target=editor dev_build=yes bin/godot.linuxbsd.editor.dev.x86_64`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "temp_diag_first_clipped_preserve_rect_render_pipeline_create"`
+
+All four passed. The formatter completed cleanly, `git diff --check` stayed clean, the refreshed source-built editor rebuilt successfully, and the rebuilt binary now contains the repaired marker string with `%s` / `%d` substitutions instead of the runtime-broken unsupported specifiers.
+
+**Exact next QA slice:** unchanged from Task 152 / Task 153 except that the repaired marker should now emit. Stay on the same locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane and rerun only the same three approved fresh-launch cases under the existing first-L88 realization gate: (1) baseline with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1`; (2) specialization-only adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1`; and (3) vertex-input-only adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`. For each run, QA should capture the existing canvas-side `pipeline_realization_request/result/bind_consume` markers together with the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker and answer the same binary question Task 153 could not yet answer: do baseline vs specialization-only vs vertex-input-only still diverge at the RD create fingerprint / create ordinal while only the final renderer RID number is numerically recycled across fresh processes, or have they already canonicalized to the same driver-facing create fingerprint before `render_pipeline_owner.make_rid(...)` runs? This closes bead `oc-rd4i` because the tracing package is repaired, rebuilt, and ready for the exact same three-run QA rerun.
+
+---
+
+### Task 155: QA rerun the first-L88 RD render-pipeline create fingerprint traces after the marker-format repair
+
+**Bead ID:** `oc-lsk1`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-lsk1` at start with `bd update oc-lsk1 --status in_progress --json`. Continue the already-approved active plan at `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md` from Task 154's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Rerun the exact same three approved fresh-launch cases under the existing first-L88 realization gate after the RD marker fix: (1) baseline, (2) specialization-only, and (3) vertex-input-only. Capture both the canvas-side realization markers and the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0`, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number is repeating across runs. Also confirm the outer crash identity remains locked. Save durable artifacts under the existing 2026-05-23 repro area, update the plan with a new task entry and concrete results, and close bead `oc-lsk1` with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-markerfix-qa-vulkan-sourcebuild-20260523-211849/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the exact same three approved fresh-launch cases on the locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1` enabled in all three runs and only the already-approved one-at-a-time specialization / vertex-input experiment toggles applied in the comparison cases. Durable artifacts were saved under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-markerfix-qa-vulkan-sourcebuild-20260523-211849/`, including per-case `stdout.log` / `stderr.log`, `env.txt`, `exact_command.txt`, `exit_status.txt`, `runtime_binary_proof.txt`, `rd_create_fingerprint_summary.tsv`, `rd_create_fingerprint_compare.txt`, `outer_crash_identity.json`, and `context.txt`.
+
+The canvas-side realization markers reproduced the same already-locked request-layer divergence and same repeated renderer RID observations as Tasks 150 and 153. Baseline again emitted `pipeline_hash=0x0f88ae32`, `vertex_format_id=2`, `specialization_packed_0=0x0`; specialization-only emitted `pipeline_hash=0xb43b3f40`, `vertex_format_id=2`, `specialization_packed_0=0x2`; and vertex-input-only emitted `pipeline_hash=0x2b2ae760`, `vertex_format_id=3`, `specialization_packed_0=0x0`. All three fresh launches again emitted the same canvas-side first-L88 realization / bind RIDs (`compiled_pipeline_rid=11343008628747`, `get_pipeline_rid=11343008628747`, `created_pipeline_rid=11343008628747`, `bound_pipeline_rid=11343008628747`), so the cross-process numeric renderer RID repetition remained reproducible.
+
+However, the repaired RD-side marker still did **not** produce a usable driver-facing create fingerprint payload. The new binary did carry the updated marker string from Task 154 — `strings` now shows `pipeline_hash=%s`, `render_pass_index=%d`, and `specialization_constant_0=%s` exactly as intended — but every fresh-launch rerun still hit the same RD print site with `ERROR: Formatting error in string "[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create={batch_index=%d,match_ordinal=%d,create_ordinal=%llu,pipeline_hash=%s,shader_rid=%llu,shader_driver_id=%llu,framebuffer_format_id=%d,driver_render_pass_id=%llu,render_pass_index=%d,vertex_format_id=%d,driver_vertex_format=%llu,specialization_constant_0=%s,allocated_render_pipeline_rid=%llu}": unsupported format character.` Because the runtime error fires before interpolation completes, the captured RD marker payload collapses to the literal format-string tokens (`%llu`, `%s`, `%d`) instead of concrete create ordinal / driver-facing IDs in all three runs. Honest QA conclusion: Task 154 fixed only part of the formatting bug; the remaining `%llu` fields are still unsupported on this print path, so this rerun still cannot honestly answer whether divergence survives through `RenderingDevice::render_pipeline_create(...)` or whether only a process-local RID number is repeating across fresh processes.
+
+The outer crash identity remained locked across all three reruns despite the still-broken RD payload. Every case preserved `queue_submit submit_serial=9`, `fence_wait_error submit_serial=9 wait_result=-4`, the same late tail through `Tonemap (L87) (Draw)` into `Command Graph (L88) (Draw)`, UI-pass continuity at the failing L88 scope, and a later `BLIT_PASS` breadcrumb. All three runs again terminated on the same abort path (captured as exit `-6` / SIGABRT by the harness). This closes bead `oc-lsk1` because the requested QA rerun package is complete and the result is concrete: the RD create-fingerprint question remains blocked by the same trace site, now narrowed to the still-unsupported `%llu` fields rather than the already-fixed `%u` / `0x%x` / `0x%08x` specifiers.
+
+**Exact next slice:** keep the lane and the three-run QA package unchanged, but hand back to a narrow coder repair of the *remaining* RD trace-formatting bug only. The next honest work is to replace or preformat the still-unsupported `%llu` fields at `temp_diag_first_clipped_preserve_rect_render_pipeline_create` (for `create_ordinal`, `shader_rid`, `shader_driver_id`, `driver_render_pass_id`, `driver_vertex_format`, and `allocated_render_pipeline_rid`) without changing the payload contract or widening the seam. After that, rerun the exact same three approved fresh-launch cases and finally compare real RD create ordinals / driver-facing fingerprints.
+
+---
+
 ## Session Stop Point (2026-05-23 land the plane)
 
 **Current Status:** In Progress
 
 **Locked failing lane:** refreshed source-built host-Vulkan `projection_only__disabled` with `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1`
 
-**Current best read:** The first `L88` bind still cannot be reduced below a joint three-lane interaction across `vertex_input_recipe`, `blend_recipe`, and `specialization_constants` under the same failing identity (`submit_serial=9`, `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity, later `BLIT_PASS`). `pipeline_layout` remains honestly demoted. `vertex_input_recipe` remains reduced to `RendererCanvasRenderRD::shader.quad_vertex_format_id`, and `specialization_constants` remains reduced to `PipelineKey::shader_specialization <- batch.use_lighting/use_msdf/use_lcd`. On the blend side, isolated QA has now honestly demoted `src_color`, `dst_color`, `dst_alpha`, and `src_alpha` out of the surviving minimum. The remaining blend-side candidate is the still-untested structural remainder centered on `enable_blend=true` together with additive ops (`color_op=add`, `alpha_op=add`). That candidate is not yet proven because the first `enable_blend=false` QA request never actually applied; the corrective coder patch for that gating/match bug is now in and validated.
+**Current best read:** The locked seam is still the first kept clipped preserve-rect `Command Graph (L88) (Draw)` handoff, but the upstream-versus-downstream picture is now much sharper. The decisive specialization-only QA root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/` proves the packet can flip only its specialization payload/cache identity (`use_msdf=false -> true`, `packed_0=0x0 -> 0x2`) while preserving the same outer crash envelope. The decisive traced vertex-input QA/audit root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/` proves the same packet can also flip only its selected vertex-format/cache identity (`vertex_format=2 -> 3`, `selected_binding_index=0 -> 1`, `binding_count=1 -> 2`, `requested=true`, `applied=true`) while specialization stays fixed/demoted and the same outer crash envelope survives. Task 150 then proved those two one-at-a-time perturbations produce distinct first-L88 request hashes while still reporting the same canvas-side realized/bound RID number across fresh launches.
+
+The refreshed full-marker QA in Task 159 finally answered the previously blocked RD-side question. Using `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`, baseline, specialization-only, and vertex-input-only still preserve the same outer crash identity (`submit_serial=9`, `fence_wait_error ... wait_result=-4`, the same late tail through `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, UI-pass continuity at the failing L88 scope, and a later `BLIT_PASS` breadcrumb). But the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker proves the divergence survives all the way through `RenderingDevice::render_pipeline_create(...)` itself: the three cases differ at the driver-facing create fingerprint (`rd_pipeline_hash`, translated `rd_driver_vertex_format`, `rd_specialization_constant_0`, `rd_driver_render_pass_id`, `rd_shader_driver_id`, and in the vertex-input case `rd_vertex_format_id`) before the final process-local RID is returned. The only thing still repeating across those fresh launches is the numeric process-local render-pipeline RID / create ordinal pattern, not the driver-facing create fingerprint. So the live seam is now downstream of the renderer request layer, the CPU-side vertex-format cache, and even the `RenderingDevice::render_pipeline_create(...)` input fingerprint; what remains suspicious is the later pipeline/provenance path after the driver-facing create fingerprint has already diverged while the same crash envelope persists.
 
 **Artifact roots worth resuming from:**
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-color-only-blend-experiment-qa-vulkan-sourcebuild-20260523-130357/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-dst-factor-zero-corrected-isolated-qa-vulkan-sourcebuild-20260523-1359/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-enable-blend-false-only-blend-experiment-qa-vulkan-sourcebuild-20260523-143014/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-enable-blend-false-corrected-qa-vulkan-sourcebuild-20260523-150121/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-ops-non-add-experiment-qa-vulkan-sourcebuild-20260523-1619/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-qa-vulkan-sourcebuild-20260523-200031/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-qa-vulkan-sourcebuild-20260523-210423/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-markerfix-qa-vulkan-sourcebuild-20260523-211849/`
 
-**Next Slice:** Re-QA the corrected `enable_blend=false` experiment on the same locked lane using the new branch tagging from Task 134 (`shader_blend_mode_attachment_enable_blend_false_experiment_from_mix_baseline` vs `..._on_demoted_blend_shape`). The goal is to confirm the override actually applies to the captured first clipped preserve-rect packet while keeping the already-demoted factors fixed, then check whether the exact same `submit_serial=9` / `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` / UI-pass / later `BLIT_PASS` identity survives. If it survives, the residual blend-side candidate collapses again toward the additive-op pair alone; if not, `enable_blend=true` remains part of the honest minimum.
+**Next Slice:** Keep the locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane exactly as-is, but move the next engineering cut downstream of the now-demoted request/cache/create-input surfaces. The narrowest honest next step is a new default-off provenance trace around the post-`render_pipeline_create(...)` pipeline realization / driver-pipeline ownership path for the captured first-L88 draw — enough to answer whether the already-divergent RD create fingerprints are still being funneled into one later pipeline/provenance identity before execution, or whether the divergence survives deeper while the same crash envelope persists. Concretely, the next coder slice should instrument the first-L88 path immediately after the repaired RD create marker so QA can compare a stable downstream identifier beyond the repeated process-local RID number; the follow-up QA slice should rerun only the same three approved cases (baseline, specialization-only, vertex-input-only) and compare that downstream provenance while re-checking the locked `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` / UI-pass / `BLIT_PASS` envelope.
 
-**Blockers/Decisions:** No access blocker. No human decision needed to resume. One stale duplicate bead (`oc-cmdn`) should be treated as superseded by Tasks 132-134 and can be closed/ignored on resume.
+**Blockers/Decisions:** No access blocker. No human decision needed to resume. The previous runtime freshness and formatting blockers are resolved, and the latest open question is purely investigative: identify the next downstream pipeline/provenance seam after `RenderingDevice::render_pipeline_create(...)` now that the driver-facing create fingerprint divergence is proven. One stale duplicate bead (`oc-cmdn`) should be treated as superseded by Tasks 132-135 and can be closed/ignored on resume.
+
+### Task 156: Convert the remaining `%llu` fields in the first-L88 RD create marker
+
+**Bead ID:** `oc-3ywz`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-3ywz` at start with `bd update oc-3ywz --status in_progress --json`. Continue the already-approved active plan from Task 155's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Build directly on the latest QA blocker: Task 154 only repaired part of the RD marker formatting and runtime still rejects the remaining `%llu` fields at `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...`. Narrow task only: convert/preformat the remaining `%llu` fields so the RD create marker emits real values, keep the payload/shape intact, and make no broader logic changes. Update the plan with a new task entry containing exact touched file(s), root cause, validation performed, and the unchanged next QA slice. Run relevant repo-local validation, then close bead `oc-3ywz` with a clear reason if the repaired tracing package is ready for the exact same three-run QA rerun.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Repaired only the remaining runtime-broken `%llu` fields at the exact `temp_diag_first_clipped_preserve_rect_render_pipeline_create` print site in `servers/rendering/rendering_device.cpp`, with no broader logic change to the locked seam or the trace arming/matching behavior. Root cause matched the Task 155 QA blocker exactly: this `vformat(...)` path still rejects `%llu`, so the marker continued aborting at print time even after Task 154 converted the hex and `%u` fields. The narrow repair kept the payload names, order, and visible shape intact while changing only the interpolation mechanics for the six remaining 64-bit decimal fields: `create_ordinal`, `shader_rid`, `shader_driver_id`, `driver_render_pass_id`, `driver_vertex_format`, and `allocated_render_pipeline_rid` are now preformatted with `String::num_uint64(...)` and emitted via `%s`, while the already-repaired `pipeline_hash`, `specialization_constant_0`, and `render_pass_index` formatting stays unchanged.
+
+**Validation performed:**
+- `python3 misc/scripts/file_format.py servers/rendering/rendering_device.cpp`
+- `git diff --check -- servers/rendering/rendering_device.cpp .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/rendering_device.linuxbsd.editor.x86_64.o`
+
+**Exact next QA slice:** unchanged from Task 155 except that the repaired marker should now interpolate all fields. Stay on the same locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane and rerun only the same three approved fresh-launch cases under the existing first-L88 realization gate: (1) baseline with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1`; (2) specialization-only adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT=1`; and (3) vertex-input-only adding only `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT=1`. For each run, QA should capture the existing canvas-side `pipeline_realization_request/result/bind_consume` markers together with the fully repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker and answer the same binary question Task 153/155 could not yet answer: do baseline vs specialization-only vs vertex-input-only still diverge at the RD create fingerprint / create ordinal while only the final renderer RID number is numerically recycled across fresh processes, or have they already canonicalized to the same driver-facing create fingerprint before `render_pipeline_owner.make_rid(...)` runs?
+
+**Blockers/Decisions:** No access blocker. No human decision needed to resume. The prior technical blocker from Task 155 is repaired at source level; next confirmation now depends on rerunning the unchanged three-case QA package against the refreshed source-built binary.
+
+### Task 157: QA rerun the first-L88 RD create fingerprint package after the final marker-field source repair
+
+**Bead ID:** `oc-ybmt`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ybmt` at start with `bd update oc-ybmt --status in_progress --json`. Continue the already-approved active plan from Task 156's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Rerun the exact same three approved fresh-launch cases under the existing first-L88 realization gate after the final RD marker fix: (1) baseline, (2) specialization-only, and (3) vertex-input-only. Capture both the canvas-side realization markers and the fully repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0`, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number is repeating across runs. Also confirm the outer crash identity remains locked. Save durable artifacts under the existing 2026-05-23 repro area, update this plan with a new task entry and concrete results, and close bead `oc-ybmt` with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-fullmarker-qa-vulkan-sourcebuild-20260523-2134/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the exact same three approved fresh-launch cases on the locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1` enabled in all three runs and only the already-approved one-at-a-time specialization / vertex-input experiment toggles applied in the comparison cases. Durable artifacts were saved under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-fullmarker-qa-vulkan-sourcebuild-20260523-2134/`, including per-case `stdout.log` / `stderr.log`, `env.txt`, `exact_command.txt`, `exit_status.txt`, `runtime_binary_proof.txt`, `rd_create_fingerprint_summary.tsv`, `rd_create_fingerprint_compare.txt`, `outer_crash_identity.json`, `artifact_root.txt`, and `context.txt`.
+
+The outer crash identity remained locked in all three reruns: every case again preserved `submit_serial=9`, `fence_wait_error submit_serial=9`, the same late-tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` continuity, a later `BLIT_PASS` breadcrumb, and the same crash exit (`-6`). The canvas-side realization markers also reproduced the already-locked request-layer divergence and repeated renderer-RID observations from Tasks 150 / 153 / 155: baseline emitted `pipeline_hash=0xf88ae32`, `vertex_format_id=2`, `specialization_packed_0=0x0`; specialization-only emitted `pipeline_hash=0xb43b3f40`, `vertex_format_id=2`, `specialization_packed_0=0x2`; vertex-input-only emitted `pipeline_hash=0x2b2ae760`, `vertex_format_id=3`, `specialization_packed_0=0x0`; and all three fresh launches again reported the same canvas-side first-L88 realization / bind RIDs (`compiled_pipeline_rid=11343008628747`, `get_pipeline_rid=11343008628747`, `created_pipeline_rid=11343008628747`, `bound_pipeline_rid=11343008628747`).
+
+However, the fully repaired RD create marker never became observable in the exercised runtime binary. All three reruns still emitted the RD marker with literal placeholder fields (`create_ordinal=%llu`, `pipeline_hash=%s`, `vertex_format_id=%d`, `driver_vertex_format=%llu`, `specialization_constant_0=%s`, `framebuffer_format_id=%d`, `driver_render_pass_id=%llu`, `shader_rid=%llu`, `shader_driver_id=%llu`, `allocated_render_pipeline_rid=%llu`) instead of interpolated values, so the intended driver-facing create-fingerprint comparison remains unanswerable on this binary. The new `runtime_binary_proof.txt` captured the same stale embedded marker string, which makes the QA read honest and specific: despite the Task 156 source repair, the editor binary used for this rerun still contained the pre-repair marker format string and therefore still behaved like the Task 155 runtime. That means this QA pass closes cleanly as a runtime-state finding, not as evidence of RD create-fingerprint divergence or canonicalization.
+
+**Next Slice:** Keep the locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane exactly as-is, but hand back to a narrow coder/build slice rather than more QA. The next honest step is not a seam change: rebuild/relink the actual `bin/godot.linuxbsd.editor.dev.x86_64` binary from the already-repaired source so the runtime marker string matches Task 156, then rerun only this exact same three-case QA package unchanged. No broader source mutation is justified by this QA result.
+
+**Blockers/Decisions:** No access blocker. No human decision needed to resume. The prior runtime-freshness blocker from Task 157 is now resolved: the exercised editor binary has been rebuilt/relinked from the already-repaired source and binary inspection now shows the repaired `%s`-based RD marker string with the stale `%llu` variant absent. The next dependency is the unchanged three-run QA rerun, not another coder-side source mutation.
+
+### Task 158: Refresh the exercised `.dev` editor binary so it actually contains the Task 156 RD marker repair
+
+**Bead ID:** `oc-ciyl`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-ciyl` at start with `bd update oc-ciyl --status in_progress --json`. Continue the already-approved active plan from Task 157's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Build directly on the latest QA blocker: the source-side Task 156 repair exists, but the exercised editor binary still embeds the stale pre-repair RD marker string, so QA could not read real `render_pipeline_create(...)` values. Narrow task only: determine why the runtime binary is stale, do the smallest rebuild/relink step needed so the exercised editor binary definitely contains the repaired first-L88 RD create marker, prove that with binary inspection, update the plan with exact touched files/commands/results, and close bead `oc-ciyl` with a clear reason if the refreshed runtime is ready for the exact same three-run QA rerun. Do not widen beyond refreshing the exercised binary.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/obj/servers/rendering/rendering_device.linuxbsd.editor.dev.x86_64.o`
+- `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Root cause was runtime-build targeting drift rather than another source bug. Task 156 repaired `servers/rendering/rendering_device.cpp`, but its validation command only rebuilt `bin/obj/servers/rendering/rendering_device.linuxbsd.editor.x86_64.o` (non-`.dev`) via `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/rendering_device.linuxbsd.editor.x86_64.o`, while the exercised QA runtime is `bin/godot.linuxbsd.editor.dev.x86_64`. Direct inspection before the refresh proved the mismatch: source at `servers/rendering/rendering_device.cpp:5097` already used the repaired `%s`-based marker payload, but both `bin/obj/servers/rendering/rendering_device.linuxbsd.editor.dev.x86_64.o` and `bin/godot.linuxbsd.editor.dev.x86_64` still embedded the stale `%llu` marker string from Task 155/157. The smallest correct refresh was to rebuild the actual `.dev` object and relink only the exercised editor binary: `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/servers/rendering/rendering_device.linuxbsd.editor.dev.x86_64.o bin/godot.linuxbsd.editor.dev.x86_64`. That completed successfully, recompiling `servers/rendering/rendering_device.cpp`, relinking `bin/godot.linuxbsd.editor.dev.x86_64`, and updating timestamps to `2026-05-23 21:36:42 -0400` for the `.dev` object and `2026-05-23 21:37:10 -0400` for the editor binary. Post-refresh binary inspection now proves the exercised runtime is correct: both the rebuilt `.dev` object and `bin/godot.linuxbsd.editor.dev.x86_64` contain `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create={...,create_ordinal=%s,...,shader_rid=%s,...,driver_vertex_format=%s,...,allocated_render_pipeline_rid=%s}`, and a direct byte-level membership check reports `new_marker_present=True` and `old_marker_present=False` for the editor binary. No source mutation beyond the already-landed Task 156 repair was needed. This closes bead `oc-ciyl` because the exact runtime QA exercises is now refreshed and ready for the unchanged three-run QA rerun from Task 157.
+
+### Task 159: QA rerun the unchanged three-case first-L88 RD create fingerprint package against the refreshed `.dev` editor binary
+
+**Bead ID:** `oc-4nc2`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-4nc2` at start with `bd update oc-4nc2 --status in_progress --json`. Continue the already-approved active plan at `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md` from Task 158's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The exercised `bin/godot.linuxbsd.editor.dev.x86_64` has now been refreshed and proven to contain the repaired `%s`-based first-L88 RD create marker. Rerun the exact same three approved fresh-launch cases: (1) baseline, (2) specialization-only, and (3) vertex-input-only. Capture both the canvas-side realization markers and the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0`, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number was repeating across fresh launches. Also confirm the outer crash identity remains locked. Save durable artifacts under the existing 2026-05-23 repro area, update the plan with a new task entry and concrete results, and close bead `oc-4nc2` with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/run_repaired_fullmarker_qa.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the unchanged three approved fresh-launch cases on the same locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1` enabled in all three runs, adding only the already-approved one-at-a-time specialization / vertex-input experiment toggles in the comparison cases. Durable artifacts were saved under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`, with the helper harness captured at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/run_repaired_fullmarker_qa.py`. The artifact set includes per-case `stdout.log` / `stderr.log`, `env.txt`, `exact_command.txt`, `exit_status.txt`, `marker_lines.json`, plus root-level `binary_marker_strings.txt`, `rd_create_fingerprint_summary.tsv`, `rd_create_fingerprint_compare.txt`, `outer_crash_identity.json`, `artifact_root.txt`, and `context.txt`.
+
+The refreshed runtime proof is now clean and specific: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/binary_marker_strings.txt` shows the exercised `bin/godot.linuxbsd.editor.dev.x86_64` embedding exactly one repaired marker string, `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create={batch_index=%d,match_ordinal=%d,create_ordinal=%s,pipeline_hash=%s,shader_rid=%s,shader_driver_id=%s,framebuffer_format_id=%d,driver_render_pass_id=%s,render_pass_index=%d,vertex_format_id=%d,driver_vertex_format=%s,specialization_constant_0=%s,allocated_render_pipeline_rid=%s}`. In all three reruns the RD marker emitted successfully with fully interpolated values and no formatting error. The outer crash identity also remained locked across all three fresh launches: every case preserved `submit_serial=9`, `fence_wait_error submit_serial=9`, the same late-tail `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)` continuity, a later `BLIT_PASS` breadcrumb, and the same crash exit (`-6`).
+
+With the repaired marker finally visible, the previously ambiguous RD-create question is now answered. The canvas-side realization request markers and the RD create markers diverge coherently by case before `render_pipeline_owner.make_rid(...)` returns the process-local RID: baseline emitted request `pipeline_hash=0xf88ae32`, `vertex_format_id=2`, `specialization_packed_0=0x0` and RD create `create_ordinal=12`, `pipeline_hash=0xf0088ae32`, `vertex_format_id=2`, `driver_vertex_format=129465181406848`, `specialization_constant_0=0x0`, `framebuffer_format_id=8`, `driver_render_pass_id=129464526631624`, `shader_rid=588410519585`, `shader_driver_id=129465197113600`, `allocated_render_pipeline_rid=11343008628747`; specialization-only kept the same create ordinal / renderer vertex format ID / framebuffer format ID but changed the request and RD fingerprint to `pipeline_hash=0xb43b3f40` at request and `pipeline_hash=0xb043b3f40`, `driver_vertex_format=124487784072832`, `specialization_constant_0=0x2`, `driver_render_pass_id=124487129297608`, `shader_driver_id=124487799779584` at RD create; vertex-input-only changed both request and RD vertex-format identity (`request vertex_format_id=3`; RD `pipeline_hash=0x2b2ae760`, `vertex_format_id=3`, `driver_vertex_format=138564538403800`, `specialization_constant_0=0x0`, `driver_render_pass_id=138563884610248`, `shader_driver_id=138564555092224`). Across all three runs the process-local realized/allocated RID remained numerically identical (`compiled_pipeline_rid=get_pipeline_rid=created_pipeline_rid=bound_pipeline_rid=allocated_render_pipeline_rid=11343008628747`) and the RD `create_ordinal` stayed fixed at `12`, which confirms the prior sameness signal was just per-process RID recycling plus stable first-match ordering, not proof of canonicalized driver-facing pipeline identity.
+
+This closes bead `oc-4nc2` as a successful QA package: the locked crash seam is still the same outer failure, but the repaired marker now proves that both the specialization-only and vertex-input-only experiments survive through `RenderingDevice::render_pipeline_create(...)` itself. The divergence is already present in the driver-facing create fingerprint (pipeline hash, translated driver vertex format, specialization constant 0, render-pass/shader driver IDs), while the apparently identical final renderer RID number is simply a repeated process-local allocation value across fresh launches rather than evidence that the three cases had converged before RID creation.
+
+### Task 159: QA rerun the first-L88 RD create fingerprint package against the refreshed `.dev` runtime
+
+**Bead ID:** `oc-4nc2`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-4nc2` at start with `bd update oc-4nc2 --status in_progress --json`. Continue the already-approved active plan from Task 158's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The exercised `bin/godot.linuxbsd.editor.dev.x86_64` has now been refreshed and proven to contain the repaired `%s`-based first-L88 RD create marker. Rerun the exact same three approved fresh-launch cases: (1) baseline, (2) specialization-only, and (3) vertex-input-only. Capture both the canvas-side realization markers and the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer vertex_format_id, translated driver_vertex_format, specialization constant 0, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number was repeating across fresh launches. Also confirm the outer crash identity remains locked. Save durable artifacts under the existing 2026-05-23 repro area, update the plan with a new task entry and concrete results, and close bead `oc-4nc2` with a clear reason if QA is complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the exact same three approved fresh-launch cases on the locked refreshed source-built host-Vulkan `projection_only__disabled` + `GODOT_GDGS_TEMP_DIAG_CLIPPED_PRESERVE_RECT_CAP=1` lane with `GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_PIPELINE_REALIZATION=1` enabled in all three runs and only the already-approved one-at-a-time specialization / vertex-input experiment toggles applied in the comparison cases. Durable artifacts were saved under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`, including per-case `stdout.log`, `stderr.log`, `env.txt`, `exact_command.txt`, `exit_status.txt`, `marker_lines.json`, plus root-level `binary_marker_strings.txt`, `rd_create_fingerprint_summary.tsv`, `rd_create_fingerprint_compare.txt`, `outer_crash_identity.json`, `artifact_root.txt`, and `context.txt`.
+
+The runtime proof is now clean: `binary_marker_strings.txt` shows the exercised `bin/godot.linuxbsd.editor.dev.x86_64` contains exactly one repaired first-L88 RD create marker string and that every previously blocking 64-bit field now routes through `%s` (`create_ordinal=%s`, `shader_rid=%s`, `shader_driver_id=%s`, `driver_render_pass_id=%s`, `driver_vertex_format=%s`, `allocated_render_pipeline_rid=%s`). The repaired RD marker emitted concrete values in all three fresh-launch cases with no formatting failure. The outer crash identity also remained locked everywhere: every run again preserved `fence_wait_begin submit_serial=9`, `fence_wait_error submit_serial=9`, the same late-tail continuity through `Tonemap (L87) (Draw)` into `Command Graph (L88) (Draw)`, a later `BLIT_PASS` breadcrumb, and the same crash exit (`-6`).
+
+The canvas-side realization markers reproduced the already-locked request-layer split while also reproducing the same process-local renderer RID number across fresh launches. Baseline again emitted `request_pipeline_hash=0xf88ae32`, `request_vertex_format_id=2`, `request_specialization_packed_0=0x0`; specialization-only emitted `request_pipeline_hash=0xb43b3f40`, `request_vertex_format_id=2`, `request_specialization_packed_0=0x2`; vertex-input-only emitted `request_pipeline_hash=0x2b2ae760`, `request_vertex_format_id=3`, `request_specialization_packed_0=0x0`. All three fresh launches again reported the same canvas-side first-L88 realization / bind RIDs (`compiled_pipeline_rid=11343008628747`, `get_pipeline_rid=11343008628747`, `created_pipeline_rid=11343008628747`, `bound_pipeline_rid=11343008628747`), confirming that the repeating RID observation still exists exactly as before.
+
+The repaired RD marker finally answers the previously blocked driver-facing question: divergence absolutely survives through `RenderingDevice::render_pipeline_create(...)`; the repeated numeric RID was not the whole story. All three runs kept the same `create_ordinal=12`, `rd_framebuffer_format_id=8`, and `rd_shader_rid=588410519585`, and all three again allocated the same process-local render-pipeline RID number `rd_allocated_render_pipeline_rid=11343008628747`. But specialization-only diverged from baseline at the RD create fingerprint with `rd_pipeline_hash=0xb043b3f40` vs `0xf0088ae32`, `rd_specialization_constant_0=0x2` vs `0x0`, a different translated `rd_driver_vertex_format` (`124487784072832` vs `129465181406848`), a different `rd_driver_render_pass_id` (`124487129297608` vs `129464526631624`), and a different `rd_shader_driver_id` (`124487799779584` vs `129465197113600`) while keeping `rd_vertex_format_id=2`. Vertex-input-only also diverged from baseline at the RD create fingerprint with `rd_pipeline_hash=0x2b2ae760` vs `0xf0088ae32`, `rd_vertex_format_id=3` vs `2`, a different translated `rd_driver_vertex_format` (`138564538403800` vs `129465181406848`), a different `rd_driver_render_pass_id` (`138563884610248` vs `129464526631624`), and a different `rd_shader_driver_id` (`138564555092224` vs `129465197113600`) while keeping `rd_specialization_constant_0=0x0`. Honest QA conclusion: the fresh-launch divergence survives all the way through the driver-facing `render_pipeline_create(...)` fingerprint for both the specialization-only and vertex-input-only experiments; the only thing that repeats across these fresh processes is the final process-local render-pipeline RID number.
+
+**Next Slice:** none for this QA bead. The requested QA rerun package is complete and the previously blocked RD create-fingerprint question is now answered with concrete values.
+
+**Blockers/Decisions:** No access blocker. No human decision needed. This closes bead `oc-4nc2` because the exact three-case QA rerun completed on the refreshed runtime, the outer crash identity stayed locked, and the repaired RD marker proved the divergence survives through `RenderingDevice::render_pipeline_create(...)` rather than collapsing to only a recycled process-local RID number.

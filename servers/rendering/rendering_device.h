@@ -762,6 +762,9 @@ private:
 					if (a.location != b.location) {
 						return false;
 					}
+					if (a.binding != b.binding) {
+						return false;
+					}
 					if (a.offset != b.offset) {
 						return false;
 					}
@@ -786,6 +789,7 @@ private:
 			for (int i = 0; i < vdc; i++) {
 				const VertexAttribute &vd = ptr[i];
 				h = hash_murmur3_one_32(vd.location, h);
+				h = hash_murmur3_one_32(vd.binding, h);
 				h = hash_murmur3_one_32(vd.offset, h);
 				h = hash_murmur3_one_32(vd.format, h);
 				h = hash_murmur3_one_32(vd.stride, h);

@@ -56,6 +56,70 @@
 #define ERR_RENDER_THREAD_GUARD() ERR_FAIL_COND_MSG(render_thread_id != Thread::get_caller_id(), ERR_RENDER_THREAD_MSG);
 #define ERR_RENDER_THREAD_GUARD_V(m_ret) ERR_FAIL_COND_V_MSG(render_thread_id != Thread::get_caller_id(), (m_ret), ERR_RENDER_THREAD_MSG);
 
+struct GdgsFirstL88RenderPipelineCreateTraceTarget {
+	Mutex mutex;
+	bool armed = false;
+	uint32_t pipeline_hash = 0;
+	RID shader_rid;
+	RD::FramebufferFormatID framebuffer_format_id = RD::INVALID_ID;
+	RD::VertexFormatID vertex_format_id = RD::INVALID_ID;
+	RD::RenderPrimitive render_primitive = RD::RENDER_PRIMITIVE_MAX;
+	uint32_t render_pass = 0;
+	uint32_t specialization_constant_0 = 0;
+	int batch_index = -1;
+	int match_ordinal = -1;
+};
+
+static GdgsFirstL88RenderPipelineCreateTraceTarget gdgs_first_l88_render_pipeline_create_trace_target;
+static std::atomic<uint64_t> gdgs_first_l88_render_pipeline_create_ordinal{ 0 };
+
+void gdgs_first_l88_render_pipeline_create_trace_arm(uint32_t p_pipeline_hash, RID p_shader_rid, RD::FramebufferFormatID p_framebuffer_format_id, RD::VertexFormatID p_vertex_format_id, RD::RenderPrimitive p_render_primitive, uint32_t p_render_pass, uint32_t p_specialization_constant_0, int p_batch_index, int p_match_ordinal) {
+	MutexLock lock(gdgs_first_l88_render_pipeline_create_trace_target.mutex);
+	gdgs_first_l88_render_pipeline_create_trace_target.armed = true;
+	gdgs_first_l88_render_pipeline_create_trace_target.pipeline_hash = p_pipeline_hash;
+	gdgs_first_l88_render_pipeline_create_trace_target.shader_rid = p_shader_rid;
+	gdgs_first_l88_render_pipeline_create_trace_target.framebuffer_format_id = p_framebuffer_format_id;
+	gdgs_first_l88_render_pipeline_create_trace_target.vertex_format_id = p_vertex_format_id;
+	gdgs_first_l88_render_pipeline_create_trace_target.render_primitive = p_render_primitive;
+	gdgs_first_l88_render_pipeline_create_trace_target.render_pass = p_render_pass;
+	gdgs_first_l88_render_pipeline_create_trace_target.specialization_constant_0 = p_specialization_constant_0;
+	gdgs_first_l88_render_pipeline_create_trace_target.batch_index = p_batch_index;
+	gdgs_first_l88_render_pipeline_create_trace_target.match_ordinal = p_match_ordinal;
+}
+
+bool gdgs_first_l88_render_pipeline_create_trace_snapshot(RID p_shader_rid, RD::FramebufferFormatID p_framebuffer_format_id, RD::VertexFormatID p_vertex_format_id, RD::RenderPrimitive p_render_primitive, uint32_t p_render_pass, uint32_t p_specialization_constant_0, uint32_t &r_pipeline_hash, int &r_batch_index, int &r_match_ordinal) {
+	MutexLock lock(gdgs_first_l88_render_pipeline_create_trace_target.mutex);
+	if (!gdgs_first_l88_render_pipeline_create_trace_target.armed) {
+		return false;
+	}
+	if (gdgs_first_l88_render_pipeline_create_trace_target.shader_rid != p_shader_rid ||
+			gdgs_first_l88_render_pipeline_create_trace_target.framebuffer_format_id != p_framebuffer_format_id ||
+			gdgs_first_l88_render_pipeline_create_trace_target.vertex_format_id != p_vertex_format_id ||
+			gdgs_first_l88_render_pipeline_create_trace_target.render_primitive != p_render_primitive ||
+			gdgs_first_l88_render_pipeline_create_trace_target.render_pass != p_render_pass ||
+			gdgs_first_l88_render_pipeline_create_trace_target.specialization_constant_0 != p_specialization_constant_0) {
+		return false;
+	}
+	r_pipeline_hash = gdgs_first_l88_render_pipeline_create_trace_target.pipeline_hash;
+	r_batch_index = gdgs_first_l88_render_pipeline_create_trace_target.batch_index;
+	r_match_ordinal = gdgs_first_l88_render_pipeline_create_trace_target.match_ordinal;
+	return true;
+}
+
+void gdgs_first_l88_render_pipeline_create_trace_disarm() {
+	MutexLock lock(gdgs_first_l88_render_pipeline_create_trace_target.mutex);
+	gdgs_first_l88_render_pipeline_create_trace_target.armed = false;
+	gdgs_first_l88_render_pipeline_create_trace_target.pipeline_hash = 0;
+	gdgs_first_l88_render_pipeline_create_trace_target.shader_rid = RID();
+	gdgs_first_l88_render_pipeline_create_trace_target.framebuffer_format_id = RD::INVALID_ID;
+	gdgs_first_l88_render_pipeline_create_trace_target.vertex_format_id = RD::INVALID_ID;
+	gdgs_first_l88_render_pipeline_create_trace_target.render_primitive = RD::RENDER_PRIMITIVE_MAX;
+	gdgs_first_l88_render_pipeline_create_trace_target.render_pass = 0;
+	gdgs_first_l88_render_pipeline_create_trace_target.specialization_constant_0 = 0;
+	gdgs_first_l88_render_pipeline_create_trace_target.batch_index = -1;
+	gdgs_first_l88_render_pipeline_create_trace_target.match_ordinal = -1;
+}
+
 /**************************/
 /**** HELPER FUNCTIONS ****/
 /**************************/
@@ -4952,6 +5016,19 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 		}
 	}
 
+	uint32_t gdgs_specialization_constant_0 = 0;
+	for (int i = 0; i < p_specialization_constants.size(); i++) {
+		if (p_specialization_constants[i].constant_id == 0) {
+			gdgs_specialization_constant_0 = uint32_t(p_specialization_constants[i].int_value);
+			break;
+		}
+	}
+	uint32_t gdgs_first_l88_pipeline_hash = 0;
+	int gdgs_first_l88_batch_index = -1;
+	int gdgs_first_l88_match_ordinal = -1;
+	const bool gdgs_first_l88_trace_matched = gdgs_first_l88_render_pipeline_create_trace_snapshot(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_for_render_pass, gdgs_specialization_constant_0, gdgs_first_l88_pipeline_hash, gdgs_first_l88_batch_index, gdgs_first_l88_match_ordinal);
+	const uint64_t gdgs_render_pipeline_create_ordinal = gdgs_first_l88_render_pipeline_create_ordinal.fetch_add(1) + 1;
+
 	RenderPipeline pipeline;
 	pipeline.driver_id = driver->render_pipeline_create(
 			shader->driver_id,
@@ -5008,6 +5085,31 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 
 	// Create ID to associate with this pipeline.
 	RID id = render_pipeline_owner.make_rid(pipeline);
+	if (gdgs_first_l88_trace_matched) {
+		const String gdgs_create_ordinal = String::num_uint64(gdgs_render_pipeline_create_ordinal);
+		const String gdgs_pipeline_hash_hex = "0x" + String::num_uint64(gdgs_first_l88_pipeline_hash, 16).pad_zeros(8);
+		const String gdgs_shader_rid = String::num_uint64(p_shader.get_id());
+		const String gdgs_shader_driver_id = String::num_uint64(shader->driver_id.id);
+		const String gdgs_driver_render_pass_id = String::num_uint64(fb_format.render_pass.id);
+		const String gdgs_driver_vertex_format = String::num_uint64(driver_vertex_format.id);
+		const String gdgs_specialization_constant_0_hex = "0x" + String::num_uint64(gdgs_specialization_constant_0, 16);
+		const String gdgs_allocated_render_pipeline_rid = String::num_uint64(id.get_id());
+		print_line(vformat("[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create={batch_index=%d,match_ordinal=%d,create_ordinal=%s,pipeline_hash=%s,shader_rid=%s,shader_driver_id=%s,framebuffer_format_id=%d,driver_render_pass_id=%s,render_pass_index=%d,vertex_format_id=%d,driver_vertex_format=%s,specialization_constant_0=%s,allocated_render_pipeline_rid=%s}",
+				gdgs_first_l88_batch_index,
+				gdgs_first_l88_match_ordinal,
+				gdgs_create_ordinal,
+				gdgs_pipeline_hash_hex,
+				gdgs_shader_rid,
+				gdgs_shader_driver_id,
+				(int)p_framebuffer_format,
+				gdgs_driver_render_pass_id,
+				(int)p_for_render_pass,
+				(int)p_vertex_format,
+				gdgs_driver_vertex_format,
+				gdgs_specialization_constant_0_hex,
+				gdgs_allocated_render_pipeline_rid));
+		gdgs_first_l88_render_pipeline_create_trace_disarm();
+	}
 	{
 		_THREAD_SAFE_METHOD_
 
