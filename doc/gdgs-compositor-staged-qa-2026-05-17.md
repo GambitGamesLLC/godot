@@ -6662,3 +6662,90 @@ This closes the Task 171 question cleanly:
 - the first failing L88 draw still enters under a converged render-pass / synchronization context
 - it also still consumes converged lifetime / realization recipes for the traced control resources
 - so the earliest stable cross-case fork beyond semantic descriptor payloads is the **backend execution packet itself** (pipeline execution recipe / vertex-input packet shape), not a driver-visible synchronization or lifetime boundary on this locked lane
+
+## 2026-05-25 — Task 172: first driver-consumptive execution recipe boundary after the converged pre-draw sync state
+
+Fresh artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-driver-consumptive-execution-boundary-vulkan-sourcebuild-20260525-150238/`
+
+Key durable artifacts inside that root:
+
+- `notes.md`
+- `comparison.txt`
+- `results.json`
+- `driver_consumptive_execution_boundary_summary.tsv`
+- per-case `stdout.log` / `stderr.log` / `marker_lines.json`
+
+Rerun entrypoint used:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_driver_consumptive_execution_boundary_qa.py`
+
+### Outer crash identity stayed locked
+
+All three approved reruns preserved the same crash envelope:
+
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- exit status stayed `-6`
+
+### Converged pre-draw sync state really does survive to the first L88 pipeline bind
+
+The first L88 draw still entered under the same already-proven synchronized render-pass context in all three reruns:
+
+- `render_pass_create_serial=13`
+- `render_pass_compatibility_hash=0x425f4d3d`
+- `render_subpass_compatibility_hash=0x81df0cad`
+- `render_pass_attachment_exact_hash=0x6529dc72`
+- `render_pass_dependency_hash=0x208ccbee`
+- `subpass=0`
+- `breadcrumb=UI_PASS`
+- `scope_pipeline_relation=different_handle_same_render_pass_compatibility`
+
+That state remained converged right up to the first L88 pipeline-consumption seam; no new sync or lifetime split appeared before the packet started consuming its bound execution recipe.
+
+### Exact first driver-consumptive boundaries
+
+The first L88 `bind_render_pipeline` is the earliest driver-facing execution-recipe consumer in all three lanes:
+
+- `pipeline_serial=103`
+- same compatibility context at consume time: `render_pass_compatibility_hash=0x425f4d3d`, `render_subpass_compatibility_hash=0x81df0cad`, `render_pass_dependency_hash=0x208ccbee`, `render_subpass=0`
+- `baseline` pipeline recipe: `graphics_recipe_hash=0x7f28b49f`, `vertex_input_recipe_hash=0xaf2a1c78`, `specialization_constant_hash=0x6273dcb1`
+- `specialization_only` pipeline recipe: `graphics_recipe_hash=0x0a87b22e`, `vertex_input_recipe_hash=0xaf2a1c78`, `specialization_constant_hash=0xbfcbce98`
+- `vertex_input_only` pipeline recipe: `graphics_recipe_hash=0xaf15fdc4`, `vertex_input_recipe_hash=0xb9920205`, `specialization_constant_hash=0x6273dcb1`
+
+That means the **first divergent execution recipe is consumed at `bind_render_pipeline`**, not later at uniform binding, pipeline barriers, or draw submission. `specialization_only` first diverges there by swapping only the specialization-driven portion of the recipe while holding the vertex-input recipe constant. `vertex_input_only` also already diverges there because the bound pipeline provenance carries a different vertex-input recipe into the driver at the same serial.
+
+The first driver-visible **draw-shape** split appears one command later at the first L88 `bind_vertex_buffers`:
+
+- `serial=104` in all three lanes
+- `baseline`: `binding_count=1`
+- `specialization_only`: `binding_count=1`
+- `vertex_input_only`: `binding_count=2`
+
+So the packet’s bound execution recipe diverges first at `bind_render_pipeline`, while the packet’s bound vertex-stream shape diverges first at `bind_vertex_buffers`.
+
+### What still converges later
+
+The later indexed draw consumer still preserves the same outer draw arguments across the three reruns:
+
+- first `draw_indexed` consumer at `serial=108`
+- `index_count=6`
+- `instance_count=27`
+- `first_index=0`
+- `vertex_offset=0`
+- `first_instance=0`
+
+### Practical conclusion
+
+This closes the Task 172 question cleanly:
+
+- the converged pre-draw sync / lifetime state survives up to the first L88 driver-consumptive boundary
+- the earliest consumed **execution-recipe** split is the first L88 `bind_render_pipeline` at `serial=103`
+- the earliest consumed **draw-shape** split is the first L88 `bind_vertex_buffers` at `serial=104`
+- the final `draw_indexed` call still converges on the same user-visible draw arguments, so the fault seam remains earlier in the backend-bound recipe / stream shape than in the final draw-call argument tuple
