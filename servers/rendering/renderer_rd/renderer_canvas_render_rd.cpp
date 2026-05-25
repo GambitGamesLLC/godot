@@ -425,6 +425,7 @@ thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_src_alpha_zero_expe
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_enable_blend_false_experiment_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_blend_ops_non_add_experiment_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_specialization_force_msdf_experiment_enabled = false;
+thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_specialization_value_force_2_experiment_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_duplicate_format_experiment_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = false;
 thread_local bool gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = false;
@@ -2910,6 +2911,7 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	const bool gdgs_temp_diag_first_rect_enable_blend_false_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_ENABLE_BLEND_FALSE_EXPERIMENT");
 	const bool gdgs_temp_diag_first_rect_blend_ops_non_add_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_BLEND_OPS_NON_ADD_EXPERIMENT");
 	const bool gdgs_temp_diag_first_rect_specialization_force_msdf_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_FORCE_MSDF_EXPERIMENT");
+	const bool gdgs_temp_diag_first_rect_specialization_value_force_2_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_SPECIALIZATION_VALUE_FORCE_2_EXPERIMENT");
 	const bool gdgs_temp_diag_first_rect_vertex_input_duplicate_format_experiment = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_VERTEX_INPUT_DUPLICATE_FORMAT_EXPERIMENT");
 	const bool gdgs_temp_diag_first_rect_trace_vertex_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_VERTEX_BIND");
 	const bool gdgs_temp_diag_first_rect_trace_index_bind = gdgs_debug_env_bool_enabled("GODOT_GDGS_TEMP_DIAG_FIRST_CLIPPED_PRESERVE_RECT_TRACE_INDEX_BIND");
@@ -2947,6 +2949,7 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_enable_blend_false_experiment_enabled = gdgs_temp_diag_first_rect_enable_blend_false_experiment;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_ops_non_add_experiment_enabled = gdgs_temp_diag_first_rect_blend_ops_non_add_experiment;
 	gdgs_temp_diag_first_clipped_preserve_rect_specialization_force_msdf_experiment_enabled = gdgs_temp_diag_first_rect_specialization_force_msdf_experiment;
+	gdgs_temp_diag_first_clipped_preserve_rect_specialization_value_force_2_experiment_enabled = gdgs_temp_diag_first_rect_specialization_value_force_2_experiment;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_duplicate_format_experiment_enabled = gdgs_temp_diag_first_rect_vertex_input_duplicate_format_experiment;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_vertex_bind;
 	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = gdgs_temp_diag_first_rect_trace_index_bind;
@@ -3172,6 +3175,7 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_enable_blend_false_experiment_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_blend_ops_non_add_experiment_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_specialization_force_msdf_experiment_enabled = false;
+	gdgs_temp_diag_first_clipped_preserve_rect_specialization_value_force_2_experiment_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_input_duplicate_format_experiment_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_vertex_bind_trace_enabled = false;
 	gdgs_temp_diag_first_clipped_preserve_rect_index_bind_trace_enabled = false;
@@ -3962,9 +3966,15 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 	pipeline_key.render_primitive = p_batch->render_primitive;
 	const bool gdgs_specialization_force_msdf_experiment_requested = gdgs_temp_diag_first_clipped_preserve_rect_specialization_force_msdf_experiment_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch;
 	const bool gdgs_specialization_force_msdf_experiment_applied = gdgs_specialization_force_msdf_experiment_requested && !p_batch->use_msdf;
+	const bool gdgs_specialization_value_force_2_experiment_requested = gdgs_temp_diag_first_clipped_preserve_rect_specialization_value_force_2_experiment_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch;
+	const uint32_t gdgs_specialization_baseline_packed_0 = (uint32_t)(p_batch->use_lighting ? 1 : 0) | (uint32_t)(p_batch->use_msdf ? 2 : 0) | (uint32_t)(p_batch->use_lcd ? 4 : 0);
+	const bool gdgs_specialization_value_force_2_experiment_applied = gdgs_specialization_value_force_2_experiment_requested && gdgs_specialization_baseline_packed_0 != 0x2;
 	pipeline_key.shader_specialization.use_lighting = p_batch->use_lighting;
 	pipeline_key.shader_specialization.use_msdf = p_batch->use_msdf || gdgs_specialization_force_msdf_experiment_requested;
 	pipeline_key.shader_specialization.use_lcd = p_batch->use_lcd;
+	if (gdgs_specialization_value_force_2_experiment_requested) {
+		pipeline_key.shader_specialization.packed_0 = 0x2;
+	}
 	pipeline_key.lcd_blend = p_batch->has_blend;
 	pipeline_key.gdgs_temp_diag_src_color_premul_experiment = gdgs_temp_diag_first_clipped_preserve_rect_src_color_premul_experiment_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch ? 1 : 0;
 	pipeline_key.gdgs_temp_diag_dst_factors_zero_experiment = gdgs_temp_diag_first_clipped_preserve_rect_dst_factors_zero_experiment_enabled && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch ? 1 : 0;
@@ -4027,7 +4037,7 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 			if (gdgs_temp_diag_first_clipped_preserve_rect_trace_active && gdgs_temp_diag_first_clipped_preserve_rect_batch_ptr == p_batch) {
 				if (gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_selector_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_selector_bucket_logged) {
 					gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_selector_bucket_logged = true;
-					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_selector={batch_index=%d,match_ordinal=%d,setup_stage=specialization_constants_selector,shader_variant=%s,command_type=%s,selector_class=%s,use_lighting=%s,use_msdf=%s,use_lcd=%s,active_field_count=%d,specialization_force_msdf_experiment={requested=%s,applied=%s,baseline_use_msdf=%s,experiment_use_msdf=%s,held_use_lighting=%s,held_use_lcd=%s}}",
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_selector={batch_index=%d,match_ordinal=%d,setup_stage=specialization_constants_selector,shader_variant=%s,command_type=%s,selector_class=%s,use_lighting=%s,use_msdf=%s,use_lcd=%s,active_field_count=%d,specialization_force_msdf_experiment={requested=%s,applied=%s,baseline_use_msdf=%s,experiment_use_msdf=%s,held_use_lighting=%s,held_use_lcd=%s},specialization_value_force_2_experiment={requested=%s,applied=%s,baseline_packed_0=0x%x,experiment_packed_0=0x%x,held_use_lighting=%s,held_use_msdf=%s,held_use_lcd=%s}}",
 							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
 							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
 							gdgs_canvas_shader_variant_name(p_batch->shader_variant),
@@ -4042,26 +4052,40 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 							p_batch->use_msdf ? "true" : "false",
 							pipeline_key.shader_specialization.use_msdf ? "true" : "false",
 							p_batch->use_lighting ? "true" : "false",
+							p_batch->use_lcd ? "true" : "false",
+							gdgs_specialization_value_force_2_experiment_requested ? "true" : "false",
+							gdgs_specialization_value_force_2_experiment_applied ? "true" : "false",
+							gdgs_specialization_baseline_packed_0,
+							pipeline_key.shader_specialization.packed_0,
+							p_batch->use_lighting ? "true" : "false",
+							p_batch->use_msdf ? "true" : "false",
 							p_batch->use_lcd ? "true" : "false"));
 				}
 				if (gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_packing_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_packing_bucket_logged) {
 					gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_packing_bucket_logged = true;
-					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_packing={batch_index=%d,match_ordinal=%d,setup_stage=specialization_constants_packing,constant_id=0,constant_type=int,packed_0=0x%x,baseline_packed_0=0x%x,bit_layout={use_lighting_bit=0,use_msdf_bit=1,use_lcd_bit=2},encoded_values={bit0=%d,bit1=%d,bit2=%d},specialization_force_msdf_experiment={requested=%s,applied=%s,baseline_bit1=%d,experiment_bit1=%d}}",
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_packing={batch_index=%d,match_ordinal=%d,setup_stage=specialization_constants_packing,constant_id=0,constant_type=int,packed_0=0x%x,baseline_packed_0=0x%x,bit_layout={use_lighting_bit=0,use_msdf_bit=1,use_lcd_bit=2},encoded_values={bit0=%d,bit1=%d,bit2=%d},specialization_force_msdf_experiment={requested=%s,applied=%s,baseline_bit1=%d,experiment_bit1=%d},specialization_value_force_2_experiment={requested=%s,applied=%s,exact_value_flip_only=%s,baseline_packed_0=0x%x,experiment_packed_0=0x%x,baseline_value=%u,experiment_value=%u}}",
 							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
 							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
 							pipeline_key.shader_specialization.packed_0,
-							(uint32_t)(p_batch->use_lighting ? 1 : 0) | (uint32_t)(p_batch->use_msdf ? 2 : 0) | (uint32_t)(p_batch->use_lcd ? 4 : 0),
+							gdgs_specialization_baseline_packed_0,
 							p_batch->use_lighting ? 1 : 0,
 							pipeline_key.shader_specialization.use_msdf ? 1 : 0,
 							p_batch->use_lcd ? 1 : 0,
 							gdgs_specialization_force_msdf_experiment_requested ? "true" : "false",
 							gdgs_specialization_force_msdf_experiment_applied ? "true" : "false",
 							p_batch->use_msdf ? 1 : 0,
-							pipeline_key.shader_specialization.use_msdf ? 1 : 0));
+							pipeline_key.shader_specialization.use_msdf ? 1 : 0,
+							gdgs_specialization_value_force_2_experiment_requested ? "true" : "false",
+							gdgs_specialization_value_force_2_experiment_applied ? "true" : "false",
+							(gdgs_specialization_baseline_packed_0 == 0x0 && pipeline_key.shader_specialization.packed_0 == 0x2) ? "true" : "false",
+							gdgs_specialization_baseline_packed_0,
+							pipeline_key.shader_specialization.packed_0,
+							gdgs_specialization_baseline_packed_0,
+							pipeline_key.shader_specialization.packed_0));
 				}
 				if (gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_provenance_trace_enabled && !gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_provenance_bucket_logged) {
 					gdgs_temp_diag_first_clipped_preserve_rect_specialization_constants_provenance_bucket_logged = true;
-					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_provenance={batch_index=%d,match_ordinal=%d,setup_stage=specialization_constants_provenance,recipe_owner=PipelineKey::shader_specialization,assignment_path={use_lighting=batch.use_lighting,use_msdf=batch.use_msdf,use_lcd=batch.use_lcd},batch_fields={use_lighting=%s,use_msdf=%s,use_lcd=%s,has_blend=%s},specialization_force_msdf_experiment={requested=%s,applied=%s,baseline_use_msdf=%s,experiment_use_msdf=%s,cache_identity_flag=%u},push_constant_context={msdf_px_range=%f,msdf_outline=%f},pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s}}",
+					print_line(vformat("[gdgs-canvas] temp_diag_first_clipped_preserve_rect_specialization_constants_provenance={batch_index=%d,match_ordinal=%d,setup_stage=specialization_constants_provenance,recipe_owner=PipelineKey::shader_specialization,assignment_path={use_lighting=batch.use_lighting,use_msdf=batch.use_msdf,use_lcd=batch.use_lcd,packed_0_override=value_force_2_if_requested},batch_fields={use_lighting=%s,use_msdf=%s,use_lcd=%s,has_blend=%s},specialization_force_msdf_experiment={requested=%s,applied=%s,baseline_use_msdf=%s,experiment_use_msdf=%s,cache_identity_flag=%u},specialization_value_force_2_experiment={requested=%s,applied=%s,baseline_packed_0=0x%x,experiment_packed_0=0x%x,cache_identity_flag=0},push_constant_context={msdf_px_range=%f,msdf_outline=%f},pipeline={rid=%s,vertex_format=%d,render_primitive=%s,shader_variant=%s}}",
 							gdgs_temp_diag_first_clipped_preserve_rect_batch_index,
 							gdgs_temp_diag_first_clipped_preserve_rect_match_ordinal,
 							p_batch->use_lighting ? "true" : "false",
@@ -4073,6 +4097,10 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 							p_batch->use_msdf ? "true" : "false",
 							pipeline_key.shader_specialization.use_msdf ? "true" : "false",
 							pipeline_key.gdgs_temp_diag_specialization_force_msdf_experiment,
+							gdgs_specialization_value_force_2_experiment_requested ? "true" : "false",
+							gdgs_specialization_value_force_2_experiment_applied ? "true" : "false",
+							gdgs_specialization_baseline_packed_0,
+							pipeline_key.shader_specialization.packed_0,
 							push_constant.msdf[0],
 							push_constant.msdf[1],
 							gdgs_rid_to_string(pipeline),
