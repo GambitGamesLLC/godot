@@ -6810,3 +6810,57 @@ This closes Task 174 cleanly without widening the seam:
 - `bind_render_pipeline` alone is sufficient to preserve the locked L88 crash envelope
 - the failure therefore does **not** require the combination of the `serial=103` pipeline fork plus the `serial=104` vertex-buffer fork
 - `bind_vertex_buffers`-alone sufficiency remains unproven by this narrow three-case matrix, which is exactly the boundary this slice was asked to respect
+
+## 2026-05-25 — Task 175: isolate the `bind_render_pipeline` recipe component that still carries the locked `submit_serial=9` L88 crash envelope
+
+Artifact root reused from Task 174:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-bind-sufficiency-matrix-vulkan-sourcebuild-20260525-170250/`
+
+Evidence consulted inside that root:
+
+- `comparison.txt`
+- `results.json`
+- per-case `marker_lines.json`
+- per-case `stdout.log` first-L88 `serial=103` pipeline-provenance payloads
+
+No new engine instrumentation was added for this slice. The analysis stayed inside the already-approved three-case matrix and only compared the first-L88 `bind_render_pipeline` recipe subfields that were already captured in Task 174.
+
+### Component contrast at `serial=103`
+
+Across the three approved reruns, the first-L88 `bind_render_pipeline` packet kept the same outer crash envelope (`submit_serial=9`, `fence_wait_error submit_serial=9`, later `BLIT_PASS`, exit `-6`) while exposing this component split:
+
+- `baseline`
+  - `graphics_recipe_hash=0x92ea9d42`
+  - `vertex_input_recipe_hash=0xaf2a1c78`
+  - `blend_recipe_hash=0xd22fca4d`
+  - `specialization_constant_hash=0x6273dcb1`
+  - `descriptor_set_layout_hash=0x258b1e0e`
+  - `push_constant_hash=0x9b5fef81`, `push_constant_stage_mask=0x11`, `push_constant_total_size=32`
+- `specialization_only`
+  - `graphics_recipe_hash=0xf16ef2b6`
+  - `vertex_input_recipe_hash=0xaf2a1c78`
+  - `blend_recipe_hash=0xd22fca4d`
+  - `specialization_constant_hash=0xbfcbce98`
+  - `descriptor_set_layout_hash=0x173e1535`
+  - `push_constant_hash=0x9b5fef81`, `push_constant_stage_mask=0x11`, `push_constant_total_size=32`
+- `vertex_input_only`
+  - `graphics_recipe_hash=0x69a72955`
+  - `vertex_input_recipe_hash=0xb9920205`
+  - `blend_recipe_hash=0xd22fca4d`
+  - `specialization_constant_hash=0x6273dcb1`
+  - `descriptor_set_layout_hash=0xa83914bf`
+  - `push_constant_hash=0x9b5fef81`, `push_constant_stage_mask=0x11`, `push_constant_total_size=32`
+
+### Narrowest locked component classification
+
+This leaves a tighter component story than Task 174:
+
+- `blend_recipe` is ruled out for this seam because it stayed identical across all three approved reruns while the crash envelope stayed locked.
+- `vertex_input_recipe` is not the minimal `serial=103` carrier because the narrow sufficiency contrast from Task 174 (`baseline` vs `specialization_only`) preserved the crash while holding `vertex_input_recipe_hash=0xaf2a1c78` fixed and also holding the first `serial=104` vertex-bind payload at `binding_count=1`.
+- The captured `pipeline_layout` payload did not provide a stable discriminant in this methodology: its `descriptor_set_layout_hash` drifted across all three fresh-launch cases, while the stable push-constant contract (`push_constant_hash=0x9b5fef81`, stage mask `0x11`, total size `32`) stayed fixed across all three. That means this slice cannot honestly promote `pipeline_layout` to the locked carrier without widening into a new experiment.
+- The only recipe component that cleanly matches the minimal preserved `serial=103` contrast is the `specialization_constants` bucket: `baseline` and `specialization_only` keep the same first-L88 vertex-input and blend sub-recipes, keep the same outer crash identity, yet split exactly on `specialization_constant_hash` (`0x6273dcb1` vs `0xbfcbce98`).
+
+### Practical conclusion
+
+Within the approved Task 174/175 methodology, the locked L88 crash envelope is currently carried by the `bind_render_pipeline` **specialization-constant sub-recipe** at `serial=103`, not by the blend sub-recipe, and not by any independently isolated `serial=104` vertex-buffer fork. This is a recipe-component classification only; it does **not** reopen specialization-cache theory or widen into a fix.

@@ -7045,3 +7045,30 @@ Conclusion for this slice: inside the post-bind / pre-draw-consumer window, the 
 Concrete finding: the narrowest sufficiency proof is still the `baseline` vs `specialization_only` contrast. Both reruns preserved the same locked crash envelope (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)` -> `Command Graph (L88) (Draw)` -> later `BLIT_PASS`, exit `-6`) while keeping the first vertex-buffer consumer unchanged at `serial=104` with `binding_count=1` and the same first-L88 `vertex_input_recipe_hash=0xaf2a1c78`. The only surviving early consumptive fork in that contrast is the first L88 `bind_render_pipeline` at `serial=103`, where `baseline` carried `graphics_recipe_hash=0x92ea9d42` / `specialization_constant_hash=0x6273dcb1` and `specialization_only` carried `graphics_recipe_hash=0xf16ef2b6` / `specialization_constant_hash=0xbfcbce98`.
 
 Classification: `bind_render_pipeline` alone is sufficient to preserve the locked L88 crash envelope at failing `submit_serial=9`, so the failure does **not** require the combination of the `serial=103` pipeline fork plus the `serial=104` vertex-buffer fork. The approved three-case matrix still does not independently isolate a pure `bind_vertex_buffers`-only fork while holding the pipeline recipe at baseline, so this slice intentionally leaves `bind_vertex_buffers`-alone sufficiency unproven rather than widening into a new experiment. This completes the requested seam without reopening request-hash, specialization-cache, or CPU-side vertex-format-cache questions and without widening into a fix.
+
+---
+
+### Task 175: Isolate which `bind_render_pipeline` recipe component at `serial=103` carries the locked L88 crash envelope at failing `submit_serial=9`
+
+**Bead ID:** `oc-qro1`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-qro1` at start and continue the already-approved active plan from Task 174's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The live seam is now inside the `bind_render_pipeline` recipe consumed at `serial=103`. Isolate which recipe component there actually carries the locked L88 crash envelope while preserving the same outer crash identity. Prefer the narrowest contrast that stays within the already-approved methodology and does not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache theories. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-qro1` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- pipeline-recipe component isolation instrumentation / analysis files as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the existing Task 174 first-L88 bind-sufficiency artifact set instead of widening instrumentation. The same approved three fresh-launch cases (`baseline`, `specialization_only`, `vertex_input_only`) under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-bind-sufficiency-matrix-vulkan-sourcebuild-20260525-170250/` already captured the first-L88 `serial=103` pipeline-provenance payloads needed for this slice, so I compared those per-case `stdout.log` / `marker_lines.json` fields directly and wrote the durable note-up in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the narrowest locked component inside the first-L88 `bind_render_pipeline` recipe is the **specialization-constant sub-recipe**. In the minimal preserved Task 174 contrast (`baseline` vs `specialization_only`), the outer crash identity stays exact (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)` -> `Command Graph (L88) (Draw)` -> later `BLIT_PASS`, exit `-6`) while the first `serial=104` vertex-bind payload stays fixed (`binding_count=1`) and the first-L88 `serial=103` `vertex_input_recipe_hash` / `blend_recipe_hash` also stay fixed (`0xaf2a1c78` / `0xd22fca4d`). The surviving recipe split in that contrast is `specialization_constant_hash` (`0x6273dcb1` vs `0xbfcbce98`).
+
+The same three-case evidence also lets this slice rule out overclaims: `blend_recipe_hash` stayed identical across all three approved reruns, so blend is not the locked carrier here; `vertex_input_recipe_hash` only moves in `vertex_input_only`, so it is not the minimal Task 175 seam; and the captured `pipeline_layout` payload did not yield a stable discriminant because its descriptor-layout hash drifted across all three fresh-launch cases while the stable push-constant contract stayed fixed (`push_constant_hash=0x9b5fef81`, stage mask `0x11`, total size `32`). Conclusion: within the approved methodology, the crash envelope currently tracks the `bind_render_pipeline` specialization-constant recipe bucket at `serial=103`. This classifies the seam only; it does **not** reopen specialization-cache theory and does not widen into a fix.
