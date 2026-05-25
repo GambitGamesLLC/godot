@@ -70,7 +70,39 @@ struct GdgsFirstL88RenderPipelineCreateTraceTarget {
 	int match_ordinal = -1;
 };
 
+struct GdgsFirstL88PostCreateTraceTarget {
+	Mutex mutex;
+	bool armed = false;
+	uint32_t pipeline_hash = 0;
+	RID render_pipeline_rid;
+	RDD::PipelineID driver_pipeline_id;
+	RID shader_rid;
+	RDD::ShaderID shader_driver_id;
+	RD::VertexFormatID vertex_format_id = RD::INVALID_ID;
+	uint32_t specialization_constant_0 = 0;
+	uint64_t create_ordinal = 0;
+	int batch_index = -1;
+	int match_ordinal = -1;
+};
+
+struct GdgsFirstL88ExecutionPacketTraceTarget {
+	Mutex mutex;
+	bool armed = false;
+	uint32_t pipeline_hash = 0;
+	RID render_pipeline_rid;
+	RDD::PipelineID driver_pipeline_id;
+	RID shader_rid;
+	RDD::ShaderID shader_driver_id;
+	RD::VertexFormatID vertex_format_id = RD::INVALID_ID;
+	uint32_t specialization_constant_0 = 0;
+	uint64_t create_ordinal = 0;
+	int batch_index = -1;
+	int match_ordinal = -1;
+};
+
 static GdgsFirstL88RenderPipelineCreateTraceTarget gdgs_first_l88_render_pipeline_create_trace_target;
+static GdgsFirstL88PostCreateTraceTarget gdgs_first_l88_post_create_trace_target;
+static GdgsFirstL88ExecutionPacketTraceTarget gdgs_first_l88_execution_packet_trace_target;
 static std::atomic<uint64_t> gdgs_first_l88_render_pipeline_create_ordinal{ 0 };
 
 void gdgs_first_l88_render_pipeline_create_trace_arm(uint32_t p_pipeline_hash, RID p_shader_rid, RD::FramebufferFormatID p_framebuffer_format_id, RD::VertexFormatID p_vertex_format_id, RD::RenderPrimitive p_render_primitive, uint32_t p_render_pass, uint32_t p_specialization_constant_0, int p_batch_index, int p_match_ordinal) {
@@ -118,6 +150,102 @@ void gdgs_first_l88_render_pipeline_create_trace_disarm() {
 	gdgs_first_l88_render_pipeline_create_trace_target.specialization_constant_0 = 0;
 	gdgs_first_l88_render_pipeline_create_trace_target.batch_index = -1;
 	gdgs_first_l88_render_pipeline_create_trace_target.match_ordinal = -1;
+}
+
+void gdgs_first_l88_post_create_trace_arm(uint32_t p_pipeline_hash, RID p_render_pipeline_rid, RDD::PipelineID p_driver_pipeline_id, RID p_shader_rid, RDD::ShaderID p_shader_driver_id, RD::VertexFormatID p_vertex_format_id, uint32_t p_specialization_constant_0, uint64_t p_create_ordinal, int p_batch_index, int p_match_ordinal) {
+	MutexLock lock(gdgs_first_l88_post_create_trace_target.mutex);
+	gdgs_first_l88_post_create_trace_target.armed = true;
+	gdgs_first_l88_post_create_trace_target.pipeline_hash = p_pipeline_hash;
+	gdgs_first_l88_post_create_trace_target.render_pipeline_rid = p_render_pipeline_rid;
+	gdgs_first_l88_post_create_trace_target.driver_pipeline_id = p_driver_pipeline_id;
+	gdgs_first_l88_post_create_trace_target.shader_rid = p_shader_rid;
+	gdgs_first_l88_post_create_trace_target.shader_driver_id = p_shader_driver_id;
+	gdgs_first_l88_post_create_trace_target.vertex_format_id = p_vertex_format_id;
+	gdgs_first_l88_post_create_trace_target.specialization_constant_0 = p_specialization_constant_0;
+	gdgs_first_l88_post_create_trace_target.create_ordinal = p_create_ordinal;
+	gdgs_first_l88_post_create_trace_target.batch_index = p_batch_index;
+	gdgs_first_l88_post_create_trace_target.match_ordinal = p_match_ordinal;
+}
+
+bool gdgs_first_l88_post_create_trace_snapshot(RID p_render_pipeline_rid, uint32_t &r_pipeline_hash, RID &r_created_render_pipeline_rid, RDD::PipelineID &r_created_driver_pipeline_id, RID &r_shader_rid, RDD::ShaderID &r_shader_driver_id, RD::VertexFormatID &r_vertex_format_id, uint32_t &r_specialization_constant_0, uint64_t &r_create_ordinal, int &r_batch_index, int &r_match_ordinal) {
+	MutexLock lock(gdgs_first_l88_post_create_trace_target.mutex);
+	if (!gdgs_first_l88_post_create_trace_target.armed || gdgs_first_l88_post_create_trace_target.render_pipeline_rid != p_render_pipeline_rid) {
+		return false;
+	}
+	r_pipeline_hash = gdgs_first_l88_post_create_trace_target.pipeline_hash;
+	r_created_render_pipeline_rid = gdgs_first_l88_post_create_trace_target.render_pipeline_rid;
+	r_created_driver_pipeline_id = gdgs_first_l88_post_create_trace_target.driver_pipeline_id;
+	r_shader_rid = gdgs_first_l88_post_create_trace_target.shader_rid;
+	r_shader_driver_id = gdgs_first_l88_post_create_trace_target.shader_driver_id;
+	r_vertex_format_id = gdgs_first_l88_post_create_trace_target.vertex_format_id;
+	r_specialization_constant_0 = gdgs_first_l88_post_create_trace_target.specialization_constant_0;
+	r_create_ordinal = gdgs_first_l88_post_create_trace_target.create_ordinal;
+	r_batch_index = gdgs_first_l88_post_create_trace_target.batch_index;
+	r_match_ordinal = gdgs_first_l88_post_create_trace_target.match_ordinal;
+	return true;
+}
+
+void gdgs_first_l88_post_create_trace_disarm() {
+	MutexLock lock(gdgs_first_l88_post_create_trace_target.mutex);
+	gdgs_first_l88_post_create_trace_target.armed = false;
+	gdgs_first_l88_post_create_trace_target.pipeline_hash = 0;
+	gdgs_first_l88_post_create_trace_target.render_pipeline_rid = RID();
+	gdgs_first_l88_post_create_trace_target.driver_pipeline_id = RDD::PipelineID();
+	gdgs_first_l88_post_create_trace_target.shader_rid = RID();
+	gdgs_first_l88_post_create_trace_target.shader_driver_id = RDD::ShaderID();
+	gdgs_first_l88_post_create_trace_target.vertex_format_id = RD::INVALID_ID;
+	gdgs_first_l88_post_create_trace_target.specialization_constant_0 = 0;
+	gdgs_first_l88_post_create_trace_target.create_ordinal = 0;
+	gdgs_first_l88_post_create_trace_target.batch_index = -1;
+	gdgs_first_l88_post_create_trace_target.match_ordinal = -1;
+}
+
+void gdgs_first_l88_execution_packet_trace_arm(uint32_t p_pipeline_hash, RID p_render_pipeline_rid, RDD::PipelineID p_driver_pipeline_id, RID p_shader_rid, RDD::ShaderID p_shader_driver_id, RD::VertexFormatID p_vertex_format_id, uint32_t p_specialization_constant_0, uint64_t p_create_ordinal, int p_batch_index, int p_match_ordinal) {
+	MutexLock lock(gdgs_first_l88_execution_packet_trace_target.mutex);
+	gdgs_first_l88_execution_packet_trace_target.armed = true;
+	gdgs_first_l88_execution_packet_trace_target.pipeline_hash = p_pipeline_hash;
+	gdgs_first_l88_execution_packet_trace_target.render_pipeline_rid = p_render_pipeline_rid;
+	gdgs_first_l88_execution_packet_trace_target.driver_pipeline_id = p_driver_pipeline_id;
+	gdgs_first_l88_execution_packet_trace_target.shader_rid = p_shader_rid;
+	gdgs_first_l88_execution_packet_trace_target.shader_driver_id = p_shader_driver_id;
+	gdgs_first_l88_execution_packet_trace_target.vertex_format_id = p_vertex_format_id;
+	gdgs_first_l88_execution_packet_trace_target.specialization_constant_0 = p_specialization_constant_0;
+	gdgs_first_l88_execution_packet_trace_target.create_ordinal = p_create_ordinal;
+	gdgs_first_l88_execution_packet_trace_target.batch_index = p_batch_index;
+	gdgs_first_l88_execution_packet_trace_target.match_ordinal = p_match_ordinal;
+}
+
+bool gdgs_first_l88_execution_packet_trace_snapshot(RID p_render_pipeline_rid, uint32_t &r_pipeline_hash, RID &r_render_pipeline_rid, RDD::PipelineID &r_driver_pipeline_id, RID &r_shader_rid, RDD::ShaderID &r_shader_driver_id, RD::VertexFormatID &r_vertex_format_id, uint32_t &r_specialization_constant_0, uint64_t &r_create_ordinal, int &r_batch_index, int &r_match_ordinal) {
+	MutexLock lock(gdgs_first_l88_execution_packet_trace_target.mutex);
+	if (!gdgs_first_l88_execution_packet_trace_target.armed || gdgs_first_l88_execution_packet_trace_target.render_pipeline_rid != p_render_pipeline_rid) {
+		return false;
+	}
+	r_pipeline_hash = gdgs_first_l88_execution_packet_trace_target.pipeline_hash;
+	r_render_pipeline_rid = gdgs_first_l88_execution_packet_trace_target.render_pipeline_rid;
+	r_driver_pipeline_id = gdgs_first_l88_execution_packet_trace_target.driver_pipeline_id;
+	r_shader_rid = gdgs_first_l88_execution_packet_trace_target.shader_rid;
+	r_shader_driver_id = gdgs_first_l88_execution_packet_trace_target.shader_driver_id;
+	r_vertex_format_id = gdgs_first_l88_execution_packet_trace_target.vertex_format_id;
+	r_specialization_constant_0 = gdgs_first_l88_execution_packet_trace_target.specialization_constant_0;
+	r_create_ordinal = gdgs_first_l88_execution_packet_trace_target.create_ordinal;
+	r_batch_index = gdgs_first_l88_execution_packet_trace_target.batch_index;
+	r_match_ordinal = gdgs_first_l88_execution_packet_trace_target.match_ordinal;
+	return true;
+}
+
+void gdgs_first_l88_execution_packet_trace_disarm() {
+	MutexLock lock(gdgs_first_l88_execution_packet_trace_target.mutex);
+	gdgs_first_l88_execution_packet_trace_target.armed = false;
+	gdgs_first_l88_execution_packet_trace_target.pipeline_hash = 0;
+	gdgs_first_l88_execution_packet_trace_target.render_pipeline_rid = RID();
+	gdgs_first_l88_execution_packet_trace_target.driver_pipeline_id = RDD::PipelineID();
+	gdgs_first_l88_execution_packet_trace_target.shader_rid = RID();
+	gdgs_first_l88_execution_packet_trace_target.shader_driver_id = RDD::ShaderID();
+	gdgs_first_l88_execution_packet_trace_target.vertex_format_id = RD::INVALID_ID;
+	gdgs_first_l88_execution_packet_trace_target.specialization_constant_0 = 0;
+	gdgs_first_l88_execution_packet_trace_target.create_ordinal = 0;
+	gdgs_first_l88_execution_packet_trace_target.batch_index = -1;
+	gdgs_first_l88_execution_packet_trace_target.match_ordinal = -1;
 }
 
 /**************************/
@@ -5092,9 +5220,10 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 		const String gdgs_shader_driver_id = String::num_uint64(shader->driver_id.id);
 		const String gdgs_driver_render_pass_id = String::num_uint64(fb_format.render_pass.id);
 		const String gdgs_driver_vertex_format = String::num_uint64(driver_vertex_format.id);
+		const String gdgs_driver_pipeline_id = String::num_uint64(pipeline.driver_id.id);
 		const String gdgs_specialization_constant_0_hex = "0x" + String::num_uint64(gdgs_specialization_constant_0, 16);
 		const String gdgs_allocated_render_pipeline_rid = String::num_uint64(id.get_id());
-		print_line(vformat("[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create={batch_index=%d,match_ordinal=%d,create_ordinal=%s,pipeline_hash=%s,shader_rid=%s,shader_driver_id=%s,framebuffer_format_id=%d,driver_render_pass_id=%s,render_pass_index=%d,vertex_format_id=%d,driver_vertex_format=%s,specialization_constant_0=%s,allocated_render_pipeline_rid=%s}",
+		print_line(vformat("[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create={batch_index=%d,match_ordinal=%d,create_ordinal=%s,pipeline_hash=%s,shader_rid=%s,shader_driver_id=%s,framebuffer_format_id=%d,driver_render_pass_id=%s,render_pass_index=%d,vertex_format_id=%d,driver_vertex_format=%s,driver_pipeline_id=%s,specialization_constant_0=%s,allocated_render_pipeline_rid=%s}",
 				gdgs_first_l88_batch_index,
 				gdgs_first_l88_match_ordinal,
 				gdgs_create_ordinal,
@@ -5106,8 +5235,10 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 				(int)p_for_render_pass,
 				(int)p_vertex_format,
 				gdgs_driver_vertex_format,
+				gdgs_driver_pipeline_id,
 				gdgs_specialization_constant_0_hex,
 				gdgs_allocated_render_pipeline_rid));
+		gdgs_first_l88_post_create_trace_arm(gdgs_first_l88_pipeline_hash, id, pipeline.driver_id, p_shader, shader->driver_id, p_vertex_format, gdgs_specialization_constant_0, gdgs_render_pipeline_create_ordinal, gdgs_first_l88_batch_index, gdgs_first_l88_match_ordinal);
 		gdgs_first_l88_render_pipeline_create_trace_disarm();
 	}
 	{
@@ -5814,6 +5945,40 @@ void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_re
 
 	draw_list.state.pipeline = p_render_pipeline;
 
+	uint32_t gdgs_post_create_pipeline_hash = 0;
+	RID gdgs_post_create_render_pipeline_rid;
+	RDD::PipelineID gdgs_post_create_driver_pipeline_id;
+	RID gdgs_post_create_shader_rid;
+	RDD::ShaderID gdgs_post_create_shader_driver_id;
+	RD::VertexFormatID gdgs_post_create_vertex_format_id = RD::INVALID_ID;
+	uint32_t gdgs_post_create_specialization_constant_0 = 0;
+	uint64_t gdgs_post_create_create_ordinal = 0;
+	int gdgs_post_create_batch_index = -1;
+	int gdgs_post_create_match_ordinal = -1;
+	const bool gdgs_post_create_trace_matched = gdgs_first_l88_post_create_trace_snapshot(p_render_pipeline, gdgs_post_create_pipeline_hash, gdgs_post_create_render_pipeline_rid, gdgs_post_create_driver_pipeline_id, gdgs_post_create_shader_rid, gdgs_post_create_shader_driver_id, gdgs_post_create_vertex_format_id, gdgs_post_create_specialization_constant_0, gdgs_post_create_create_ordinal, gdgs_post_create_batch_index, gdgs_post_create_match_ordinal);
+	if (gdgs_post_create_trace_matched) {
+		print_line(vformat("[gdgs-rd] temp_diag_first_clipped_preserve_rect_post_create_provenance={batch_index=%d,match_ordinal=%d,bind_stage=draw_list_bind_render_pipeline,pipeline_hash=%s,create_ordinal=%s,created_render_pipeline_rid=%s,bound_render_pipeline_rid=%s,created_driver_pipeline_id=%s,bound_driver_pipeline_id=%s,render_pipeline_rid_matches_create=%s,driver_pipeline_id_matches_create=%s,shader_rid=%s,created_shader_driver_id=%s,bound_shader_driver_id=%s,shader_driver_id_matches_create=%s,vertex_format_id=%d,specialization_constant_0=%s,stage_bits=0x%x}",
+				gdgs_post_create_batch_index,
+				gdgs_post_create_match_ordinal,
+				"0x" + String::num_uint64(gdgs_post_create_pipeline_hash, 16).pad_zeros(8),
+				String::num_uint64(gdgs_post_create_create_ordinal),
+				String::num_uint64(gdgs_post_create_render_pipeline_rid.get_id()),
+				String::num_uint64(p_render_pipeline.get_id()),
+				String::num_uint64(gdgs_post_create_driver_pipeline_id.id),
+				String::num_uint64(pipeline->driver_id.id),
+				gdgs_post_create_render_pipeline_rid == p_render_pipeline ? "true" : "false",
+				gdgs_post_create_driver_pipeline_id == pipeline->driver_id ? "true" : "false",
+				String::num_uint64(gdgs_post_create_shader_rid.get_id()),
+				String::num_uint64(gdgs_post_create_shader_driver_id.id),
+				String::num_uint64(pipeline->shader_driver_id.id),
+				gdgs_post_create_shader_driver_id == pipeline->shader_driver_id ? "true" : "false",
+				(int)gdgs_post_create_vertex_format_id,
+				"0x" + String::num_uint64(gdgs_post_create_specialization_constant_0, 16),
+				(uint32_t)pipeline->stage_bits));
+		gdgs_first_l88_execution_packet_trace_arm(gdgs_post_create_pipeline_hash, p_render_pipeline, pipeline->driver_id, gdgs_post_create_shader_rid, pipeline->shader_driver_id, gdgs_post_create_vertex_format_id, gdgs_post_create_specialization_constant_0, gdgs_post_create_create_ordinal, gdgs_post_create_batch_index, gdgs_post_create_match_ordinal);
+		gdgs_first_l88_post_create_trace_disarm();
+	}
+
 	draw_graph.add_draw_list_bind_pipeline(pipeline->driver_id, pipeline->stage_bits);
 
 	if (draw_list.state.pipeline_shader != pipeline->shader) {
@@ -5937,6 +6102,9 @@ void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_verte
 	_check_transfer_worker_vertex_array(vertex_array);
 
 	draw_list.state.vertex_array = p_vertex_array;
+	draw_list.state.vertex_buffers = vertex_array->buffers;
+	draw_list.state.vertex_buffer_offsets = vertex_array->offsets;
+	draw_list.state.vertex_buffers_bound_direct = false;
 
 #ifdef DEBUG_ENABLED
 	draw_list.validation.vertex_format = vertex_array->description;
@@ -6032,6 +6200,15 @@ void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, Ve
 	}
 
 	draw_list.state.vertex_array = RID();
+	draw_list.state.vertex_buffers.resize(driver_buffers.size());
+	for (uint32_t i = 0; i < driver_buffers.size(); i++) {
+		draw_list.state.vertex_buffers.write[i] = driver_buffers[i];
+	}
+	draw_list.state.vertex_buffer_offsets.resize(offsets_span.size());
+	for (uint32_t i = 0; i < offsets_span.size(); i++) {
+		draw_list.state.vertex_buffer_offsets.write[i] = offsets_span[i];
+	}
+	draw_list.state.vertex_buffers_bound_direct = true;
 
 	draw_graph.add_draw_list_bind_vertex_buffers(driver_buffers, offsets_span);
 
@@ -6148,6 +6325,18 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 		}
 	}
 #endif
+	uint32_t gdgs_execution_pipeline_hash = 0;
+	RID gdgs_execution_render_pipeline_rid;
+	RDD::PipelineID gdgs_execution_driver_pipeline_id;
+	RID gdgs_execution_shader_rid;
+	RDD::ShaderID gdgs_execution_shader_driver_id;
+	RD::VertexFormatID gdgs_execution_vertex_format_id = RD::INVALID_ID;
+	uint32_t gdgs_execution_specialization_constant_0 = 0;
+	uint64_t gdgs_execution_create_ordinal = 0;
+	int gdgs_execution_batch_index = -1;
+	int gdgs_execution_match_ordinal = -1;
+	const bool gdgs_execution_trace_matched = gdgs_first_l88_execution_packet_trace_snapshot(draw_list.state.pipeline, gdgs_execution_pipeline_hash, gdgs_execution_render_pipeline_rid, gdgs_execution_driver_pipeline_id, gdgs_execution_shader_rid, gdgs_execution_shader_driver_id, gdgs_execution_vertex_format_id, gdgs_execution_specialization_constant_0, gdgs_execution_create_ordinal, gdgs_execution_batch_index, gdgs_execution_match_ordinal);
+
 	thread_local LocalVector<RDD::UniformSetID> valid_descriptor_ids;
 	valid_descriptor_ids.clear();
 	valid_descriptor_ids.resize(draw_list.state.set_count);
@@ -6169,6 +6358,135 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 		if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
 			draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
 		}
+	}
+
+	if (gdgs_execution_trace_matched) {
+		uint32_t gdgs_expected_set_mask = 0;
+		uint32_t gdgs_dirty_set_mask = 0;
+		uint32_t gdgs_bound_set_mask = 0;
+		uint32_t gdgs_expected_set_count = 0;
+		uint32_t gdgs_dirty_set_count = 0;
+		int gdgs_first_dirty_set = -1;
+		int gdgs_last_dirty_set = -1;
+		uint32_t gdgs_descriptor_bind_call_count = 0;
+		bool gdgs_in_dirty_range = false;
+		String gdgs_descriptor_sets = "[";
+		bool gdgs_first_descriptor_entry = true;
+		for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
+			const bool gdgs_expected = draw_list.state.sets[i].pipeline_expected_format != 0;
+			const bool gdgs_bound = draw_list.state.sets[i].bound;
+			if (!gdgs_expected) {
+				gdgs_in_dirty_range = false;
+				continue;
+			}
+			gdgs_expected_set_count++;
+			gdgs_expected_set_mask |= (i < 32) ? (1U << i) : 0;
+			if (gdgs_bound) {
+				gdgs_bound_set_mask |= (i < 32) ? (1U << i) : 0;
+			}
+			if (!gdgs_bound) {
+				gdgs_dirty_set_count++;
+				gdgs_dirty_set_mask |= (i < 32) ? (1U << i) : 0;
+				if (gdgs_first_dirty_set == -1) {
+					gdgs_first_dirty_set = (int)i;
+				}
+				gdgs_last_dirty_set = (int)i;
+				if (descriptor_set_batching) {
+					if (!gdgs_in_dirty_range) {
+						gdgs_descriptor_bind_call_count++;
+						gdgs_in_dirty_range = true;
+					}
+				} else {
+					gdgs_descriptor_bind_call_count++;
+				}
+			} else {
+				gdgs_in_dirty_range = false;
+			}
+			if (!gdgs_first_descriptor_entry) {
+				gdgs_descriptor_sets += ",";
+			}
+			gdgs_first_descriptor_entry = false;
+			gdgs_descriptor_sets += vformat("{set=%d,expected_format=%d,uniform_set_format=%d,bound_before_draw=%s,uniform_set_rid=%s,uniform_set_driver_id=%s}",
+					(int)i,
+					(int)draw_list.state.sets[i].pipeline_expected_format,
+					(int)draw_list.state.sets[i].uniform_set_format,
+					gdgs_bound ? "true" : "false",
+					String::num_uint64(draw_list.state.sets[i].uniform_set.get_id()),
+					String::num_uint64(draw_list.state.sets[i].uniform_set_driver_id.id));
+		}
+		gdgs_descriptor_sets += "]";
+
+		String gdgs_vertex_buffers = "[]";
+		String gdgs_vertex_source = draw_list.state.vertex_buffers_bound_direct ? "direct_bind" : (draw_list.state.vertex_array.is_valid() ? "vertex_array" : "none");
+		uint32_t gdgs_vertex_buffer_bind_count = draw_list.state.vertex_buffers.size();
+		if (gdgs_vertex_buffer_bind_count > 0) {
+			gdgs_vertex_buffers = "[";
+			for (int i = 0; i < draw_list.state.vertex_buffers.size(); i++) {
+				if (i > 0) {
+					gdgs_vertex_buffers += ",";
+				}
+				const uint64_t gdgs_offset = i < draw_list.state.vertex_buffer_offsets.size() ? draw_list.state.vertex_buffer_offsets[i] : 0;
+				gdgs_vertex_buffers += vformat("{binding=%d,driver_buffer_id=%s,offset=%s}", i, String::num_uint64(draw_list.state.vertex_buffers[i].id), String::num_uint64(gdgs_offset));
+			}
+			gdgs_vertex_buffers += "]";
+		}
+
+		String gdgs_index_driver_id = "none";
+		String gdgs_index_format = "none";
+		String gdgs_index_offset_bytes = "0";
+		uint32_t gdgs_index_count = 0;
+		if (draw_list.state.index_array.is_valid()) {
+			IndexArray *gdgs_index_array = index_array_owner.get_or_null(draw_list.state.index_array);
+			if (gdgs_index_array != nullptr) {
+				gdgs_index_driver_id = String::num_uint64(gdgs_index_array->driver_id.id);
+				gdgs_index_format = gdgs_index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? "uint16" : "uint32";
+				gdgs_index_offset_bytes = String::num_uint64((uint64_t)gdgs_index_array->offset * (gdgs_index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t)));
+				gdgs_index_count = gdgs_index_array->indices;
+			}
+		}
+
+		uint32_t gdgs_to_draw = p_use_indices ? draw_list.validation.index_array_count : (p_procedural_vertices > 0 ? p_procedural_vertices : draw_list.validation.vertex_array_size);
+		print_line(vformat("[gdgs-rd] temp_diag_first_clipped_preserve_rect_execution_packet={batch_index=%d,match_ordinal=%d,stage=draw_list_draw,pipeline_hash=%s,create_ordinal=%s,render_pipeline_rid=%s,driver_pipeline_id=%s,shader_rid=%s,shader_driver_id=%s,vertex_format_id=%d,specialization_constant_0=%s,descriptor_state={set_count=%d,expected_set_count=%d,dirty_set_count=%d,expected_mask=0x%x,bound_mask=0x%x,dirty_mask=0x%x,descriptor_prepare_count=%d,descriptor_bind_call_count=%d,descriptor_bind_mode=%s,first_dirty_set=%d,last_dirty_set=%d,sets=%s},vertex_state={source=%s,vertex_array_rid=%s,vertex_format_id=%d,vertex_count=%d,buffer_bind_count=%d,buffers=%s},index_state={index_array_rid=%s,index_driver_id=%s,index_count=%d,index_format=%s,index_offset_bytes=%s},draw_shape={kind=%s,use_indices=%s,instances=%d,procedural_vertices=%d,to_draw=%d,draw_count_before=%d}}",
+				gdgs_execution_batch_index,
+				gdgs_execution_match_ordinal,
+				"0x" + String::num_uint64(gdgs_execution_pipeline_hash, 16).pad_zeros(8),
+				String::num_uint64(gdgs_execution_create_ordinal),
+				String::num_uint64(gdgs_execution_render_pipeline_rid.get_id()),
+				String::num_uint64(gdgs_execution_driver_pipeline_id.id),
+				String::num_uint64(gdgs_execution_shader_rid.get_id()),
+				String::num_uint64(gdgs_execution_shader_driver_id.id),
+				(int)gdgs_execution_vertex_format_id,
+				"0x" + String::num_uint64(gdgs_execution_specialization_constant_0, 16),
+				(int)draw_list.state.set_count,
+				(int)gdgs_expected_set_count,
+				(int)gdgs_dirty_set_count,
+				gdgs_expected_set_mask,
+				gdgs_bound_set_mask,
+				gdgs_dirty_set_mask,
+				!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS) ? (int)gdgs_expected_set_count : 0,
+				(int)gdgs_descriptor_bind_call_count,
+				descriptor_set_batching ? "batched" : "single",
+				gdgs_first_dirty_set,
+				gdgs_last_dirty_set,
+				gdgs_descriptor_sets,
+				gdgs_vertex_source,
+				String::num_uint64(draw_list.state.vertex_array.get_id()),
+				(int)draw_list.validation.vertex_format,
+				(int)draw_list.validation.vertex_array_size,
+				(int)gdgs_vertex_buffer_bind_count,
+				gdgs_vertex_buffers,
+				String::num_uint64(draw_list.state.index_array.get_id()),
+				gdgs_index_driver_id,
+				(int)gdgs_index_count,
+				gdgs_index_format,
+				gdgs_index_offset_bytes,
+				p_use_indices ? "draw_indexed" : (p_procedural_vertices > 0 ? "draw_procedural" : "draw"),
+				p_use_indices ? "true" : "false",
+				(int)p_instances,
+				(int)p_procedural_vertices,
+				(int)gdgs_to_draw,
+				(int)draw_list.state.draw_count));
+		gdgs_first_l88_execution_packet_trace_disarm();
 	}
 
 	// Bind descriptor sets.

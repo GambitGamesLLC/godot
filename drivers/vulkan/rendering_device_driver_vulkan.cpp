@@ -3422,9 +3422,18 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_render_pipeline_bound = false;
 	command_buffer->debug_bound_render_pipeline_handle = 0;
 	command_buffer->debug_bound_render_pipeline_provenance = DebugPipelineBindingProvenance();
+	command_buffer->debug_bound_descriptor_set_handles.clear();
+	command_buffer->debug_last_uniform_bind_provenance = DebugUniformBindingProvenance();
+	command_buffer->debug_last_uniform_bind_serial = 0;
 	command_buffer->debug_vertex_binding_count = 0;
+	command_buffer->debug_bound_vertex_buffer_ids.clear();
+	command_buffer->debug_bound_vertex_buffer_offsets.clear();
+	command_buffer->debug_last_vertex_bind_serial = 0;
 	command_buffer->debug_index_buffer_bound = false;
 	command_buffer->debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
+	command_buffer->debug_bound_index_buffer_id = 0;
+	command_buffer->debug_bound_index_buffer_offset = 0;
+	command_buffer->debug_last_index_bind_serial = 0;
 	command_buffer->debug_blend_constants_set = false;
 	command_buffer->debug_blend_constants[0] = 0.0f;
 	command_buffer->debug_blend_constants[1] = 0.0f;
@@ -3476,9 +3485,18 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_render_pipeline_bound = false;
 	command_buffer->debug_bound_render_pipeline_handle = 0;
 	command_buffer->debug_bound_render_pipeline_provenance = DebugPipelineBindingProvenance();
+	command_buffer->debug_bound_descriptor_set_handles.clear();
+	command_buffer->debug_last_uniform_bind_provenance = DebugUniformBindingProvenance();
+	command_buffer->debug_last_uniform_bind_serial = 0;
 	command_buffer->debug_vertex_binding_count = 0;
+	command_buffer->debug_bound_vertex_buffer_ids.clear();
+	command_buffer->debug_bound_vertex_buffer_offsets.clear();
+	command_buffer->debug_last_vertex_bind_serial = 0;
 	command_buffer->debug_index_buffer_bound = false;
 	command_buffer->debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
+	command_buffer->debug_bound_index_buffer_id = 0;
+	command_buffer->debug_bound_index_buffer_offset = 0;
+	command_buffer->debug_last_index_bind_serial = 0;
 	command_buffer->debug_blend_constants_set = false;
 	command_buffer->debug_blend_constants[0] = 0.0f;
 	command_buffer->debug_blend_constants[1] = 0.0f;
@@ -6180,10 +6198,31 @@ void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBuffer
 	}
 	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
 	_debug_record_label_backend_command(command_buffer, "bind_render_uniform_sets");
+	const uint64_t uniform_bind_serial = command_buffer->debug_backend_command_serial;
+	if (command_buffer->debug_bound_descriptor_set_handles.size() < int(p_first_set_index + p_set_count)) {
+		command_buffer->debug_bound_descriptor_set_handles.resize(p_first_set_index + p_set_count);
+	}
+	DebugUniformBindCallPayload uniform_bind_call;
+	uniform_bind_call.serial = uniform_bind_serial;
+	uniform_bind_call.first_set_index = p_first_set_index;
+	uniform_bind_call.set_count = p_set_count;
+	uniform_bind_call.set_indices.resize(p_set_count);
+	uniform_bind_call.descriptor_set_handles.resize(p_set_count);
+	for (uint32_t i = 0; i < p_set_count; i++) {
+		const UniformSetInfo *usi = (const UniformSetInfo *)p_uniform_sets[i].id;
+		const uint32_t set_index = p_first_set_index + i;
+		const uint64_t descriptor_set_handle = (uint64_t)usi->vk_descriptor_set;
+		command_buffer->debug_bound_descriptor_set_handles[set_index] = descriptor_set_handle;
+		uniform_bind_call.set_indices[i] = set_index;
+		uniform_bind_call.descriptor_set_handles[i] = descriptor_set_handle;
+	}
+	command_buffer->debug_last_uniform_bind_serial = uniform_bind_serial;
+	command_buffer->debug_last_uniform_bind_provenance = uniform_bind_provenance;
 	if (command_buffer->debug_active_label_stack_size > 0) {
 		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
 		if (entry_index < command_buffer->debug_label_entry_count) {
 			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			entry.uniform_bind_calls.push_back(uniform_bind_call);
 			if (entry.first_uniform_bind_serial == command_buffer->debug_backend_command_serial) {
 				entry.first_uniform_bind_before_state = before_state;
 				entry.first_uniform_bind_provenance = uniform_bind_provenance;
@@ -6202,6 +6241,42 @@ void RenderingDeviceDriverVulkan::command_render_draw_indexed(CommandBufferID p_
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdDrawIndexed(command_buffer->vk_command_buffer, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
 	_debug_record_label_backend_command(command_buffer, "draw_indexed");
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			if (!entry.first_draw_indexed_consumption.valid) {
+				entry.first_draw_indexed_consumption.valid = true;
+				entry.first_draw_indexed_consumption.serial = command_buffer->debug_backend_command_serial;
+				entry.first_draw_indexed_consumption.last_uniform_bind_serial = command_buffer->debug_last_uniform_bind_serial;
+				entry.first_draw_indexed_consumption.last_vertex_bind_serial = command_buffer->debug_last_vertex_bind_serial;
+				entry.first_draw_indexed_consumption.last_index_bind_serial = command_buffer->debug_last_index_bind_serial;
+				entry.first_draw_indexed_consumption.index_count = p_index_count;
+				entry.first_draw_indexed_consumption.instance_count = p_instance_count;
+				entry.first_draw_indexed_consumption.first_index = p_first_index;
+				entry.first_draw_indexed_consumption.vertex_offset = p_vertex_offset;
+				entry.first_draw_indexed_consumption.first_instance = p_first_instance;
+				entry.first_draw_indexed_consumption.uniform_bind_provenance = command_buffer->debug_last_uniform_bind_provenance;
+				for (uint32_t i = 0; i < command_buffer->debug_bound_descriptor_set_handles.size(); i++) {
+					const uint64_t descriptor_set_handle = command_buffer->debug_bound_descriptor_set_handles[i];
+					if (descriptor_set_handle == 0) {
+						continue;
+					}
+					entry.first_draw_indexed_consumption.descriptor_set_indices.push_back(i);
+					entry.first_draw_indexed_consumption.descriptor_set_handles.push_back(descriptor_set_handle);
+				}
+				entry.first_draw_indexed_consumption.vertex_binding_payload.valid = !command_buffer->debug_bound_vertex_buffer_ids.is_empty();
+				entry.first_draw_indexed_consumption.vertex_binding_payload.serial = command_buffer->debug_last_vertex_bind_serial;
+				entry.first_draw_indexed_consumption.vertex_binding_payload.buffer_ids = command_buffer->debug_bound_vertex_buffer_ids;
+				entry.first_draw_indexed_consumption.vertex_binding_payload.offsets = command_buffer->debug_bound_vertex_buffer_offsets;
+				entry.first_draw_indexed_consumption.index_binding_payload.valid = command_buffer->debug_index_buffer_bound;
+				entry.first_draw_indexed_consumption.index_binding_payload.serial = command_buffer->debug_last_index_bind_serial;
+				entry.first_draw_indexed_consumption.index_binding_payload.buffer_id = command_buffer->debug_bound_index_buffer_id;
+				entry.first_draw_indexed_consumption.index_binding_payload.offset = command_buffer->debug_bound_index_buffer_offset;
+				entry.first_draw_indexed_consumption.index_binding_payload.format = command_buffer->debug_index_format;
+			}
+		}
+	}
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
@@ -6252,6 +6327,32 @@ void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBuff
 	vkCmdBindVertexBuffers(command_buffer->vk_command_buffer, 0, p_binding_count, vk_buffers, vk_offsets);
 	command_buffer->debug_vertex_binding_count = p_binding_count;
 	_debug_record_label_backend_command(command_buffer, "bind_vertex_buffers");
+	const uint64_t vertex_bind_serial = command_buffer->debug_backend_command_serial;
+	command_buffer->debug_bound_vertex_buffer_ids.resize(p_binding_count);
+	command_buffer->debug_bound_vertex_buffer_offsets.resize(p_binding_count);
+	DebugVertexBindingPayload vertex_binding_payload;
+	vertex_binding_payload.valid = true;
+	vertex_binding_payload.serial = vertex_bind_serial;
+	vertex_binding_payload.buffer_ids.resize(p_binding_count);
+	vertex_binding_payload.offsets.resize(p_binding_count);
+	for (uint32_t i = 0; i < p_binding_count; i++) {
+		const uint64_t buffer_id = p_buffers[i].id != 0 ? (uint64_t)((const BufferInfo *)p_buffers[i].id)->vk_buffer : 0;
+		const uint64_t resolved_offset = vk_offsets[i];
+		command_buffer->debug_bound_vertex_buffer_ids[i] = buffer_id;
+		command_buffer->debug_bound_vertex_buffer_offsets[i] = resolved_offset;
+		vertex_binding_payload.buffer_ids[i] = buffer_id;
+		vertex_binding_payload.offsets[i] = resolved_offset;
+	}
+	command_buffer->debug_last_vertex_bind_serial = vertex_bind_serial;
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			if (!entry.first_vertex_binding_payload.valid) {
+				entry.first_vertex_binding_payload = vertex_binding_payload;
+			}
+		}
+	}
 }
 
 void RenderingDeviceDriverVulkan::command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) {
@@ -6261,6 +6362,23 @@ void RenderingDeviceDriverVulkan::command_render_bind_index_buffer(CommandBuffer
 	command_buffer->debug_index_buffer_bound = true;
 	command_buffer->debug_index_format = p_format;
 	_debug_record_label_backend_command(command_buffer, "bind_index_buffer");
+	const uint64_t index_bind_serial = command_buffer->debug_backend_command_serial;
+	command_buffer->debug_bound_index_buffer_id = (uint64_t)buf_info->vk_buffer;
+	command_buffer->debug_bound_index_buffer_offset = p_offset;
+	command_buffer->debug_last_index_bind_serial = index_bind_serial;
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			if (!entry.first_index_binding_payload.valid) {
+				entry.first_index_binding_payload.valid = true;
+				entry.first_index_binding_payload.serial = index_bind_serial;
+				entry.first_index_binding_payload.buffer_id = command_buffer->debug_bound_index_buffer_id;
+				entry.first_index_binding_payload.offset = p_offset;
+				entry.first_index_binding_payload.format = p_format;
+			}
+		}
+	}
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color &p_constants) {
@@ -11645,6 +11763,96 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",vertex_buffer_binds=" + String(l88_scope.vertex_buffer_bind_count > target_scope.vertex_buffer_bind_count ? "true" : "false");
 		text += ",index_buffer_binds=" + String(l88_scope.index_buffer_bind_count > target_scope.index_buffer_bind_count ? "true" : "false");
 		text += ",secondary_draw_labels=" + String(l88_scope.secondary_draw_label_count > target_scope.secondary_draw_label_count ? "true" : "false") + "}}";
+
+		const auto uniform_bind_call_summary = [](const DebugUniformBindCallPayload &call) {
+			String call_text = "{serial=" + String::num_uint64(call.serial);
+			call_text += ",first_set_index=" + itos(call.first_set_index);
+			call_text += ",set_count=" + itos(call.set_count);
+			call_text += ",sets=[";
+			for (uint32_t i = 0; i < call.set_indices.size(); i++) {
+				if (i > 0) {
+					call_text += ",";
+				}
+				const uint64_t descriptor_set_handle = i < call.descriptor_set_handles.size() ? call.descriptor_set_handles[i] : 0;
+				call_text += "{set=" + itos(call.set_indices[i]) + ",descriptor_set_driver_id=" + String::num_uint64(descriptor_set_handle) + "}";
+			}
+			call_text += "]}";
+			return call_text;
+		};
+		const auto vertex_binding_payload_summary = [](const DebugVertexBindingPayload &payload) {
+			if (!payload.valid) {
+				return String("none");
+			}
+			String payload_text = "{serial=" + String::num_uint64(payload.serial);
+			payload_text += ",binding_count=" + itos(payload.buffer_ids.size());
+			payload_text += ",bindings=[";
+			for (uint32_t i = 0; i < payload.buffer_ids.size(); i++) {
+				if (i > 0) {
+					payload_text += ",";
+				}
+				const uint64_t offset = i < payload.offsets.size() ? payload.offsets[i] : 0;
+				payload_text += "{binding=" + itos(i) + ",driver_buffer_id=" + String::num_uint64(payload.buffer_ids[i]) + ",offset=" + String::num_uint64(offset) + "}";
+			}
+			payload_text += "]}";
+			return payload_text;
+		};
+		const auto index_binding_payload_summary = [](const DebugIndexBindingPayload &payload) {
+			if (!payload.valid) {
+				return String("none");
+			}
+			return String("{serial=") + String::num_uint64(payload.serial) + ",driver_buffer_id=" + String::num_uint64(payload.buffer_id) + ",offset=" + String::num_uint64(payload.offset) + ",format=\"" + String(payload.format == INDEX_BUFFER_FORMAT_UINT16 ? "uint16" : "uint32") + "\"}";
+		};
+		const auto descriptor_set_state_summary = [](const DebugDrawIndexedConsumptionPayload &payload) {
+			if (!payload.valid || payload.descriptor_set_indices.is_empty()) {
+				return String("none");
+			}
+			String state_text = "[";
+			for (uint32_t i = 0; i < payload.descriptor_set_indices.size(); i++) {
+				if (i > 0) {
+					state_text += ",";
+				}
+				const uint64_t descriptor_set_handle = i < payload.descriptor_set_handles.size() ? payload.descriptor_set_handles[i] : 0;
+				state_text += "{set=" + itos(payload.descriptor_set_indices[i]) + ",descriptor_set_driver_id=" + String::num_uint64(descriptor_set_handle) + "}";
+			}
+			state_text += "]";
+			return state_text;
+		};
+		const auto draw_indexed_consumption_summary = [&](const DebugDrawIndexedConsumptionPayload &payload) {
+			if (!payload.valid) {
+				return String("{status=missing}");
+			}
+			String summary = "{serial=" + String::num_uint64(payload.serial);
+			summary += ",last_uniform_bind_serial=" + String::num_uint64(payload.last_uniform_bind_serial);
+			summary += ",last_vertex_bind_serial=" + String::num_uint64(payload.last_vertex_bind_serial);
+			summary += ",last_index_bind_serial=" + String::num_uint64(payload.last_index_bind_serial);
+			summary += ",index_count=" + itos(payload.index_count);
+			summary += ",instance_count=" + itos(payload.instance_count);
+			summary += ",first_index=" + itos(payload.first_index);
+			summary += ",vertex_offset=" + itos(payload.vertex_offset);
+			summary += ",first_instance=" + itos(payload.first_instance);
+			summary += ",descriptor_state=" + descriptor_set_state_summary(payload);
+			summary += ",vertex_state=" + vertex_binding_payload_summary(payload.vertex_binding_payload);
+			summary += ",index_state=" + index_binding_payload_summary(payload.index_binding_payload);
+			summary += "}";
+			return summary;
+		};
+		text += ",l88_command_emission_boundary={descriptor_bind_calls=";
+		if (l88_label_entry.uniform_bind_calls.is_empty()) {
+			text += "none";
+		} else {
+			text += "[";
+			for (uint32_t i = 0; i < l88_label_entry.uniform_bind_calls.size(); i++) {
+				if (i > 0) {
+					text += ",";
+				}
+				text += uniform_bind_call_summary(l88_label_entry.uniform_bind_calls[i]);
+			}
+			text += "]";
+		}
+		text += ",first_vertex_bind_payload=" + vertex_binding_payload_summary(l88_label_entry.first_vertex_binding_payload);
+		text += ",first_index_bind_payload=" + index_binding_payload_summary(l88_label_entry.first_index_binding_payload);
+		text += ",first_draw_indexed_consumer=" + draw_indexed_consumption_summary(l88_label_entry.first_draw_indexed_consumption);
+		text += "}";
 	}
 	text += ",previous=";
 	if (target_scope_index > 0) {

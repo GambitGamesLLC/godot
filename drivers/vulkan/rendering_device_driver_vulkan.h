@@ -636,6 +636,47 @@ private:
 		bool all_sets_match_declared_set_index = true;
 	};
 
+	struct DebugUniformBindCallPayload {
+		uint64_t serial = 0;
+		uint32_t first_set_index = 0;
+		uint32_t set_count = 0;
+		LocalVector<uint32_t> set_indices;
+		LocalVector<uint64_t> descriptor_set_handles;
+	};
+
+	struct DebugVertexBindingPayload {
+		bool valid = false;
+		uint64_t serial = 0;
+		LocalVector<uint64_t> buffer_ids;
+		LocalVector<uint64_t> offsets;
+	};
+
+	struct DebugIndexBindingPayload {
+		bool valid = false;
+		uint64_t serial = 0;
+		uint64_t buffer_id = 0;
+		uint64_t offset = 0;
+		IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
+	};
+
+	struct DebugDrawIndexedConsumptionPayload {
+		bool valid = false;
+		uint64_t serial = 0;
+		uint64_t last_uniform_bind_serial = 0;
+		uint64_t last_vertex_bind_serial = 0;
+		uint64_t last_index_bind_serial = 0;
+		uint32_t index_count = 0;
+		uint32_t instance_count = 0;
+		uint32_t first_index = 0;
+		int32_t vertex_offset = 0;
+		uint32_t first_instance = 0;
+		DebugUniformBindingProvenance uniform_bind_provenance;
+		LocalVector<uint32_t> descriptor_set_indices;
+		LocalVector<uint64_t> descriptor_set_handles;
+		DebugVertexBindingPayload vertex_binding_payload;
+		DebugIndexBindingPayload index_binding_payload;
+	};
+
 	struct DebugLabelEntry {
 		String label;
 		String operation_tag;
@@ -698,7 +739,11 @@ private:
 		uint64_t first_uniform_bind_serial = 0;
 		DebugCommandStateSnapshot first_uniform_bind_before_state;
 		DebugUniformBindingProvenance first_uniform_bind_provenance;
+		LocalVector<DebugUniformBindCallPayload> uniform_bind_calls;
 		uint64_t last_uniform_bind_serial = 0;
+		DebugVertexBindingPayload first_vertex_binding_payload;
+		DebugIndexBindingPayload first_index_binding_payload;
+		DebugDrawIndexedConsumptionPayload first_draw_indexed_consumption;
 		uint64_t first_draw_backend_command_serial = 0;
 		uint64_t last_draw_backend_command_serial = 0;
 		uint64_t first_render_pass_end_serial = 0;
@@ -789,9 +834,18 @@ private:
 		bool debug_render_pipeline_bound = false;
 		uint64_t debug_bound_render_pipeline_handle = 0;
 		DebugPipelineBindingProvenance debug_bound_render_pipeline_provenance;
+		LocalVector<uint64_t> debug_bound_descriptor_set_handles;
+		DebugUniformBindingProvenance debug_last_uniform_bind_provenance;
+		uint64_t debug_last_uniform_bind_serial = 0;
 		uint32_t debug_vertex_binding_count = 0;
+		LocalVector<uint64_t> debug_bound_vertex_buffer_ids;
+		LocalVector<uint64_t> debug_bound_vertex_buffer_offsets;
+		uint64_t debug_last_vertex_bind_serial = 0;
 		bool debug_index_buffer_bound = false;
 		IndexBufferFormat debug_index_format = INDEX_BUFFER_FORMAT_UINT16;
+		uint64_t debug_bound_index_buffer_id = 0;
+		uint64_t debug_bound_index_buffer_offset = 0;
+		uint64_t debug_last_index_bind_serial = 0;
 		bool debug_blend_constants_set = false;
 		float debug_blend_constants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		uint64_t debug_blend_constants_hash = 0;

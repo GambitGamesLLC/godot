@@ -6627,3 +6627,172 @@ The repaired RD marker finally answers the previously blocked driver-facing ques
 **Next Slice:** none for this QA bead. The requested QA rerun package is complete and the previously blocked RD create-fingerprint question is now answered with concrete values.
 
 **Blockers/Decisions:** No access blocker. No human decision needed. This closes bead `oc-4nc2` because the exact three-case QA rerun completed on the refreshed runtime, the outer crash identity stayed locked, and the repaired RD marker proved the divergence survives through `RenderingDevice::render_pipeline_create(...)` rather than collapsing to only a recycled process-local RID number.
+
+### Task 160: Audit the refreshed first-L88 RD create fingerprint divergence and classify the next seam
+
+**Bead ID:** `oc-tvbr`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-tvbr` at start and continue the already-approved active plan from Task 159's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Audit the refreshed three-case QA package at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`. Confirm whether baseline vs specialization-only vs vertex-input-only truly diverge through `RenderingDevice::render_pipeline_create(...)`, whether the repeated renderer/render-pipeline RID is only process-local recycling rather than canonicalization, and what the next honest seam/slice should be now that driver-facing divergence is proven. Update this plan with concrete audit findings, cite the decisive artifacts, and close bead `oc-tvbr` with a clear reason if complete. Do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the refreshed three-case QA package directly and confirmed the earlier reading is honest. Decisive artifact set: root comparison files `rd_create_fingerprint_summary.tsv`, `rd_create_fingerprint_compare.txt`, and `outer_crash_identity.json` under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`, plus the per-case `marker_lines.json` files for `baseline/`, `specialization_only/`, and `vertex_input_only/`. Those markers show the outer crash identity stayed locked in all three fresh launches (`submit_serial=9`, `fence_wait_error submit_serial=9`, late tail still includes `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`), while the repaired RD marker emitted cleanly with fully interpolated values in every case.
+
+The divergence absolutely survives through `RenderingDevice::render_pipeline_create(...)`; it is not just a request-layer difference. Baseline vs specialization-only diverge at the RD create marker on `pipeline_hash` (`0xf0088ae32` vs `0xb043b3f40`), `specialization_constant_0` (`0x0` vs `0x2`), `driver_vertex_format` (`129465181406848` vs `124487784072832`), `driver_render_pass_id` (`129464526631624` vs `124487129297608`), and `shader_driver_id` (`129465197113600` vs `124487799779584`) while keeping `vertex_format_id=2`. Baseline vs vertex-input-only diverge on `pipeline_hash` (`0xf0088ae32` vs `0x2b2ae760`), `vertex_format_id` (`2` vs `3`), `driver_vertex_format` (`129465181406848` vs `138564538403800`), `driver_render_pass_id` (`129464526631624` vs `138563884610248`), and `shader_driver_id` (`129465197113600` vs `138564555092224`) while keeping `specialization_constant_0=0x0`. All three cases still report the same numeric `allocated_render_pipeline_rid=11343008628747` and `create_ordinal=12`, but at this point that sameness is only a process-local allocation/order pattern across separate fresh launches, not evidence of canonicalization before RID allocation.
+
+The repeated renderer/render-pipeline RID is therefore best read as process-local recycling / stable first-match allocation order rather than a shared downstream identity. The source still supports that reading: `PipelineHashMapRD` stores realized pipelines in `RBMap<uint32_t, RID> hash_map` keyed by the supplied request hash in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/pipeline_hash_map_rd.h`, and `RenderingDevice::render_pipeline_create(...)` allocates a fresh RID with `render_pipeline_owner.make_rid(pipeline)` in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`. Given the three distinct request hashes already observed and the now-distinct RD create fingerprints, the cross-run numeric RID match is no longer an honest place to claim convergence.
+
+Audit verdict: Task 159's refreshed QA package is complete and truthful. Specialization-only and vertex-input-only are both demoted as first-cause candidates on this locked lane because each perturbation survives through the driver-facing create fingerprint while the same outer crash envelope persists. The next honest seam/slice is downstream of `RenderingDevice::render_pipeline_create(...)` itself: add default-off provenance tracing on the first-L88 post-create / driver-pipeline ownership path (the earliest stable identity after the diverging RD create fingerprint, before or at the first bound/consumed pipeline path used for execution) and rerun only the same three approved cases. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+---
+
+### Task 161: Classify first-L88 post-create / driver-pipeline ownership provenance downstream of `RenderingDevice::render_pipeline_create(...)` at failing `submit_serial=9`
+
+**Bead ID:** `oc-fw0s`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-fw0s` at start and continue the already-approved active plan from Task 160's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Add default-off provenance tracing on the first-L88 post-create / driver-pipeline ownership path downstream of `RenderingDevice::render_pipeline_create(...)` — the earliest stable identity after the diverging RD create fingerprint, before or at the first bound/consumed pipeline path used for execution. Then rerun only the same three approved cases (`baseline`, `specialization_only`, `vertex_input_only`), preserve the same outer crash identity checks, write durable artifact notes, update this plan with concrete findings, and close bead `oc-fw0s` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_post_create_provenance_qa.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrow default-off post-create provenance seam without widening into a fix. The implementation kept the existing first-L88 `render_pipeline_create(...)` trace gate, extended that RD marker with `driver_pipeline_id`, and armed a second marker at `RenderingDevice::draw_list_bind_render_pipeline()` to record the create→bind ownership handoff for the same targeted pipeline. The new marker emits `created_render_pipeline_rid`, `bound_render_pipeline_rid`, `created_driver_pipeline_id`, `bound_driver_pipeline_id`, `created_shader_driver_id`, `bound_shader_driver_id`, and booleans proving whether the bind path still points at the exact pipeline object created earlier in that same run. Cleanup disarm was also added in `renderer_canvas_render_rd.cpp` so the one-shot trace does not leak beyond the targeted lane.
+
+Rebuilt the source editor and reran only the same approved three fresh-launch cases with `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_post_create_provenance_qa.py`, writing durable artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/`. The decisive summaries are `post_create_provenance_summary.tsv`, `post_create_provenance_compare.txt`, `runtime_binary_proof.txt`, and per-case `marker_lines.json`. All three runs preserved the same outer crash identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`). The process-local render-pipeline RID still recycled numerically in every fresh launch (`11343008628747`), but the backend-owned pipeline identity still diverged per case and stayed divergent through first bind/consumption: baseline `driver_pipeline_id=123590973675520`, specialization-only `131215950987168`, vertex-input-only `137637126010544`. In every run, `render_pipeline_rid_matches_create=true`, `driver_pipeline_id_matches_create=true`, and `shader_driver_id_matches_create=true`, which proves the ownership path is internally consistent inside the run while still preserving the per-case divergence downstream of `RenderingDevice::render_pipeline_create(...)`.
+
+This closes bead `oc-fw0s`: the requested post-create / driver-pipeline provenance tracing was added, the exact three approved cases were rerun, the outer crash checks stayed locked, and the new seam shows there is still no honest convergence before the first bound/consumed pipeline path. Per the task lock, this work does **not** reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and it does not widen into a fix.
+
+---
+
+### Task 162: Audit first-L88 post-create / driver-pipeline ownership provenance divergence and classify the next seam downstream of first bind/consume at failing `submit_serial=9`
+
+**Bead ID:** `oc-vg5r`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-vg5r` at start and continue the already-approved active plan from Task 161's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Audit the refreshed three-case post-create provenance package at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/`. Confirm whether baseline vs specialization-only vs vertex-input-only still diverge on the earliest backend-owned identity after the recycled render-pipeline RID, whether the create→first-bind ownership path is internally exact within each run, and what the next honest seam/slice should be now that divergence is proven through first bind/consume. Update this plan with concrete audit findings, cite the decisive artifacts, and close bead `oc-vg5r` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the refreshed three-case post-create provenance package directly and confirmed the new QA reading is honest. Decisive artifacts: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/post_create_provenance_summary.tsv`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/post_create_provenance_compare.txt`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/outer_crash_identity.json`, plus the per-case `marker_lines.json` files under `baseline/`, `specialization_only/`, and `vertex_input_only/`. Those markers show the same recycled process-local render-pipeline RID in all three fresh launches (`compiled_pipeline_rid`, `get_pipeline_rid`, `created_pipeline_rid`, and `bound_pipeline_rid` all `11343008628747`), but the earliest backend-owned identity after that RID still diverges per case and stays divergent through the first bind/consume path: baseline `prov_created_driver_pipeline_id=prov_bound_driver_pipeline_id=123590973675520`, specialization-only `131215950987168`, and vertex-input-only `137637126010544`. The same is true one rung up for shader/vertex-format provenance: baseline stays on `prov_created_shader_driver_id=prov_bound_shader_driver_id=123589816070400`, specialization-only on `131214456762624`, vertex-input-only on `137635499979008`, while specialization-only preserves `prov_specialization_constant_0=0x2` and vertex-input-only preserves `prov_vertex_format_id=3`.
+
+The create→first-bind ownership path is also internally exact within each run. In every case the new provenance booleans stay true: `prov_render_pipeline_rid_matches_create=true`, `prov_driver_pipeline_id_matches_create=true`, and `prov_shader_driver_id_matches_create=true`. So the same run that created the targeted first-L88 pipeline is the run that first bound/consumed that exact driver-pipeline object; there is no honest convergence at the recycled RID, no swap to a different bound driver pipeline before first consume, and no evidence that specialization-only or vertex-input-only collapsed away before execution ownership. The outer crash identity also remains locked in all three cases (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)`, `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`).
+
+Audit verdict: this package is complete and truthful, and it demotes the remaining “maybe they already reconverged before first use” reading. Now that divergence is proven through first bind/consume, the next honest seam is downstream of ownership provenance and into the first actual execution payload that uses that bound L88 pipeline on the locked lane: the narrowest next slice should trace the first kept clipped preserve-rect draw/consume packet itself — the immediate driver-facing execution bundle after `draw_list_bind_render_pipeline()` (for example the paired descriptor/uniform, vertex/index binding, and first draw submission shape for that exact first-L88 batch) — so QA can ask whether divergence still survives into the first real executed packet or whether convergence first appears only at that execution boundary. Per the task lock, this does not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and it does not widen into a fix.
+
+---
+
+### Task 163: Trace the first executed L88 draw/consume packet downstream of `draw_list_bind_render_pipeline()` at failing `submit_serial=9`
+
+**Bead ID:** `oc-vt8r`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-vt8r` at start and continue the already-approved active plan from Task 162's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Trace the first executed L88 draw/consume packet downstream of `draw_list_bind_render_pipeline()` on the failing `submit_serial=9` lane — the immediate driver-facing execution bundle after first bind for that exact first-L88 batch. Keep the slice narrow and execution-focused: paired descriptor/uniform state, vertex/index binding state, and first draw submission shape for the exact first-L88 packet. Rerun only the same three approved cases (`baseline`, `specialization_only`, `vertex_input_only`), preserve the same outer crash identity checks, write durable artifact notes, update this plan with concrete findings, and close bead `oc-vt8r` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_execution_packet_qa.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/`
+
+**Status:** ✅ Complete
+
+**Results:** Added a narrow default-off execution-packet seam downstream of the already-proven first bind/consume provenance without widening into a fix. The existing first-L88 `render_pipeline_create(...)` and post-create ownership markers now arm a one-shot execution trace that fires on the very first `RenderingDevice::draw_list_draw(...)` using that exact bound L88 pipeline. The new `temp_diag_first_clipped_preserve_rect_execution_packet=` marker records the immediate driver-facing submission bundle for that first packet: descriptor/uniform state (`set_count`, expected/dirty masks, pre-draw bound state, batched bind call count, and the exact uniform-set RID/driver-ID pairs for sets `0`, `2`, and `3`), vertex binding state (whether the packet came from direct vertex-buffer binds or a vertex-array RID, plus the exact bound driver buffer IDs and offsets), index binding state, and the first draw submission shape (`draw_indexed`, `instances=27`, `to_draw=6`, `draw_count_before=0`). To keep the vertex slice honest for the `vertex_input_only` lane, `draw_list_bind_vertex_array()` / `draw_list_bind_vertex_buffers_format()` now preserve the currently bound vertex-buffer IDs and offsets in draw-list state so the execution marker can report the true binding payload even when the path uses direct binds instead of a cached vertex-array RID. Cleanup disarm was also extended in `renderer_canvas_render_rd.cpp` so the one-shot execution trace cannot leak beyond the targeted first-L88 batch.
+
+Rebuilt the source editor, verified the runtime marker with `strings`, and reran only the same approved three fresh-launch cases with `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_execution_packet_qa.py`, writing durable artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/`. The decisive summaries are `execution_packet_summary.tsv`, `execution_packet_compare.txt`, `runtime_binary_proof.txt`, and the per-case `marker_lines.json` files. All three runs preserved the same outer crash identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`). The first execution packet still preserves the same case split seen upstream: baseline `exec_driver_pipeline_id=127052114409296`, specialization-only `124354939642144`, vertex-input-only `135993698385776`; baseline / specialization-only keep `exec_vertex_format_id=2` while vertex-input-only keeps `exec_vertex_format_id=3`; specialization-only keeps `exec_specialization_constant_0=0x2`; and the vertex-input-only packet now proves the exact direct vertex-binding payload diverges too (`buffer_bind_count=2` with duplicated binding payload `[{binding=0,driver_buffer_id=135991731162496,offset=0},{binding=1,driver_buffer_id=135991731162496,offset=0}]` versus one bound vertex buffer in baseline / specialization-only). What *does* converge at this seam is the packet shape around those identities: all three cases reach the same descriptor topology (`expected_mask=dirty_mask=0xd`, sets `0/2/3`, two batched descriptor bind calls, all three sets initially unbound), the same indexed draw submission (`index_count=6`, `instances=27`, `to_draw=6`), and the same outer crash envelope.
+
+This closes bead `oc-vt8r`: the requested first executed L88 draw/consume packet was traced, only the exact three approved cases were rerun, the outer crash checks stayed locked, and the durable artifacts now show that divergence still survives into the first real executed packet itself rather than collapsing before execution. Per the task lock, this work does **not** reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and it does not widen into a fix.
+
+---
+
+### Task 164: Audit first-L88 execution-packet divergence and classify the next execution-state seam inside the same packet at failing `submit_serial=9`
+
+**Bead ID:** `oc-ins8`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-ins8` at start and continue the already-approved active plan from Task 163's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Audit the refreshed three-case execution-packet package at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/`. Confirm whether baseline vs specialization-only vs vertex_input_only still diverge inside the first real executed L88 packet, what execution-state fields truly converge versus still diverge, and what the next honest seam/slice should be inside that same packet now that convergence does not appear before first execution. Update this plan with concrete audit findings, cite the decisive artifacts, and close bead `oc-ins8` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the refreshed three-case execution-packet package directly and confirmed the new QA reading is honest. Decisive artifacts: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/execution_packet_summary.tsv`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/execution_packet_compare.txt`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/outer_crash_identity.json`, plus the per-case `marker_lines.json` files under `baseline/`, `specialization_only/`, and `vertex_input_only/`.
+
+Those artifacts show there is still no honest convergence before or at the first real executed L88 packet. The same per-case divergence proven upstream survives into the exact first `draw_list_draw(...)` execution bundle itself: baseline keeps `exec_driver_pipeline_id=127052114409296`, specialization-only keeps `124354939642144`, and vertex-input-only keeps `135993698385776`; the bound shader-driver IDs also stay per-case (`127050888622336`, `124353783378176`, `135992406552832` respectively); specialization-only still preserves `exec_specialization_constant_0=0x2`; and vertex-input-only still preserves both `exec_vertex_format_id=3` and the widened direct vertex-binding payload (`exec_vertex_buffer_bind_count=2` with duplicated bindings `0` and `1` to the same driver buffer ID) while baseline and specialization-only stay on `exec_vertex_format_id=2` and `exec_vertex_buffer_bind_count=1`. The index-side backend object also stays divergent per case (`exec_index_driver_id` differs in all three runs) even though the process-local `exec_render_pipeline_rid=11343008628747` and `exec_index_array_rid=665719930881` recycle numerically across fresh launches.
+
+What truly converges at this execution seam is only the packet topology and draw shape, not the bound backend-owned payload identities. In all three runs the first execution marker emits and the outer crash envelope stays locked (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)`, `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`). Inside the packet, the descriptor topology is exact-match across cases: `exec_descriptor_set_count=4`, `exec_descriptor_expected_set_count=3`, `exec_descriptor_dirty_set_count=3`, `exec_descriptor_expected_mask=0xd`, `exec_descriptor_bound_mask=0x0`, `exec_descriptor_dirty_mask=0xd`, `exec_descriptor_prepare_count=0`, `exec_descriptor_bind_call_count=2`, `exec_descriptor_bind_mode=batched`, and the same set slots `0`, `2`, and `3` are used with matching expected/uniform formats. The first draw submission shape also fully converges: `exec_draw_kind=draw_indexed`, `exec_use_indices=true`, `exec_index_count=6`, `exec_instances=27`, `exec_to_draw=6`, `exec_draw_count_before=0`, `exec_procedural_vertices=0`, `exec_index_format=uint16`, and `exec_index_offset_bytes=0`.
+
+Audit verdict: the package is complete and truthful, and it demotes any remaining “maybe the three lanes had already collapsed by first execution” reading. The next honest seam should stay inside this exact first execution packet and narrow from packet topology to packet payload identity consumption: specifically, trace the exact per-set descriptor bind payload and the exact vertex/index bind-to-draw handoff for this same first L88 packet — i.e. whether the first actual descriptor-set driver IDs, vertex-buffer driver IDs/offset tuples, index-buffer driver ID, and first `draw_indexed` consumer boundary still stay case-divergent at the point they are handed to the backend command recorder, or whether convergence appears only one rung later at the exact bound-resource command emission boundary. Per the task lock, this does not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and it does not widen into a fix.
+
+---
+
+### Task 165: Trace first-L88 bound-resource command-emission boundary inside the first executed packet at failing `submit_serial=9`
+
+**Bead ID:** `oc-ij99`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-ij99` at start and continue the already-approved active plan from Task 164's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Stay inside the same first executed L88 packet and trace the exact bound-resource command-emission boundary: the per-set descriptor bind payload plus the vertex/index bind-to-draw handoff for the first `draw_indexed` consumer path on failing `submit_serial=9`. Determine whether the first actual descriptor-set driver IDs, vertex-buffer driver ID/offset tuples, index-buffer driver ID, and first `draw_indexed` consumer boundary still stay case-divergent at the point they are handed to backend command recording, or whether convergence first appears there. Rerun only the same three approved cases (`baseline`, `specialization_only`, `vertex_input_only`), preserve the same outer crash identity checks, write durable artifact notes, update this plan with concrete findings, and close bead `oc-ij99` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_command_emission_boundary_qa.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/postprocess_command_emission_boundary.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new Vulkan-driver `l88_command_emission_boundary=` marker that records the first backend descriptor-set bind payload(s), the first vertex/index bind payloads, and the first `draw_indexed` consumer state for the locked first executed L88 packet. Rebuilt the local source binary with `scons -j8 platform=linuxbsd target=editor dev_build=yes`, reran only `baseline`, `specialization_only`, and `vertex_input_only`, and preserved the same outer crash identity in all three cases (`submit_serial=9`, same `Tonemap (L87)` → `Command Graph (L88)` tail, later `BLIT_PASS`, exit `-6`). Durable artifacts live under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/` with the comparison summarized in `command_emission_boundary_compare_v2.txt` and `command_emission_boundary_results.json`.
+
+Concrete finding: convergence still does **not** first appear at backend command recording. The first actual descriptor-set driver IDs remain case-divergent across all three lanes at the emitted bind payload itself; `specialization_only` already diverges there even while keeping the same one-binding vertex shape as `baseline`. The first vertex bind payload still diverges (`baseline` / `specialization_only`: one binding at offset `2097152`; `vertex_input_only`: two mirrored bindings, both at offset `2097152`), the first index-buffer backend driver ID still diverges while format/offset stay stable (`uint16`, `0`), and the first `draw_indexed` consumer boundary (`serial=18`) consumes those same case-divergent descriptor / vertex / index payloads directly. The carried set-1 descriptor-set driver ID present at the draw consumer boundary also remains case-divergent. That keeps the locked crash seam upstream of any hypothetical convergence inside backend command recording.

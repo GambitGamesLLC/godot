@@ -46,6 +46,8 @@
 
 void gdgs_first_l88_render_pipeline_create_trace_arm(uint32_t p_pipeline_hash, RID p_shader_rid, RD::FramebufferFormatID p_framebuffer_format_id, RD::VertexFormatID p_vertex_format_id, RD::RenderPrimitive p_render_primitive, uint32_t p_render_pass, uint32_t p_specialization_constant_0, int p_batch_index, int p_match_ordinal);
 void gdgs_first_l88_render_pipeline_create_trace_disarm();
+void gdgs_first_l88_post_create_trace_disarm();
+void gdgs_first_l88_execution_packet_trace_disarm();
 
 namespace {
 bool gdgs_debug_ui_pass_origin_enabled() {
@@ -3226,6 +3228,8 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 	gdgs_temp_diag_first_clipped_preserve_rect_prereq_logged = false;
 	gdgs_canvas_pipeline_realization_trace_disarm(0);
 	gdgs_first_l88_render_pipeline_create_trace_disarm();
+	gdgs_first_l88_post_create_trace_disarm();
+	gdgs_first_l88_execution_packet_trace_disarm();
 
 	state.current_batch_index = 0;
 	state.canvas_instance_batches.clear();

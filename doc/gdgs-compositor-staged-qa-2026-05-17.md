@@ -6018,3 +6018,181 @@ In other words, removing the lazy shared-view debug gate fixes the Tonemap-side 
 Task 140's conclusion was real: the lazy shared-view debug gate was the honest reason the overwrite-off failing lane carried the wrong Tonemap-side recipe upstream. But Task 141 shows that this recipe divergence is **not** the device-loss root cause by itself. Once the gate is removed, the lane matches the healthy `persistent_root_sampled_shared` / `LOAD` Tonemap path and still crashes at the same `submit_serial=9` fence-wait failure.
 
 That means the next investigation fork should treat the lazy shared-view gate as a recipe confounder that is now eliminated, not as the surviving crash trigger.
+
+## 2026-05-24 — first-L88 post-create / driver-pipeline ownership provenance QA
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/`
+- harness: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_post_create_provenance_qa.py`
+- binary proof: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/runtime_binary_proof.txt`
+- summary: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/post_create_provenance_summary.tsv`
+- comparison: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/post_create_provenance_compare.txt`
+
+### What changed in the instrumentation
+
+- `RenderingDevice::render_pipeline_create(...)` now emits `driver_pipeline_id` alongside the existing first-L88 RD create fingerprint.
+- The same first-L88 target now arms a second default-off marker at `draw_list_bind_render_pipeline()`:
+  - `temp_diag_first_clipped_preserve_rect_post_create_provenance=`
+- That second marker records the create→bind ownership handoff for the same pipeline:
+  - created vs bound render-pipeline RID
+  - created vs bound driver-pipeline ID
+  - created vs bound shader-driver ID
+  - carried vertex-format ID and specialization constant `0`
+
+### What the three approved reruns showed
+
+Across `baseline`, `specialization_only`, and `vertex_input_only`:
+
+- the outer crash identity stayed locked:
+  - `submit_serial=9` present
+  - `fence_wait_error submit_serial=9` present
+  - tail still includes `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+  - later breadcrumb still reaches `BLIT_PASS`
+  - exit status stays `-6`
+- the process-local renderer RID still recycles numerically in all three fresh launches:
+  - `allocated_render_pipeline_rid=11343008628747`
+  - `created_render_pipeline_rid=11343008628747`
+  - `bound_render_pipeline_rid=11343008628747`
+- but the earliest backend-owned identity after that RID does **not** collapse:
+  - baseline: `driver_pipeline_id=123590973675520`
+  - specialization-only: `driver_pipeline_id=131215950987168`
+  - vertex-input-only: `driver_pipeline_id=137637126010544`
+- in every case, the new bind marker proves the ownership handoff is internally consistent inside that run:
+  - `render_pipeline_rid_matches_create=true`
+  - `driver_pipeline_id_matches_create=true`
+  - `shader_driver_id_matches_create=true`
+
+### Exact conclusion
+
+The new provenance seam answers the post-create question cleanly: the repeated `RID` is only a process-local recycled handle, while the first bound/consumed backend-owned pipeline identity still diverges per case and preserves the same case-specific distinctions already seen at RD create time.
+
+So the locked crash lane now stays divergent through:
+
+1. request hash / selector recipe
+2. `RenderingDevice::render_pipeline_create(...)`
+3. the first bound driver-pipeline ownership path at `draw_list_bind_render_pipeline()`
+
+That means there is still no honest convergence point before first consumption of the graphics pipeline on this seam.
+
+## 2026-05-24 — first-L88 execution-packet QA
+
+- artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/`
+- harness: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_execution_packet_qa.py`
+- binary proof: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/runtime_binary_proof.txt`
+- summary: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/execution_packet_summary.tsv`
+- comparison: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/execution_packet_compare.txt`
+
+### What changed in the instrumentation
+
+- The first-L88 post-create / first-bind provenance seam now arms a one-shot execution marker at the first `RenderingDevice::draw_list_draw(...)` that uses that exact bound pipeline:
+  - `temp_diag_first_clipped_preserve_rect_execution_packet=`
+- That marker records the immediate submission bundle for the first executed L88 packet:
+  - descriptor / uniform state (`set_count`, expected/dirty masks, batched bind count, and exact uniform-set RID/driver-ID pairs)
+  - vertex binding state (direct-bind vs vertex-array source, bound driver buffer IDs, and offsets)
+  - index binding state
+  - first draw submission shape (`draw_indexed`, `instances`, `to_draw`, `draw_count_before`)
+- To keep the vertex slice honest on the direct-bind path, draw-list state now preserves the currently bound vertex-buffer IDs and offsets even when the packet does not come from a cached vertex-array RID.
+
+### What the three approved reruns showed
+
+Across `baseline`, `specialization_only`, and `vertex_input_only`:
+
+- the outer crash identity stayed locked:
+  - `submit_serial=9` present
+  - `fence_wait_error submit_serial=9` present
+  - tail still includes `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+  - later breadcrumb still reaches `BLIT_PASS`
+  - exit status stays `-6`
+- the first real executed packet still carries the same per-case identity split already seen upstream:
+  - baseline: `exec_driver_pipeline_id=127052114409296`, `exec_vertex_format_id=2`, `exec_specialization_constant_0=0x0`
+  - specialization-only: `exec_driver_pipeline_id=124354939642144`, `exec_vertex_format_id=2`, `exec_specialization_constant_0=0x2`
+  - vertex-input-only: `exec_driver_pipeline_id=135993698385776`, `exec_vertex_format_id=3`, `exec_specialization_constant_0=0x0`
+- the descriptor topology converges even while the identities differ:
+  - `expected_mask=dirty_mask=0xd`
+  - sets `0`, `2`, and `3` are the expected / initially dirty descriptor sets
+  - descriptor binding stays batched with `descriptor_bind_call_count=2`
+- the draw submission shape also converges:
+  - `draw_indexed`
+  - `index_count=6`
+  - `instances=27`
+  - `to_draw=6`
+  - `draw_count_before=0`
+- the vertex-input-only case now proves the direct vertex-binding payload itself diverges:
+  - baseline / specialization-only: `buffer_bind_count=1`
+  - vertex-input-only: `buffer_bind_count=2`
+  - both vertex-input-only bindings point at the same driver buffer ID with offset `0`, i.e. duplicated direct-bind payload for bindings `0` and `1`
+
+### Exact conclusion
+
+The first honest execution-packet seam still does **not** show convergence before the crash. The same case split survives all the way into the first real executed L88 draw packet: backend pipeline identity still differs, specialization-only still carries its specialization bit, and vertex-input-only still carries both its distinct vertex format and its duplicated direct vertex-buffer bind payload.
+
+What *does* converge by this seam is the higher-level packet shape around those identities: all three cases bind the same descriptor-set topology, issue the same indexed draw shape, and then die inside the same locked `submit_serial=9` fence-wait crash envelope.
+
+## 2026-05-24 audit follow-up — Task 164 (`oc-ins8`)
+
+Auditor re-checked the same package directly rather than widening the lane.
+
+Decisive artifacts:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/execution_packet_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/execution_packet_compare.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/outer_crash_identity.json`
+- per-case `marker_lines.json` files under `baseline/`, `specialization_only/`, and `vertex_input_only/`
+
+Audit findings:
+
+- Divergence still survives *inside* the first real executed packet, not just upstream of it.
+- Truly converged fields are only the execution topology / shape:
+  - descriptor topology: `set_count=4`, `expected_set_count=3`, `dirty_set_count=3`, `expected_mask=0xd`, `bound_mask=0x0`, `dirty_mask=0xd`, `descriptor_bind_call_count=2`, `descriptor_bind_mode=batched`, same active slots `0/2/3`
+  - draw shape: `draw_indexed`, `index_count=6`, `instances=27`, `to_draw=6`, `draw_count_before=0`, `index_format=uint16`, `index_offset_bytes=0`
+  - outer crash envelope: same `submit_serial=9` -> `fence_wait_error submit_serial=9` -> later `BLIT_PASS`, exit `-6`
+- Still-divergent execution payload fields are backend-owned resource identities and lane-specific packet contents:
+  - `exec_driver_pipeline_id`
+  - `exec_shader_driver_id`
+  - `exec_specialization_constant_0` (specialization-only only)
+  - `exec_vertex_format_id`
+  - `exec_vertex_buffer_bind_count` plus the actual bound driver-buffer payload
+  - `exec_index_driver_id`
+  - per-set `uniform_set_driver_id` values, even though the slot topology matches
+
+The honest next slice therefore stays inside this same packet: inspect the exact resource-consumption boundary where those already-divergent descriptor-set / vertex-buffer / index-buffer identities are handed into backend command emission for the first `draw_indexed` packet, rather than reopening upstream pipeline-selection theories or widening into a fix.
+
+## 2026-05-24 — First L88 backend command-emission boundary (submit_serial=9, source build)
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/`
+
+Key files:
+- `command_emission_boundary_compare_v2.txt`
+- `command_emission_boundary_results.json`
+- `runtime_binary_proof.txt`
+- per-case `stdout.log`, `stderr.log`, `marker_lines.json`, `exact_command.txt`
+
+### Locked cases rerun
+
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+
+All three preserved the same outer crash identity:
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- process exit still `-6`
+
+### Backend command-emission finding
+
+The new Vulkan-driver marker `l88_command_emission_boundary=` shows that convergence still does **not** appear at backend command recording. The first bound-resource payloads and the first `draw_indexed` consumer state remain case-divergent when the backend records them.
+
+Observed boundary facts:
+- descriptor binds stay split into the same two calls in every case (`set 0`, then `sets 2+3`), but the actual descriptor-set driver IDs differ per case
+- `specialization_only` already diverges at the first descriptor-set driver IDs even though its vertex-format shape still matches `baseline`
+- `vertex_input_only` diverges at the descriptor-set driver IDs **and** changes the first vertex bind shape from one binding to two mirrored bindings; both bindings carry offset `2097152`
+- index-buffer format/offset stay stable (`uint16`, offset `0`), but the actual backend index-buffer driver ID still differs per case
+- the first `draw_indexed` consumer boundary (`serial=18`) consumes those same case-divergent descriptor / vertex / index payloads directly; no convergence appears at the handoff into `vkCmdDrawIndexed`
+- the consumer still sees a carried set-1 descriptor-set driver ID in addition to the newly emitted set `0`, `2`, and `3` payloads, and that carried set-1 driver ID also differs per case
+
+### Practical conclusion
+
+The locked crash seam remains upstream of any hypothetical convergence inside backend command recording. By the time the first failing L88 packet reaches the actual descriptor-bind / vertex-bind / index-bind / `draw_indexed` emission boundary, the three approved cases are still materially different in the concrete backend resources being recorded.

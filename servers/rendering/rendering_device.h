@@ -1460,6 +1460,9 @@ private:
 			uint32_t pipeline_shader_layout_hash = 0;
 			uint32_t pipeline_push_constant_size = 0;
 			RID vertex_array;
+			Vector<RDD::BufferID> vertex_buffers;
+			Vector<uint64_t> vertex_buffer_offsets;
+			bool vertex_buffers_bound_direct = false;
 			RID index_array;
 			uint32_t draw_count = 0;
 		} state;
