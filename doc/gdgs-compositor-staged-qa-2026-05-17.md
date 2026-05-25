@@ -6864,3 +6864,59 @@ This leaves a tighter component story than Task 174:
 ### Practical conclusion
 
 Within the approved Task 174/175 methodology, the locked L88 crash envelope is currently carried by the `bind_render_pipeline` **specialization-constant sub-recipe** at `serial=103`, not by the blend sub-recipe, and not by any independently isolated `serial=104` vertex-buffer fork. This is a recipe-component classification only; it does **not** reopen specialization-cache theory or widen into a fix.
+
+## 2026-05-25 — Task 176: isolate the exact first-L88 specialization-constant change that still carries the locked `submit_serial=9` crash envelope
+
+Artifact root reused again from Tasks 174-175:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-bind-sufficiency-matrix-vulkan-sourcebuild-20260525-170250/`
+
+Evidence consulted inside that root:
+
+- `notes.md`
+- `comparison.txt`
+- per-case `stdout.log` first-L88 `serial=103` pipeline-provenance payloads
+- per-case `stdout.log` neighboring-pass `specialization_delta` payloads
+
+No new engine instrumentation was added for this slice. I stayed inside the already-approved three-case matrix and only tightened the specialization-constant comparison that Task 175 had already isolated.
+
+### Exact specialization-constant contrast at `serial=103`
+
+The narrowest preserved contrast remains `baseline` vs `specialization_only` because both reruns keep the same outer crash identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)` -> `Command Graph (L88) (Draw)` -> later `BLIT_PASS`, exit `-6`) while also keeping the same first-L88 vertex-input side fixed:
+
+- `vertex_input_recipe_hash=0xaf2a1c78`
+- first `serial=104` vertex bind `binding_count=1`
+- same first-L88 singleton specialization shape: `count=1`, `type_mask=0x2`, `bool_count=0`, `int_count=1`, `float_count=0`, `id_hash=0xc5247e53`, `min_id=0`, `max_id=0`
+
+What changes is only the payload of that singleton specialization entry:
+
+- `baseline`
+  - `specialization_constant_hash=0x6273dcb1`
+  - `specialization_constant_value_hash=0xc5247e53`
+  - preview `[{id=0,type="int",bits="0x0",value=0}]`
+- `specialization_only`
+  - `specialization_constant_hash=0xbfcbce98`
+  - `specialization_constant_value_hash=0xa18293e9`
+  - preview `[{id=0,type="int",bits="0x2",value=2}]`
+
+The control case confirms that this is the exact specialization fork and not a hidden ID/count reshuffle:
+
+- `vertex_input_only` keeps the same specialization payload as `baseline`
+  - `specialization_constant_hash=0x6273dcb1`
+  - `specialization_constant_value_hash=0xc5247e53`
+  - preview `[{id=0,type="int",bits="0x0",value=0}]`
+- while changing only the first-L88 vertex-input recipe (`vertex_input_recipe_hash=0xb9920205`)
+
+### Narrowest exact carrier
+
+That makes the Task 176 seam stricter than Task 175:
+
+- it is **not** a change in specialization-constant count
+- it is **not** a change in the specialization constant ID set
+- it is **not** a change in specialization type mix (`int_count` stays `1`)
+- it is **not** a broader shape change across multiple specialization entries
+- it **is** the singleton `id=0` integer specialization payload changing from `0` to `2`
+
+### Practical conclusion
+
+Within the approved methodology, the exact first-L88 specialization-constant change that carries the locked crash envelope at failing `submit_serial=9` is the singleton `id=0` integer specialization value flipping from `0` to `2` while the rest of the specialization contract stays fixed. This remains a seam-classification result only; it does **not** reopen specialization-cache theory, request-hash theory, or CPU-side vertex-format-cache theory, and it does not widen into a fix.
