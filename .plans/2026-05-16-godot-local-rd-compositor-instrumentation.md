@@ -7018,3 +7018,30 @@ Within that gap, `serial=105` fully reconverges across `baseline`, `specializati
 The descriptor packets rebound at `106`/`107` also stay semantically converged across all three cases even though process-local driver handles and `resource_object_hash` values rotate: set `0` keeps `binding_signature_hash=0xd741e22d`, `buffer_realization_hash=0x94bc9dff`, `stable_resource_provenance_hash=0x41781106`; set `2` keeps `binding_signature_hash=0x7421fd0b`, `buffer_realization_hash=0xccee0b09`, `stable_resource_provenance_hash=0xbed89158`; set `3` keeps `binding_signature_hash=0x5fd84932`, `buffer_realization_hash=0xa9452f37`, `stable_resource_provenance_hash=0xe0e3b457`. The final `draw_indexed` consumer still reconverges on identical args at `serial=108` (`index_count=6`, `instance_count=27`, `first_index=0`, `vertex_offset=0`, `first_instance=0`).
 
 Conclusion for this slice: inside the post-bind / pre-draw-consumer window, the only surviving per-case differences are the already-owned pipeline-recipe split consumed at `serial=103` and the vertex-stream arity split consumed at `serial=104` (`binding_count=1` in `baseline` / `specialization_only`, `binding_count=2` in `vertex_input_only`). The later `bind_index_buffer` plus the `bind_render_uniform_sets` calls reconverge semantically before the still-converged `draw_indexed` consumer. This completes the requested seam without reopening request-hash, specialization-cache, or CPU-side vertex-format-cache questions and without widening into a fix.
+
+---
+
+### Task 174: Classify whether `bind_render_pipeline` or `bind_vertex_buffers` alone is sufficient to preserve the locked L88 crash envelope at failing `submit_serial=9`
+
+**Bead ID:** `oc-fe14`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-fe14` at start and continue the already-approved active plan from Task 173's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Isolate the two surviving early consumptive forks on the failing L88 packet — `bind_render_pipeline` at `serial=103` and `bind_vertex_buffers` at `serial=104` — and classify whether either one alone is sufficient to preserve the locked crash envelope, or whether the failure requires the combination. Prefer the narrowest comparison that keeps the same three-case methodology and preserved outer crash checks. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-fe14` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- bind-isolation instrumentation / analysis files as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the same approved three-case methodology without widening engine instrumentation, then reran only `baseline`, `specialization_only`, and `vertex_input_only` through `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_bind_sufficiency_matrix_qa.py`. Durable artifacts live at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-bind-sufficiency-matrix-vulkan-sourcebuild-20260525-170250/` with summary notes in `notes.md`, the classification logic in `comparison.txt`, a tabular rollup in `bind_sufficiency_summary.tsv`, and structured per-case captures in `results.json` / `marker_lines.json`.
+
+Concrete finding: the narrowest sufficiency proof is still the `baseline` vs `specialization_only` contrast. Both reruns preserved the same locked crash envelope (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)` -> `Command Graph (L88) (Draw)` -> later `BLIT_PASS`, exit `-6`) while keeping the first vertex-buffer consumer unchanged at `serial=104` with `binding_count=1` and the same first-L88 `vertex_input_recipe_hash=0xaf2a1c78`. The only surviving early consumptive fork in that contrast is the first L88 `bind_render_pipeline` at `serial=103`, where `baseline` carried `graphics_recipe_hash=0x92ea9d42` / `specialization_constant_hash=0x6273dcb1` and `specialization_only` carried `graphics_recipe_hash=0xf16ef2b6` / `specialization_constant_hash=0xbfcbce98`.
+
+Classification: `bind_render_pipeline` alone is sufficient to preserve the locked L88 crash envelope at failing `submit_serial=9`, so the failure does **not** require the combination of the `serial=103` pipeline fork plus the `serial=104` vertex-buffer fork. The approved three-case matrix still does not independently isolate a pure `bind_vertex_buffers`-only fork while holding the pipeline recipe at baseline, so this slice intentionally leaves `bind_vertex_buffers`-alone sufficiency unproven rather than widening into a new experiment. This completes the requested seam without reopening request-hash, specialization-cache, or CPU-side vertex-format-cache questions and without widening into a fix.

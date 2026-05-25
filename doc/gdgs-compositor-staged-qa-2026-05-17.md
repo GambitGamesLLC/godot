@@ -6749,3 +6749,64 @@ This closes the Task 172 question cleanly:
 - the earliest consumed **execution-recipe** split is the first L88 `bind_render_pipeline` at `serial=103`
 - the earliest consumed **draw-shape** split is the first L88 `bind_vertex_buffers` at `serial=104`
 - the final `draw_indexed` call still converges on the same user-visible draw arguments, so the fault seam remains earlier in the backend-bound recipe / stream shape than in the final draw-call argument tuple
+
+## 2026-05-25 — Task 174: first-L88 early-bind sufficiency matrix
+
+Fresh artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-bind-sufficiency-matrix-vulkan-sourcebuild-20260525-170250/`
+
+Key durable artifacts inside that root:
+
+- `notes.md`
+- `comparison.txt`
+- `results.json`
+- `bind_sufficiency_summary.tsv`
+- per-case `stdout.log` / `stderr.log` / `marker_lines.json`
+
+Rerun entrypoint used:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_bind_sufficiency_matrix_qa.py`
+
+### Outer crash identity stayed locked
+
+All three approved reruns preserved the same crash envelope:
+
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- exit status stayed `-6`
+
+### Narrow sufficiency proof for `bind_render_pipeline`
+
+The narrowest approved comparison is still `baseline` vs `specialization_only`.
+
+- both runs keep the first vertex bind unchanged at `serial=104`
+- both runs keep `binding_count=1` at that vertex-bind consumer
+- both runs keep the same first-L88 vertex-input recipe hash `0xaf2a1c78`
+- only the pipeline-owned recipe changes at `serial=103`
+  - `baseline`: `graphics_recipe_hash=0x92ea9d42`, `specialization_constant_hash=0x6273dcb1`
+  - `specialization_only`: `graphics_recipe_hash=0xf16ef2b6`, `specialization_constant_hash=0xbfcbce98`
+
+Because that single-fork comparison still preserves the exact locked crash envelope, `bind_render_pipeline` at `serial=103` is by itself sufficient to preserve the failing `submit_serial=9` lane.
+
+### What this says about the `bind_vertex_buffers` fork
+
+The third approved case still shows the combined packet split:
+
+- `vertex_input_only`: `graphics_recipe_hash=0x69a72955`, `vertex_input_recipe_hash=0xb9920205`, `specialization_constant_hash=0x6273dcb1`
+- the first vertex bind still lands at `serial=104`, but now with `binding_count=2`
+
+That confirms the combined `serial=103` + `serial=104` divergent packet also preserves the same crash envelope. But the approved three-case matrix does **not** independently isolate a pure `bind_vertex_buffers`-only fork while holding the `serial=103` pipeline recipe at baseline, so this slice intentionally does not overclaim that `bind_vertex_buffers` alone is sufficient.
+
+### Practical conclusion
+
+This closes Task 174 cleanly without widening the seam:
+
+- `bind_render_pipeline` alone is sufficient to preserve the locked L88 crash envelope
+- the failure therefore does **not** require the combination of the `serial=103` pipeline fork plus the `serial=104` vertex-buffer fork
+- `bind_vertex_buffers`-alone sufficiency remains unproven by this narrow three-case matrix, which is exactly the boundary this slice was asked to respect
