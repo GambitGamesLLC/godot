@@ -38,6 +38,58 @@
 
 #include <thirdparty/misc/smolv.h>
 
+struct GDGSDebugSamplerInfo {
+	uint64_t create_ordinal = 0;
+	uint64_t state_hash = 0;
+};
+
+static HashMap<uint64_t, const void *> gdgs_debug_buffer_info_by_vk_handle;
+static HashMap<uint64_t, GDGSDebugSamplerInfo> gdgs_debug_sampler_info_by_vk_handle;
+static HashMap<uint64_t, const void *> gdgs_debug_uniform_set_info_by_vk_handle;
+
+static uint64_t gdgs_debug_hash_texture_image_recipe(const VkImageCreateInfo &p_create_info, RenderingDeviceDriverVulkan::DataFormat p_rd_format, bool p_has_allocation, bool p_is_subsampled, bool p_created_from_extension) {
+	uint64_t hash = hash_murmur3_one_64((uint64_t)p_rd_format);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.flags, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.imageType, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.format, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.extent.width, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.extent.height, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.extent.depth, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.mipLevels, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.arrayLayers, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.samples, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.tiling, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.usage, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.sharingMode, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_create_info.initialLayout, hash);
+	hash = hash_murmur3_one_64(p_has_allocation ? 1ULL : 0ULL, hash);
+	hash = hash_murmur3_one_64(p_is_subsampled ? 1ULL : 0ULL, hash);
+	hash = hash_murmur3_one_64(p_created_from_extension ? 1ULL : 0ULL, hash);
+	return hash;
+}
+
+static uint64_t gdgs_debug_hash_texture_view_recipe(const VkImageViewCreateInfo &p_view_create_info) {
+	uint64_t hash = hash_murmur3_one_64((uint64_t)p_view_create_info.flags);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.viewType, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.format, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.components.r, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.components.g, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.components.b, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.components.a, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.subresourceRange.aspectMask, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.subresourceRange.baseMipLevel, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.subresourceRange.levelCount, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.subresourceRange.baseArrayLayer, hash);
+	hash = hash_murmur3_one_64((uint64_t)p_view_create_info.subresourceRange.layerCount, hash);
+	return hash;
+}
+
+static uint64_t gdgs_debug_hash_texture_descriptor_provenance(uint64_t p_backing_provenance_hash, uint64_t p_view_recipe_hash) {
+	uint64_t hash = hash_murmur3_one_64(p_backing_provenance_hash);
+	hash = hash_murmur3_one_64(p_view_recipe_hash, hash);
+	return hash;
+}
+
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
 #include "platform/android/java_godot_wrapper.h"
 #include "platform/android/os_android.h"
@@ -1975,6 +2027,18 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	buf_info->allocation.handle = allocation;
 	buf_info->allocation.size = alloc_info.size;
 	buf_info->size = original_size;
+	buf_info->debug_create_ordinal = ++debug_buffer_create_serial_counter;
+	buf_info->debug_usage_mask = (uint64_t)(p_usage & ~BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT);
+	buf_info->debug_requested_size = original_size;
+	buf_info->debug_frames_drawn = p_frames_drawn;
+	buf_info->debug_allocation_type = (uint32_t)p_allocation_type;
+	buf_info->debug_realization_recipe_hash = hash_murmur3_one_64(buf_info->debug_usage_mask);
+	buf_info->debug_realization_recipe_hash = hash_murmur3_one_64(buf_info->debug_requested_size, buf_info->debug_realization_recipe_hash);
+	buf_info->debug_realization_recipe_hash = hash_murmur3_one_64((uint64_t)alloc_info.size, buf_info->debug_realization_recipe_hash);
+	buf_info->debug_realization_recipe_hash = hash_murmur3_one_64((uint64_t)p_allocation_type, buf_info->debug_realization_recipe_hash);
+	buf_info->debug_realization_recipe_hash = hash_murmur3_one_64(p_frames_drawn, buf_info->debug_realization_recipe_hash);
+	buf_info->debug_realization_recipe_hash = hash_murmur3_one_64(buf_info->is_dynamic() ? 1ULL : 0ULL, buf_info->debug_realization_recipe_hash);
+	gdgs_debug_buffer_info_by_vk_handle[(uint64_t)vk_buffer] = buf_info;
 
 	return BufferID(buf_info);
 }
@@ -1998,6 +2062,7 @@ bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, Dat
 
 void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
+	gdgs_debug_buffer_info_by_vk_handle.erase((uint64_t)buf_info->vk_buffer);
 	if (buf_info->vk_view) {
 		vkDestroyBufferView(vk_device, buf_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER_VIEW));
 	}
@@ -2358,9 +2423,21 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	tex_info->vk_view_create_info = image_view_create_info;
 	tex_info->allocation.handle = allocation;
 	tex_info->is_subsampled = (create_info.flags & VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT) != 0;
+	tex_info->debug_create_ordinal = ++debug_texture_create_serial_counter;
+	tex_info->debug_backing_origin_create_ordinal = tex_info->debug_create_ordinal;
 #ifdef DEBUG_ENABLED
 	tex_info->transient = (p_format.usage_bits & TEXTURE_USAGE_TRANSIENT_BIT) != 0;
 #endif
+	tex_info->debug_image_recipe_hash = gdgs_debug_hash_texture_image_recipe(create_info, p_format.format, true, tex_info->is_subsampled,
+#ifdef DEBUG_ENABLED
+			tex_info->created_from_extension
+#else
+			false
+#endif
+	);
+	tex_info->debug_view_recipe_hash = gdgs_debug_hash_texture_view_recipe(image_view_create_info);
+	tex_info->debug_backing_provenance_hash = tex_info->debug_image_recipe_hash;
+	tex_info->debug_descriptor_provenance_hash = gdgs_debug_hash_texture_descriptor_provenance(tex_info->debug_backing_provenance_hash, tex_info->debug_view_recipe_hash);
 	vmaGetAllocationInfo(allocator, tex_info->allocation.handle, &tex_info->allocation.info);
 
 #if PRINT_NATIVE_COMMANDS
@@ -2398,12 +2475,25 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_from_extension(uint64
 	// Bookkeep.
 
 	TextureInfo *tex_info = VersatileResource::allocate<TextureInfo>(resources_allocator);
+	tex_info->vk_image = vk_image;
 	tex_info->vk_view = vk_image_view;
 	tex_info->rd_format = p_format;
 	tex_info->vk_view_create_info = image_view_create_info;
+	tex_info->debug_create_ordinal = ++debug_texture_create_serial_counter;
+	tex_info->debug_backing_origin_create_ordinal = tex_info->debug_create_ordinal;
 #ifdef DEBUG_ENABLED
 	tex_info->created_from_extension = true;
 #endif
+	tex_info->debug_image_recipe_hash = gdgs_debug_hash_texture_image_recipe(tex_info->vk_create_info, p_format, false, tex_info->is_subsampled,
+#ifdef DEBUG_ENABLED
+			tex_info->created_from_extension
+#else
+			false
+#endif
+	);
+	tex_info->debug_view_recipe_hash = gdgs_debug_hash_texture_view_recipe(image_view_create_info);
+	tex_info->debug_backing_provenance_hash = tex_info->debug_image_recipe_hash;
+	tex_info->debug_descriptor_provenance_hash = gdgs_debug_hash_texture_descriptor_provenance(tex_info->debug_backing_provenance_hash, tex_info->debug_view_recipe_hash);
 	return TextureID(tex_info);
 }
 
@@ -2456,6 +2546,10 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared(TextureID p_or
 	tex_info->vk_view = new_vk_image_view;
 	tex_info->vk_view_create_info = image_view_create_info;
 	tex_info->allocation = {};
+	tex_info->debug_create_ordinal = ++debug_texture_create_serial_counter;
+	tex_info->debug_backing_origin_create_ordinal = owner_tex_info->debug_backing_origin_create_ordinal;
+	tex_info->debug_view_recipe_hash = gdgs_debug_hash_texture_view_recipe(image_view_create_info);
+	tex_info->debug_descriptor_provenance_hash = gdgs_debug_hash_texture_descriptor_provenance(tex_info->debug_backing_provenance_hash, tex_info->debug_view_recipe_hash);
 
 #if PRINT_NATIVE_COMMANDS
 	print_line(vformat("vkCreateImageView: 0x%uX for 0x%uX", uint64_t(new_vk_image_view), uint64_t(owner_tex_info->vk_view_create_info.image)));
@@ -2509,6 +2603,10 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared_from_slice(Tex
 	tex_info->vk_view = new_vk_image_view;
 	tex_info->vk_view_create_info = image_view_create_info;
 	tex_info->allocation = {};
+	tex_info->debug_create_ordinal = ++debug_texture_create_serial_counter;
+	tex_info->debug_backing_origin_create_ordinal = owner_tex_info->debug_backing_origin_create_ordinal;
+	tex_info->debug_view_recipe_hash = gdgs_debug_hash_texture_view_recipe(image_view_create_info);
+	tex_info->debug_descriptor_provenance_hash = gdgs_debug_hash_texture_descriptor_provenance(tex_info->debug_backing_provenance_hash, tex_info->debug_view_recipe_hash);
 
 #if PRINT_NATIVE_COMMANDS
 	print_line(vformat("vkCreateImageView: 0x%uX for 0x%uX (%d %d %d %d)", uint64_t(new_vk_image_view), uint64_t(owner_tex_info->vk_view_create_info.image), p_mipmap, p_mipmaps, p_layer, p_layers));
@@ -2711,10 +2809,31 @@ RDD::SamplerID RenderingDeviceDriverVulkan::sampler_create(const SamplerState &p
 	VkResult res = vkCreateSampler(vk_device, &sampler_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SAMPLER), &vk_sampler);
 	ERR_FAIL_COND_V_MSG(res, SamplerID(), vformat("Couldn't create Vulkan sampler (VkResult error %d).", res));
 
+	GDGSDebugSamplerInfo debug_info;
+	debug_info.create_ordinal = ++debug_sampler_create_serial_counter;
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.flags);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.magFilter, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.minFilter, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.mipmapMode, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.addressModeU, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.addressModeV, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.addressModeW, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)Math::make_half_float(sampler_create_info.mipLodBias), debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64(sampler_create_info.anisotropyEnable ? 1ULL : 0ULL, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)Math::make_half_float(sampler_create_info.maxAnisotropy), debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64(sampler_create_info.compareEnable ? 1ULL : 0ULL, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.compareOp, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)Math::make_half_float(sampler_create_info.minLod), debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)Math::make_half_float(sampler_create_info.maxLod), debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64((uint64_t)sampler_create_info.borderColor, debug_info.state_hash);
+	debug_info.state_hash = hash_murmur3_one_64(sampler_create_info.unnormalizedCoordinates ? 1ULL : 0ULL, debug_info.state_hash);
+	gdgs_debug_sampler_info_by_vk_handle[(uint64_t)vk_sampler] = debug_info;
+
 	return SamplerID(vk_sampler);
 }
 
 void RenderingDeviceDriverVulkan::sampler_free(SamplerID p_sampler) {
+	gdgs_debug_sampler_info_by_vk_handle.erase((uint64_t)p_sampler.id);
 	vkDestroySampler(vk_device, (VkSampler)p_sampler.id, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SAMPLER));
 }
 
@@ -4801,6 +4920,91 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	// Immutable samplers will be skipped so we need to track the number of vk_writes used.
 	VkWriteDescriptorSet *vk_writes = ALLOCA_ARRAY(VkWriteDescriptorSet, p_uniforms.size());
 	uint32_t writes_amount = 0;
+	uint64_t debug_binding_signature_hash = hash_murmur3_one_64(p_set_index);
+	uint64_t debug_resource_object_hash = hash_murmur3_one_64(p_uniforms.size(), debug_binding_signature_hash);
+	uint64_t debug_buffer_realization_hash = hash_murmur3_one_64(p_uniforms.size());
+	uint64_t debug_stable_resource_provenance_hash = hash_murmur3_one_64(p_uniforms.size(), hash_murmur3_one_64(p_set_index));
+	uint32_t debug_buffer_reference_count = 0;
+	String debug_binding_realization_summary = "[";
+	const auto gdgs_uniform_type_name = [&](UniformType p_type) -> const char * {
+		switch (p_type) {
+			case UNIFORM_TYPE_SAMPLER: return "Sampler";
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: return "CombinedSampler";
+			case UNIFORM_TYPE_TEXTURE: return "Texture";
+			case UNIFORM_TYPE_IMAGE: return "Image";
+			case UNIFORM_TYPE_TEXTURE_BUFFER: return "TextureBuffer";
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: return "SamplerTextureBuffer";
+			case UNIFORM_TYPE_IMAGE_BUFFER: return "ImageBuffer";
+			case UNIFORM_TYPE_UNIFORM_BUFFER: return "UniformBuffer";
+			case UNIFORM_TYPE_STORAGE_BUFFER: return "StorageBuffer";
+			case UNIFORM_TYPE_INPUT_ATTACHMENT: return "InputAttachment";
+			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: return "UniformBufferDynamic";
+			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: return "StorageBufferDynamic";
+			default: return "Unknown";
+		}
+	};
+	const auto gdgs_texture_recipe_hash = [&](const TextureInfo *p_texture_info) {
+		return p_texture_info->debug_descriptor_provenance_hash;
+	};
+	const auto gdgs_append_sampler_summary = [&](String &r_text, uint64_t p_sampler_handle) {
+		r_text += "{kind=sampler,driver_id=" + String::num_uint64(p_sampler_handle);
+		HashMap<uint64_t, GDGSDebugSamplerInfo>::ConstIterator sampler_it = gdgs_debug_sampler_info_by_vk_handle.find(p_sampler_handle);
+		if (sampler_it) {
+			r_text += ",create_ordinal=" + String::num_uint64(sampler_it->value.create_ordinal);
+			r_text += ",state_hash=0x" + String::num_uint64(sampler_it->value.state_hash, 16);
+		} else {
+			r_text += ",status=missing_lookup";
+		}
+		r_text += "}";
+	};
+	const auto gdgs_append_texture_summary = [&](String &r_text, const TextureInfo *p_texture_info, const char *p_kind, VkImageLayout p_layout) {
+		r_text += String("{kind=") + p_kind;
+		r_text += ",driver_id=" + String::num_uint64((uint64_t)p_texture_info);
+		r_text += ",image_handle=" + String::num_uint64((uint64_t)p_texture_info->vk_image);
+		r_text += ",view_handle=" + String::num_uint64((uint64_t)p_texture_info->vk_view);
+		r_text += ",create_ordinal=" + String::num_uint64(p_texture_info->debug_create_ordinal);
+		r_text += ",backing_origin_create_ordinal=" + String::num_uint64(p_texture_info->debug_backing_origin_create_ordinal);
+		r_text += ",rd_format=" + itos((int)p_texture_info->rd_format);
+		r_text += ",usage=0x" + String::num_uint64((uint64_t)p_texture_info->vk_create_info.usage, 16);
+		r_text += ",view_type=" + itos((int)p_texture_info->vk_view_create_info.viewType);
+		r_text += ",layout=" + itos((int)p_layout);
+		r_text += ",image_recipe_hash=0x" + String::num_uint64(p_texture_info->debug_image_recipe_hash, 16);
+		r_text += ",view_recipe_hash=0x" + String::num_uint64(p_texture_info->debug_view_recipe_hash, 16);
+		r_text += ",backing_provenance_hash=0x" + String::num_uint64(p_texture_info->debug_backing_provenance_hash, 16);
+		r_text += ",descriptor_provenance_hash=0x" + String::num_uint64(gdgs_texture_recipe_hash(p_texture_info), 16);
+		r_text += ",has_allocation=" + String(p_texture_info->allocation.handle ? "true" : "false");
+		r_text += ",is_subsampled=" + String(p_texture_info->is_subsampled ? "true" : "false");
+		r_text += "}";
+	};
+	const auto gdgs_append_buffer_summary = [&](String &r_text, const BufferInfo *p_buf_info, const char *p_kind) {
+		r_text += String("{kind=") + p_kind;
+		r_text += ",driver_id=" + String::num_uint64((uint64_t)p_buf_info);
+		r_text += ",buffer_handle=" + String::num_uint64((uint64_t)p_buf_info->vk_buffer);
+		r_text += ",view_handle=" + String::num_uint64((uint64_t)p_buf_info->vk_view);
+		r_text += ",requested_size=" + String::num_uint64(p_buf_info->debug_requested_size);
+		r_text += ",allocation_size=" + String::num_uint64(p_buf_info->allocation.size);
+		r_text += ",usage_mask=0x" + String::num_uint64(p_buf_info->debug_usage_mask, 16);
+		r_text += ",dynamic=" + String(p_buf_info->is_dynamic() ? "true" : "false");
+		r_text += ",frame_slot=" + String::num_uint64(p_buf_info->frame_idx);
+		r_text += ",realization_recipe_hash=0x" + String::num_uint64(p_buf_info->debug_realization_recipe_hash, 16);
+		r_text += "}";
+	};
+	const auto gdgs_hash_uniform_header = [&](const BoundUniform &p_uniform, uint32_t p_num_descriptors) {
+		debug_binding_signature_hash = hash_murmur3_one_64((uint64_t)p_uniform.binding, debug_binding_signature_hash);
+		debug_binding_signature_hash = hash_murmur3_one_64((uint64_t)p_uniform.type, debug_binding_signature_hash);
+		debug_binding_signature_hash = hash_murmur3_one_64((uint64_t)p_num_descriptors, debug_binding_signature_hash);
+		debug_binding_signature_hash = hash_murmur3_one_64(p_uniform.immutable_sampler ? 1ULL : 0ULL, debug_binding_signature_hash);
+		debug_resource_object_hash = hash_murmur3_one_64((uint64_t)p_uniform.binding, debug_resource_object_hash);
+		debug_resource_object_hash = hash_murmur3_one_64((uint64_t)p_uniform.type, debug_resource_object_hash);
+		debug_resource_object_hash = hash_murmur3_one_64((uint64_t)p_num_descriptors, debug_resource_object_hash);
+		debug_buffer_realization_hash = hash_murmur3_one_64((uint64_t)p_uniform.binding, debug_buffer_realization_hash);
+		debug_buffer_realization_hash = hash_murmur3_one_64((uint64_t)p_uniform.type, debug_buffer_realization_hash);
+		debug_buffer_realization_hash = hash_murmur3_one_64((uint64_t)p_num_descriptors, debug_buffer_realization_hash);
+		debug_stable_resource_provenance_hash = hash_murmur3_one_64((uint64_t)p_uniform.binding, debug_stable_resource_provenance_hash);
+		debug_stable_resource_provenance_hash = hash_murmur3_one_64((uint64_t)p_uniform.type, debug_stable_resource_provenance_hash);
+		debug_stable_resource_provenance_hash = hash_murmur3_one_64((uint64_t)p_num_descriptors, debug_stable_resource_provenance_hash);
+		debug_stable_resource_provenance_hash = hash_murmur3_one_64(p_uniform.immutable_sampler ? 1ULL : 0ULL, debug_stable_resource_provenance_hash);
+	};
 	for (uint32_t i = 0; i < p_uniforms.size(); i++) {
 		const BoundUniform &uniform = p_uniforms[i];
 
@@ -5016,6 +5220,119 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 			}
 		}
 
+		gdgs_hash_uniform_header(uniform, num_descriptors);
+		for (uint32_t j = 0; j < uniform.ids.size(); j++) {
+			debug_resource_object_hash = hash_murmur3_one_64((uint64_t)uniform.ids[j].id, debug_resource_object_hash);
+		}
+		switch (uniform.type) {
+			case UNIFORM_TYPE_TEXTURE_BUFFER:
+			case UNIFORM_TYPE_UNIFORM_BUFFER:
+			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC:
+			case UNIFORM_TYPE_STORAGE_BUFFER:
+			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
+				const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
+				debug_buffer_realization_hash = hash_murmur3_one_64(buf_info->debug_realization_recipe_hash, debug_buffer_realization_hash);
+				debug_stable_resource_provenance_hash = hash_murmur3_one_64(buf_info->debug_realization_recipe_hash, debug_stable_resource_provenance_hash);
+				debug_buffer_reference_count++;
+			} break;
+			case UNIFORM_TYPE_SAMPLER: {
+				for (uint32_t j = 0; j < num_descriptors; j++) {
+					HashMap<uint64_t, GDGSDebugSamplerInfo>::ConstIterator sampler_it = gdgs_debug_sampler_info_by_vk_handle.find((uint64_t)uniform.ids[j].id);
+					debug_stable_resource_provenance_hash = hash_murmur3_one_64(sampler_it ? sampler_it->value.state_hash : (uint64_t)uniform.ids[j].id, debug_stable_resource_provenance_hash);
+				}
+			} break;
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
+				for (uint32_t j = 0; j < num_descriptors; j++) {
+					HashMap<uint64_t, GDGSDebugSamplerInfo>::ConstIterator sampler_it = gdgs_debug_sampler_info_by_vk_handle.find((uint64_t)uniform.ids[j * 2 + 0].id);
+					debug_stable_resource_provenance_hash = hash_murmur3_one_64(sampler_it ? sampler_it->value.state_hash : (uint64_t)uniform.ids[j * 2 + 0].id, debug_stable_resource_provenance_hash);
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[j * 2 + 1].id;
+					debug_stable_resource_provenance_hash = hash_murmur3_one_64(tex_info->debug_descriptor_provenance_hash, debug_stable_resource_provenance_hash);
+				}
+			} break;
+			case UNIFORM_TYPE_TEXTURE:
+			case UNIFORM_TYPE_IMAGE:
+			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
+				for (uint32_t j = 0; j < num_descriptors; j++) {
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[j].id;
+					debug_stable_resource_provenance_hash = hash_murmur3_one_64(tex_info->debug_descriptor_provenance_hash, debug_stable_resource_provenance_hash);
+				}
+			} break;
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
+				for (uint32_t j = 0; j < num_descriptors; j++) {
+					HashMap<uint64_t, GDGSDebugSamplerInfo>::ConstIterator sampler_it = gdgs_debug_sampler_info_by_vk_handle.find((uint64_t)uniform.ids[j * 2 + 0].id);
+					debug_stable_resource_provenance_hash = hash_murmur3_one_64(sampler_it ? sampler_it->value.state_hash : (uint64_t)uniform.ids[j * 2 + 0].id, debug_stable_resource_provenance_hash);
+					const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[j * 2 + 1].id;
+					debug_buffer_realization_hash = hash_murmur3_one_64(buf_info->debug_realization_recipe_hash, debug_buffer_realization_hash);
+					debug_stable_resource_provenance_hash = hash_murmur3_one_64(buf_info->debug_realization_recipe_hash, debug_stable_resource_provenance_hash);
+					debug_buffer_reference_count++;
+				}
+			} break;
+			default: {
+				for (uint32_t j = 0; j < uniform.ids.size(); j++) {
+					debug_buffer_realization_hash = hash_murmur3_one_64((uint64_t)uniform.ids[j].id, debug_buffer_realization_hash);
+					debug_stable_resource_provenance_hash = hash_murmur3_one_64((uint64_t)uniform.ids[j].id, debug_stable_resource_provenance_hash);
+				}
+			} break;
+		}
+
+		if (i > 0) {
+			debug_binding_realization_summary += ",";
+		}
+		debug_binding_realization_summary += "{binding=" + itos(uniform.binding);
+		debug_binding_realization_summary += ",type=\"" + String(gdgs_uniform_type_name(uniform.type)) + "\"";
+		debug_binding_realization_summary += ",descriptor_count=" + itos(num_descriptors);
+		debug_binding_realization_summary += ",immutable_sampler=" + String(uniform.immutable_sampler ? "true" : "false");
+		debug_binding_realization_summary += ",resources=[";
+		for (uint32_t j = 0; j < num_descriptors; j++) {
+			if (j > 0) {
+				debug_binding_realization_summary += ",";
+			}
+			debug_binding_realization_summary += "{slot=" + itos(j) + ",parts=[";
+			switch (uniform.type) {
+				case UNIFORM_TYPE_SAMPLER: {
+					gdgs_append_sampler_summary(debug_binding_realization_summary, (uint64_t)uniform.ids[j].id);
+				} break;
+				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
+					gdgs_append_sampler_summary(debug_binding_realization_summary, (uint64_t)uniform.ids[j * 2 + 0].id);
+					debug_binding_realization_summary += ",";
+					gdgs_append_texture_summary(debug_binding_realization_summary, (const TextureInfo *)uniform.ids[j * 2 + 1].id, "texture", VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				} break;
+				case UNIFORM_TYPE_TEXTURE: {
+					gdgs_append_texture_summary(debug_binding_realization_summary, (const TextureInfo *)uniform.ids[j].id, "texture", VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				} break;
+				case UNIFORM_TYPE_IMAGE: {
+					gdgs_append_texture_summary(debug_binding_realization_summary, (const TextureInfo *)uniform.ids[j].id, "image", VK_IMAGE_LAYOUT_GENERAL);
+				} break;
+				case UNIFORM_TYPE_TEXTURE_BUFFER: {
+					gdgs_append_buffer_summary(debug_binding_realization_summary, (const BufferInfo *)uniform.ids[j].id, "texel_buffer");
+				} break;
+				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
+					gdgs_append_sampler_summary(debug_binding_realization_summary, (uint64_t)uniform.ids[j * 2 + 0].id);
+					debug_binding_realization_summary += ",";
+					gdgs_append_buffer_summary(debug_binding_realization_summary, (const BufferInfo *)uniform.ids[j * 2 + 1].id, "texel_buffer");
+				} break;
+				case UNIFORM_TYPE_UNIFORM_BUFFER:
+				case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
+					gdgs_append_buffer_summary(debug_binding_realization_summary, (const BufferInfo *)uniform.ids[0].id, "uniform_buffer");
+				} break;
+				case UNIFORM_TYPE_STORAGE_BUFFER:
+				case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
+					gdgs_append_buffer_summary(debug_binding_realization_summary, (const BufferInfo *)uniform.ids[0].id, "storage_buffer");
+				} break;
+				case UNIFORM_TYPE_INPUT_ATTACHMENT: {
+					gdgs_append_texture_summary(debug_binding_realization_summary, (const TextureInfo *)uniform.ids[j].id, "input_attachment", VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				} break;
+				case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
+					debug_binding_realization_summary += "{kind=acceleration_structure,driver_id=" + String::num_uint64((uint64_t)uniform.ids[0].id) + "}";
+				} break;
+				default: {
+					debug_binding_realization_summary += "{kind=unknown,driver_id=" + String::num_uint64((uint64_t)uniform.ids[j].id) + "}";
+				} break;
+			}
+			debug_binding_realization_summary += "]}";
+		}
+		debug_binding_realization_summary += "]}";
+
 		if (add_write) {
 			vk_writes[writes_amount].dstBinding = uniform.binding;
 			vk_writes[writes_amount].descriptorCount = num_descriptors;
@@ -5025,6 +5342,8 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 		ERR_FAIL_COND_V_MSG(pool_key.uniform_type[uniform.type] == MAX_UNIFORM_POOL_ELEMENT, UniformSetID(), "Uniform set reached the limit of bindings for the same type (" + itos(MAX_UNIFORM_POOL_ELEMENT) + ").");
 		pool_key.uniform_type[uniform.type] += num_descriptors;
 	}
+
+	debug_binding_realization_summary += "]";
 
 	bool linear_pool = p_linear_pool_index >= 0;
 	DescriptorSetPools::Iterator pool_sets_it = linear_pool ? linear_descriptor_set_pools[p_linear_pool_index].find(pool_key) : descriptor_set_pools.find(pool_key);
@@ -5098,12 +5417,27 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	usi->debug_shader_pipeline_layout_handle = (uint64_t)shader_info->vk_pipeline_layout;
 	usi->debug_set_index = p_set_index;
 	usi->debug_shader_name = shader_info->name;
+	usi->debug_create_ordinal = ++debug_uniform_set_create_serial_counter;
+	usi->debug_binding_signature_hash = debug_binding_signature_hash;
+	usi->debug_resource_object_hash = debug_resource_object_hash;
+	usi->debug_buffer_realization_hash = debug_buffer_realization_hash;
+	usi->debug_stable_resource_provenance_hash = debug_stable_resource_provenance_hash;
+	usi->debug_binding_count = p_uniforms.size();
+	usi->debug_write_count = writes_amount;
+	usi->debug_buffer_reference_count = debug_buffer_reference_count;
+	usi->debug_binding_realization_summary = debug_binding_realization_summary;
+	usi->debug_pool_key_hash = hash_murmur3_one_64(MAX_UNIFORM_POOL_ELEMENT);
+	for (uint32_t i = 0; i < UNIFORM_TYPE_MAX; i++) {
+		usi->debug_pool_key_hash = hash_murmur3_one_64((uint64_t)pool_key.uniform_type[i], usi->debug_pool_key_hash);
+	}
+	gdgs_debug_uniform_set_info_by_vk_handle[(uint64_t)vk_descriptor_set] = usi;
 
 	return UniformSetID(usi);
 }
 
 void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
 	UniformSetInfo *usi = (UniformSetInfo *)p_uniform_set.id;
+	gdgs_debug_uniform_set_info_by_vk_handle.erase((uint64_t)usi->vk_descriptor_set);
 
 	if (usi->vk_linear_descriptor_pool) {
 		// Nothing to do. All sets are freed at once using vkResetDescriptorPool.
@@ -6199,7 +6533,7 @@ void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBuffer
 	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
 	_debug_record_label_backend_command(command_buffer, "bind_render_uniform_sets");
 	const uint64_t uniform_bind_serial = command_buffer->debug_backend_command_serial;
-	if (command_buffer->debug_bound_descriptor_set_handles.size() < int(p_first_set_index + p_set_count)) {
+	if (command_buffer->debug_bound_descriptor_set_handles.size() < (uint32_t)(p_first_set_index + p_set_count)) {
 		command_buffer->debug_bound_descriptor_set_handles.resize(p_first_set_index + p_set_count);
 	}
 	DebugUniformBindCallPayload uniform_bind_call;
@@ -11836,6 +12170,59 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			summary += "}";
 			return summary;
 		};
+		const auto buffer_realization_summary = [&](uint64_t p_buffer_id, int32_t p_binding_index, uint64_t p_offset, bool p_include_binding_fields) {
+			if (p_buffer_id == 0) {
+				return String("none");
+			}
+			HashMap<uint64_t, const void *>::ConstIterator buf_it = gdgs_debug_buffer_info_by_vk_handle.find(p_buffer_id);
+			if (!buf_it) {
+				return String("{driver_buffer_id=") + String::num_uint64(p_buffer_id) + ",status=missing_lookup}";
+			}
+			const BufferInfo *buf_info = (const BufferInfo *)buf_it->value;
+			String summary = "{";
+			if (p_include_binding_fields) {
+				summary += "binding=" + itos(p_binding_index) + ",offset=" + String::num_uint64(p_offset) + ",";
+			}
+			summary += "driver_buffer_id=" + String::num_uint64(p_buffer_id);
+			summary += ",create_ordinal=" + String::num_uint64(buf_info->debug_create_ordinal);
+			summary += ",allocation_type=\"" + String(buf_info->debug_allocation_type == MEMORY_ALLOCATION_TYPE_CPU ? "cpu" : "gpu") + "\"";
+			summary += ",usage_mask=0x" + String::num_uint64(buf_info->debug_usage_mask, 16);
+			summary += ",requested_size=" + String::num_uint64(buf_info->debug_requested_size);
+			summary += ",allocation_size=" + String::num_uint64(buf_info->allocation.size);
+			summary += ",frames_drawn=" + String::num_uint64(buf_info->debug_frames_drawn);
+			summary += ",dynamic=" + String(buf_info->is_dynamic() ? "true" : "false");
+			summary += ",frame_slot=" + String::num_uint64(buf_info->frame_idx);
+			summary += ",realization_recipe_hash=0x" + String::num_uint64(buf_info->debug_realization_recipe_hash, 16) + "}";
+			return summary;
+		};
+		const auto descriptor_set_realization_summary = [&](uint32_t p_set_index, uint64_t p_descriptor_set_handle) {
+			if (p_descriptor_set_handle == 0) {
+				return String("none");
+			}
+			HashMap<uint64_t, const void *>::ConstIterator usi_it = gdgs_debug_uniform_set_info_by_vk_handle.find(p_descriptor_set_handle);
+			if (!usi_it) {
+				return String("{set=") + itos(p_set_index) + ",descriptor_set_driver_id=" + String::num_uint64(p_descriptor_set_handle) + ",status=missing_lookup}";
+			}
+			const UniformSetInfo *usi = (const UniformSetInfo *)usi_it->value;
+			String summary = "{set=" + itos(p_set_index);
+			summary += ",descriptor_set_driver_id=" + String::num_uint64(p_descriptor_set_handle);
+			summary += ",create_ordinal=" + String::num_uint64(usi->debug_create_ordinal);
+			summary += ",declared_set_index=" + itos(usi->debug_set_index);
+			summary += ",binding_count=" + itos(usi->debug_binding_count);
+			summary += ",write_count=" + itos(usi->debug_write_count);
+			summary += ",dynamic_buffer_count=" + itos(usi->dynamic_buffers.size());
+			summary += ",buffer_reference_count=" + itos(usi->debug_buffer_reference_count);
+			summary += ",descriptor_set_layout_handle=" + String::num_uint64(usi->debug_descriptor_set_layout_handle);
+			summary += ",shader_pipeline_layout_handle=" + String::num_uint64(usi->debug_shader_pipeline_layout_handle);
+			summary += ",descriptor_pool_handle=" + String::num_uint64(usi->vk_descriptor_pool != VK_NULL_HANDLE ? (uint64_t)usi->vk_descriptor_pool : (uint64_t)usi->vk_linear_descriptor_pool);
+			summary += ",pool_key_hash=0x" + String::num_uint64(usi->debug_pool_key_hash, 16);
+			summary += ",binding_signature_hash=0x" + String::num_uint64(usi->debug_binding_signature_hash, 16);
+			summary += ",resource_object_hash=0x" + String::num_uint64(usi->debug_resource_object_hash, 16);
+			summary += ",buffer_realization_hash=0x" + String::num_uint64(usi->debug_buffer_realization_hash, 16);
+			summary += ",stable_resource_provenance_hash=0x" + String::num_uint64(usi->debug_stable_resource_provenance_hash, 16);
+			summary += ",binding_realizations=" + usi->debug_binding_realization_summary + "}";
+			return summary;
+		};
 		text += ",l88_command_emission_boundary={descriptor_bind_calls=";
 		if (l88_label_entry.uniform_bind_calls.is_empty()) {
 			text += "none";
@@ -11852,6 +12239,41 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 		text += ",first_vertex_bind_payload=" + vertex_binding_payload_summary(l88_label_entry.first_vertex_binding_payload);
 		text += ",first_index_bind_payload=" + index_binding_payload_summary(l88_label_entry.first_index_binding_payload);
 		text += ",first_draw_indexed_consumer=" + draw_indexed_consumption_summary(l88_label_entry.first_draw_indexed_consumption);
+		text += "}";
+		text += ",l88_resource_realization_boundary={descriptor_sets=";
+		if (!l88_label_entry.first_draw_indexed_consumption.valid || l88_label_entry.first_draw_indexed_consumption.descriptor_set_indices.is_empty()) {
+			text += "none";
+		} else {
+			text += "[";
+			for (uint32_t i = 0; i < l88_label_entry.first_draw_indexed_consumption.descriptor_set_indices.size(); i++) {
+				if (i > 0) {
+					text += ",";
+				}
+				const uint64_t descriptor_set_handle = i < l88_label_entry.first_draw_indexed_consumption.descriptor_set_handles.size() ? l88_label_entry.first_draw_indexed_consumption.descriptor_set_handles[i] : 0;
+				text += descriptor_set_realization_summary(l88_label_entry.first_draw_indexed_consumption.descriptor_set_indices[i], descriptor_set_handle);
+			}
+			text += "]";
+		}
+		text += ",vertex_buffers=";
+		if (!l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.valid || l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.buffer_ids.is_empty()) {
+			text += "none";
+		} else {
+			text += "[";
+			for (uint32_t i = 0; i < l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.buffer_ids.size(); i++) {
+				if (i > 0) {
+					text += ",";
+				}
+				const uint64_t offset = i < l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.offsets.size() ? l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.offsets[i] : 0;
+				text += buffer_realization_summary(l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.buffer_ids[i], i, offset, true);
+			}
+			text += "]";
+		}
+		text += ",index_buffer=";
+		if (!l88_label_entry.first_draw_indexed_consumption.index_binding_payload.valid) {
+			text += "none";
+		} else {
+			text += buffer_realization_summary(l88_label_entry.first_draw_indexed_consumption.index_binding_payload.buffer_id, -1, l88_label_entry.first_draw_indexed_consumption.index_binding_payload.offset, false);
+		}
 		text += "}";
 	}
 	text += ",previous=";

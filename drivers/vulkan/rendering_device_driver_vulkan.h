@@ -180,6 +180,10 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	};
 
 	PendingFlushes pending_flushes;
+	uint64_t debug_buffer_create_serial_counter = 0;
+	uint64_t debug_sampler_create_serial_counter = 0;
+	uint64_t debug_texture_create_serial_counter = 0;
+	uint64_t debug_uniform_set_create_serial_counter = 0;
 
 	struct PipelineStatistics {
 		Ref<FileAccess> file_access;
@@ -253,6 +257,12 @@ public:
 		// If dynamic buffer, then its range is [0; RenderingDeviceDriverVulkan::frame_count)
 		// else it's UINT32_MAX.
 		uint32_t frame_idx = UINT32_MAX;
+		uint64_t debug_create_ordinal = 0;
+		uint64_t debug_realization_recipe_hash = 0;
+		uint64_t debug_usage_mask = 0;
+		uint64_t debug_requested_size = 0;
+		uint64_t debug_frames_drawn = 0;
+		uint32_t debug_allocation_type = 0;
 
 		bool is_dynamic() const { return frame_idx != UINT32_MAX; }
 	};
@@ -291,6 +301,12 @@ public:
 			VmaAllocationInfo info = {};
 		} allocation; // All 0/null if just a view.
 		bool is_subsampled = false;
+		uint64_t debug_create_ordinal = 0;
+		uint64_t debug_image_recipe_hash = 0;
+		uint64_t debug_view_recipe_hash = 0;
+		uint64_t debug_backing_provenance_hash = 0;
+		uint64_t debug_descriptor_provenance_hash = 0;
+		uint64_t debug_backing_origin_create_ordinal = 0;
 #ifdef DEBUG_ENABLED
 		bool created_from_extension = false;
 		bool transient = false;
@@ -1032,6 +1048,16 @@ private:
 		uint64_t debug_shader_pipeline_layout_handle = 0;
 		uint32_t debug_set_index = 0;
 		String debug_shader_name;
+		uint64_t debug_create_ordinal = 0;
+		uint64_t debug_binding_signature_hash = 0;
+		uint64_t debug_resource_object_hash = 0;
+		uint64_t debug_buffer_realization_hash = 0;
+		uint64_t debug_stable_resource_provenance_hash = 0;
+		uint64_t debug_pool_key_hash = 0;
+		uint32_t debug_binding_count = 0;
+		uint32_t debug_write_count = 0;
+		uint32_t debug_buffer_reference_count = 0;
+		String debug_binding_realization_summary;
 	};
 
 	bool adreno_5xx_empty_descriptor_set_layout_workaround = false;

@@ -6501,3 +6501,74 @@ This closes the Task 169 question cleanly:
 - set `2` behaves the same way as the converged control, which reinforces that the reruns are simply allocating fresh backend objects while the stable provenance remains converged
 
 So the descriptor-set realization family stays narrowed to an identity-only split for these resources at failing `submit_serial=9`; there is still no evidence here of a stable recipe/provenance fork hiding behind sets `0`, `1`, or `3`.
+
+
+## 2026-05-25 source-build follow-up — Task 170 (`oc-rayk`)
+
+This follow-up stayed on the exact same locked failing lane (`projection_only__disabled`, host Vulkan, `submit_serial=9`) and deliberately did **not** widen into a fix. Rather than reopening request-hash, specialization-cache, or CPU-side vertex-format-cache questions, it traced one rung farther forward from descriptor-set realization to the **semantic descriptor payload actually consumed by the first failing L88 packet**, while keeping set `2` as the converged control.
+
+Fresh artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-135340/`
+
+Key durable artifacts inside that root:
+
+- `resource_realization_contents_compare.txt`
+- `resource_realization_contents.json`
+- `resource_realization_binding_details.txt`
+- `resource_realization_binding_details.json`
+- `resource_backing_provenance.txt`
+- `outer_crash_identity.json`
+
+Analyzer / rerun entrypoints used:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_resource_realization_boundary_qa.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_contents.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_binding_details.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_backing_provenance.py`
+
+### Outer crash identity stayed locked
+
+All three approved reruns preserved the same crash envelope:
+
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- exit status stayed `-6`
+
+### First consumer-boundary semantic payload verdict
+
+The first failing L88 packet still consumes the **same semantic descriptor payload** across all three approved cases.
+
+Across both comparisons (`baseline` -> `specialization_only`, `baseline` -> `vertex_input_only`):
+
+- set `0`: `first_recipe_diff_binding=None`, `semantic_recipe_changed=False`
+- set `1`: `first_recipe_diff_binding=None`, `semantic_recipe_changed=False`
+- set `3`: `first_recipe_diff_binding=None`, `semantic_recipe_changed=False`
+- control set `2`: `first_recipe_diff_binding=None`, `semantic_recipe_changed=False`
+- `first_semantic_binding_diff=null` for every compared set
+
+So a true semantic split does **not** first appear at the first consumer boundary either. The remaining cross-case differences are still only raw backend identity fields (`driver_id`, `buffer_handle`, `image_handle`, `view_handle`).
+
+### Concrete effective payload that stayed converged
+
+The consumed payload remained content-stable at the exact fields that matter for each focus set:
+
+- **set `0`** still carries the same buffer contract at the first distinguishing slots: binding `1` (`UniformBuffer`) stays `requested_size=320`, `allocation_size=320`, `usage_mask=0x12`, `dynamic=false`, `frame_slot=4294967295`, `realization_recipe_hash=0x737d4ff4`; binding `2` (`StorageBuffer`) keeps `realization_recipe_hash=0x488b2968`. Later texture/sampler slots also keep their same recipe/state payloads while only identity fields change.
+- **set `1`** still carries the same combined-sampler payload at binding `0`: sampler `create_ordinal=4`, `state_hash=0x251d4581`; texture `recipe_hash=0xacb5d5d9`, `rd_format=36`, `usage=0x6`, `view_type=1`, `layout=5`, `has_allocation=true`, `is_subsampled=false`.
+- **set `3`** still carries the same texture/sampler payload: binding `0` texture `recipe_hash=0x31a55154`, `rd_format=15`, `usage=0x7`, `view_type=1`, `layout=5`; bindings `1/2` textures `recipe_hash=0xacb5d5d9`; sampler slot keeps `state_hash=0x251d4581`.
+- **set `2` control** remains converged with storage-buffer `realization_recipe_hash=0x922906c0`, confirming that fresh reruns naturally rotate backend identities even when the effective payload is semantically unchanged.
+
+### Practical conclusion
+
+This closes the Task 170 question cleanly:
+
+- the first failing L88 packet does **not** first split semantically at the descriptor payload it actually consumes
+- the effective descriptor contents / resource payload remain converged at content level across `baseline`, `specialization_only`, and `vertex_input_only`
+- the surviving cross-case difference is still only backend object identity / handle churn, with set `2` behaving as the expected converged control
+
+So the locked `submit_serial=9` seam is now narrowed one step farther: even at the first consumer boundary for the first failing L88 packet, the descriptor payload is still semantically the same across the approved contrast cases.
