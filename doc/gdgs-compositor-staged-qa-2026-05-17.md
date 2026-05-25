@@ -6926,6 +6926,7 @@ Within the approved methodology, the exact first-L88 specialization-constant cha
 Durable note for this slice:
 
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-specialization-meaning-2026-05-25.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-fragment-path-2026-05-25.md`
 
 The narrow source-backed conclusion is:
 
