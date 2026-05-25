@@ -6572,3 +6572,93 @@ This closes the Task 170 question cleanly:
 - the surviving cross-case difference is still only backend object identity / handle churn, with set `2` behaving as the expected converged control
 
 So the locked `submit_serial=9` seam is now narrowed one step farther: even at the first consumer boundary for the first failing L88 packet, the descriptor payload is still semantically the same across the approved contrast cases.
+
+
+## 2026-05-25 source-build follow-up — Task 171 (`oc-6az1`)
+
+This follow-up stayed on the same locked failing lane (`projection_only__disabled`, host Vulkan, `submit_serial=9`) and moved exactly one rung lower than Task 170: from semantically converged descriptor payloads to the **first L88 backend execution / synchronization / lifetime boundary that actually consumes that payload**. It did not widen into a fix and reran only the same approved three cases.
+
+Fresh artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-sync-lifetime-boundary-vulkan-sourcebuild-20260525-143018/`
+
+Key durable artifacts inside that root:
+
+- `notes.md`
+- `parsed_execution_sync_lifetime_summary.json`
+- `comparison.txt`
+- `execution_sync_lifetime_boundary_summary.tsv`
+- per-case `stdout.log` / `stderr.log` / `marker_lines.json`
+
+Rerun entrypoint used:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_execution_sync_lifetime_boundary_qa.py`
+
+### Outer crash identity stayed locked
+
+All three approved reruns preserved the same crash envelope:
+
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- exit status stayed `-6`
+
+### New driver-side consume-boundary trace
+
+The Vulkan driver now records `l88_execution_sync_lifetime_boundary` beside the existing first-L88 summaries. That trace captures three things for the first L88 `draw_indexed` consumer:
+
+- the exact pre-draw command-state snapshot actually consumed by the draw
+- the last pipeline barrier seen before that draw
+- control lifetime / realization summaries for descriptor set `2`, the first vertex buffer, and the index buffer
+
+### What stayed converged
+
+The first L88 draw consumed the same synchronization scope in all three cases:
+
+- `render_pass_create_serial=13`
+- `render_pass_compatibility_hash=0x425f4d3d`
+- `render_subpass_compatibility_hash=0x81df0cad`
+- `render_pass_attachment_exact_hash=0x6529dc72`
+- `render_pass_dependency_hash=0x208ccbee`
+- `subpass=0`
+- `breadcrumb=UI_PASS`
+- `scope_pipeline_relation=different_handle_same_render_pass_compatibility`
+
+The last pipeline barrier before that first L88 draw also stayed structurally the same across the three reruns:
+
+- `serial=101`
+- `src_stage_mask=0x1489`
+- `dst_stage_mask=0x248c`
+- `memory_barriers=1`
+- `buffer_barriers=5`
+- `texture_barriers=4`
+- `acceleration_structure_barriers=0`
+- first traced texture layout remained `old=2 -> new=2`
+- serial gaps remained `uniform_to_draw=1`, `vertex_to_draw=4`, `index_to_draw=3`, `pipeline_barrier_to_draw=7`
+
+The lifetime / realization controls also stayed converged:
+
+- descriptor set `2` kept `buffer_realization_hash=0xccee0b09` and `stable_resource_provenance_hash=0xbed89158`
+- the first vertex buffer kept `create_ordinal=385`, `requested_size=2097152`, `allocation_size=4194304`, `dynamic=true`, `frame_slot=1`, `realization_recipe_hash=0x78fdd30e`
+- the index buffer kept `create_ordinal=25`, `requested_size=16`, `allocation_size=16`, `dynamic=false`, `realization_recipe_hash=0x5e1dfda9`
+
+Across those layers, only raw driver identities / handles rotated per rerun.
+
+### Where the first true split appears
+
+The first meaningful split beyond semantic descriptor content therefore appears in **backend execution state**, not synchronization scope or resource lifetime / aliasing state.
+
+- `specialization_only` keeps the same draw synchronization context and lifetime controls, but changes the bound pipeline execution recipe (`graphics_recipe_hash=0xc10455e7`, `specialization_constant_hash=0xbfcbce98` versus baseline `0xb3c95184` / `0x6273dcb1`)
+- `vertex_input_only` keeps the same draw synchronization context and lifetime controls, but changes the execution packet shape (`vertex_binding_count=2`, `vertex_input_recipe_hash=0xb9920205` versus baseline `vertex_binding_count=1`, `vertex_input_recipe_hash=0xaf2a1c78`)
+
+### Practical conclusion
+
+This closes the Task 171 question cleanly:
+
+- the first failing L88 draw still enters under a converged render-pass / synchronization context
+- it also still consumes converged lifetime / realization recipes for the traced control resources
+- so the earliest stable cross-case fork beyond semantic descriptor payloads is the **backend execution packet itself** (pipeline execution recipe / vertex-input packet shape), not a driver-visible synchronization or lifetime boundary on this locked lane

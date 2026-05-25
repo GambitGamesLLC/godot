@@ -675,22 +675,44 @@ private:
 		IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
 	};
 
+	struct DebugPipelineBarrierPayload {
+		bool valid = false;
+		uint64_t serial = 0;
+		uint64_t src_stage_mask = 0;
+		uint64_t dst_stage_mask = 0;
+		uint32_t memory_barrier_count = 0;
+		uint32_t buffer_barrier_count = 0;
+		uint32_t texture_barrier_count = 0;
+		uint32_t acceleration_structure_barrier_count = 0;
+		uint64_t memory_barrier_hash = 0;
+		uint64_t buffer_barrier_hash = 0;
+		uint64_t texture_barrier_hash = 0;
+		uint64_t acceleration_structure_barrier_hash = 0;
+		uint64_t first_buffer_id = 0;
+		uint64_t first_texture_id = 0;
+		uint32_t first_texture_old_layout = 0;
+		uint32_t first_texture_new_layout = 0;
+	};
+
 	struct DebugDrawIndexedConsumptionPayload {
 		bool valid = false;
 		uint64_t serial = 0;
 		uint64_t last_uniform_bind_serial = 0;
 		uint64_t last_vertex_bind_serial = 0;
 		uint64_t last_index_bind_serial = 0;
+		uint64_t last_pipeline_barrier_serial = 0;
 		uint32_t index_count = 0;
 		uint32_t instance_count = 0;
 		uint32_t first_index = 0;
 		int32_t vertex_offset = 0;
 		uint32_t first_instance = 0;
+		DebugCommandStateSnapshot consume_state_snapshot;
 		DebugUniformBindingProvenance uniform_bind_provenance;
 		LocalVector<uint32_t> descriptor_set_indices;
 		LocalVector<uint64_t> descriptor_set_handles;
 		DebugVertexBindingPayload vertex_binding_payload;
 		DebugIndexBindingPayload index_binding_payload;
+		DebugPipelineBarrierPayload last_pipeline_barrier_payload;
 	};
 
 	struct DebugLabelEntry {
@@ -862,6 +884,8 @@ private:
 		uint64_t debug_bound_index_buffer_id = 0;
 		uint64_t debug_bound_index_buffer_offset = 0;
 		uint64_t debug_last_index_bind_serial = 0;
+		uint64_t debug_last_pipeline_barrier_serial = 0;
+		DebugPipelineBarrierPayload debug_last_pipeline_barrier_payload;
 		bool debug_blend_constants_set = false;
 		float debug_blend_constants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		uint64_t debug_blend_constants_hash = 0;

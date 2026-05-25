@@ -3055,7 +3055,53 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 	}
 #endif
 
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
+	DebugPipelineBarrierPayload barrier_payload;
+	barrier_payload.valid = true;
+	barrier_payload.src_stage_mask = src_stage_flags;
+	barrier_payload.dst_stage_mask = dst_stage_flags;
+	barrier_payload.memory_barrier_count = p_memory_barriers.size();
+	barrier_payload.buffer_barrier_count = p_buffer_barriers.size();
+	barrier_payload.texture_barrier_count = p_texture_barriers.size();
+	barrier_payload.acceleration_structure_barrier_count = p_acceleration_structure_barriers.size();
+	for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
+		barrier_payload.memory_barrier_hash = hash_murmur3_one_64(vk_memory_barriers[i].srcAccessMask, barrier_payload.memory_barrier_hash);
+		barrier_payload.memory_barrier_hash = hash_murmur3_one_64(vk_memory_barriers[i].dstAccessMask, barrier_payload.memory_barrier_hash);
+	}
+	for (uint32_t i = 0; i < p_buffer_barriers.size(); i++) {
+		barrier_payload.buffer_barrier_hash = hash_murmur3_one_64(vk_buffer_barriers[i].srcAccessMask, barrier_payload.buffer_barrier_hash);
+		barrier_payload.buffer_barrier_hash = hash_murmur3_one_64(vk_buffer_barriers[i].dstAccessMask, barrier_payload.buffer_barrier_hash);
+		barrier_payload.buffer_barrier_hash = hash_murmur3_one_64((uint64_t)vk_buffer_barriers[i].buffer, barrier_payload.buffer_barrier_hash);
+		barrier_payload.buffer_barrier_hash = hash_murmur3_one_64(vk_buffer_barriers[i].offset, barrier_payload.buffer_barrier_hash);
+		barrier_payload.buffer_barrier_hash = hash_murmur3_one_64(vk_buffer_barriers[i].size, barrier_payload.buffer_barrier_hash);
+		if (i == 0) {
+			barrier_payload.first_buffer_id = (uint64_t)vk_buffer_barriers[i].buffer;
+		}
+	}
+	for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].srcAccessMask, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].dstAccessMask, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64((uint64_t)vk_image_barriers[i].image, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].oldLayout, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].newLayout, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].subresourceRange.aspectMask, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].subresourceRange.baseMipLevel, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].subresourceRange.levelCount, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].subresourceRange.baseArrayLayer, barrier_payload.texture_barrier_hash);
+		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].subresourceRange.layerCount, barrier_payload.texture_barrier_hash);
+		if (i == 0) {
+			barrier_payload.first_texture_id = (uint64_t)vk_image_barriers[i].image;
+			barrier_payload.first_texture_old_layout = vk_image_barriers[i].oldLayout;
+			barrier_payload.first_texture_new_layout = vk_image_barriers[i].newLayout;
+		}
+	}
+	for (uint32_t i = 0; i < p_acceleration_structure_barriers.size(); i++) {
+		barrier_payload.acceleration_structure_barrier_hash = hash_murmur3_one_64(vk_accel_barriers[i].srcAccessMask, barrier_payload.acceleration_structure_barrier_hash);
+		barrier_payload.acceleration_structure_barrier_hash = hash_murmur3_one_64(vk_accel_barriers[i].dstAccessMask, barrier_payload.acceleration_structure_barrier_hash);
+		barrier_payload.acceleration_structure_barrier_hash = hash_murmur3_one_64((uint64_t)vk_accel_barriers[i].buffer, barrier_payload.acceleration_structure_barrier_hash);
+		barrier_payload.acceleration_structure_barrier_hash = hash_murmur3_one_64(vk_accel_barriers[i].offset, barrier_payload.acceleration_structure_barrier_hash);
+		barrier_payload.acceleration_structure_barrier_hash = hash_murmur3_one_64(vk_accel_barriers[i].size, barrier_payload.acceleration_structure_barrier_hash);
+	}
 	vkCmdPipelineBarrier(
 			command_buffer->vk_command_buffer,
 			src_stage_flags,
@@ -3075,6 +3121,10 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 				p_acceleration_structure_barriers.size(), vk_accel_barriers,
 				0, nullptr);
 	}
+	_debug_record_label_backend_command(command_buffer, "pipeline_barrier");
+	barrier_payload.serial = command_buffer->debug_backend_command_serial;
+	command_buffer->debug_last_pipeline_barrier_serial = barrier_payload.serial;
+	command_buffer->debug_last_pipeline_barrier_payload = barrier_payload;
 }
 
 /****************/
@@ -3553,6 +3603,8 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_bound_index_buffer_id = 0;
 	command_buffer->debug_bound_index_buffer_offset = 0;
 	command_buffer->debug_last_index_bind_serial = 0;
+	command_buffer->debug_last_pipeline_barrier_serial = 0;
+	command_buffer->debug_last_pipeline_barrier_payload = DebugPipelineBarrierPayload();
 	command_buffer->debug_blend_constants_set = false;
 	command_buffer->debug_blend_constants[0] = 0.0f;
 	command_buffer->debug_blend_constants[1] = 0.0f;
@@ -3616,6 +3668,8 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_bound_index_buffer_id = 0;
 	command_buffer->debug_bound_index_buffer_offset = 0;
 	command_buffer->debug_last_index_bind_serial = 0;
+	command_buffer->debug_last_pipeline_barrier_serial = 0;
+	command_buffer->debug_last_pipeline_barrier_payload = DebugPipelineBarrierPayload();
 	command_buffer->debug_blend_constants_set = false;
 	command_buffer->debug_blend_constants[0] = 0.0f;
 	command_buffer->debug_blend_constants[1] = 0.0f;
@@ -6573,6 +6627,7 @@ void RenderingDeviceDriverVulkan::command_render_draw(CommandBufferID p_cmd_buff
 
 void RenderingDeviceDriverVulkan::command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) {
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
+	const DebugCommandStateSnapshot consume_state_snapshot = _debug_capture_command_state_snapshot(command_buffer);
 	vkCmdDrawIndexed(command_buffer->vk_command_buffer, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
 	_debug_record_label_backend_command(command_buffer, "draw_indexed");
 	if (command_buffer->debug_active_label_stack_size > 0) {
@@ -6585,12 +6640,15 @@ void RenderingDeviceDriverVulkan::command_render_draw_indexed(CommandBufferID p_
 				entry.first_draw_indexed_consumption.last_uniform_bind_serial = command_buffer->debug_last_uniform_bind_serial;
 				entry.first_draw_indexed_consumption.last_vertex_bind_serial = command_buffer->debug_last_vertex_bind_serial;
 				entry.first_draw_indexed_consumption.last_index_bind_serial = command_buffer->debug_last_index_bind_serial;
+				entry.first_draw_indexed_consumption.last_pipeline_barrier_serial = command_buffer->debug_last_pipeline_barrier_serial;
 				entry.first_draw_indexed_consumption.index_count = p_index_count;
 				entry.first_draw_indexed_consumption.instance_count = p_instance_count;
 				entry.first_draw_indexed_consumption.first_index = p_first_index;
 				entry.first_draw_indexed_consumption.vertex_offset = p_vertex_offset;
 				entry.first_draw_indexed_consumption.first_instance = p_first_instance;
+				entry.first_draw_indexed_consumption.consume_state_snapshot = consume_state_snapshot;
 				entry.first_draw_indexed_consumption.uniform_bind_provenance = command_buffer->debug_last_uniform_bind_provenance;
+				entry.first_draw_indexed_consumption.last_pipeline_barrier_payload = command_buffer->debug_last_pipeline_barrier_payload;
 				for (uint32_t i = 0; i < command_buffer->debug_bound_descriptor_set_handles.size(); i++) {
 					const uint64_t descriptor_set_handle = command_buffer->debug_bound_descriptor_set_handles[i];
 					if (descriptor_set_handle == 0) {
@@ -12223,6 +12281,27 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			summary += ",binding_realizations=" + usi->debug_binding_realization_summary + "}";
 			return summary;
 		};
+		const auto pipeline_barrier_payload_summary = [&](const DebugPipelineBarrierPayload &payload) {
+			if (!payload.valid) {
+				return String("none");
+			}
+			String summary = "{serial=" + String::num_uint64(payload.serial);
+			summary += ",src_stage_mask=0x" + String::num_uint64(payload.src_stage_mask, 16);
+			summary += ",dst_stage_mask=0x" + String::num_uint64(payload.dst_stage_mask, 16);
+			summary += ",memory_barriers=" + itos(payload.memory_barrier_count);
+			summary += ",buffer_barriers=" + itos(payload.buffer_barrier_count);
+			summary += ",texture_barriers=" + itos(payload.texture_barrier_count);
+			summary += ",acceleration_structure_barriers=" + itos(payload.acceleration_structure_barrier_count);
+			summary += ",memory_barrier_hash=0x" + String::num_uint64(payload.memory_barrier_hash, 16);
+			summary += ",buffer_barrier_hash=0x" + String::num_uint64(payload.buffer_barrier_hash, 16);
+			summary += ",texture_barrier_hash=0x" + String::num_uint64(payload.texture_barrier_hash, 16);
+			summary += ",acceleration_structure_barrier_hash=0x" + String::num_uint64(payload.acceleration_structure_barrier_hash, 16);
+			summary += ",first_buffer_id=" + debug_uint64_or_none(payload.first_buffer_id);
+			summary += ",first_texture_id=" + debug_uint64_or_none(payload.first_texture_id);
+			summary += ",first_texture_old_layout=" + itos(payload.first_texture_old_layout);
+			summary += ",first_texture_new_layout=" + itos(payload.first_texture_new_layout) + "}";
+			return summary;
+		};
 		text += ",l88_command_emission_boundary={descriptor_bind_calls=";
 		if (l88_label_entry.uniform_bind_calls.is_empty()) {
 			text += "none";
@@ -12275,6 +12354,48 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_tonemap_pass_scope_sum
 			text += buffer_realization_summary(l88_label_entry.first_draw_indexed_consumption.index_binding_payload.buffer_id, -1, l88_label_entry.first_draw_indexed_consumption.index_binding_payload.offset, false);
 		}
 		text += "}";
+		text += ",l88_execution_sync_lifetime_boundary={draw_consume_state=" + command_state_snapshot_summary(l88_label_entry.first_draw_indexed_consumption.consume_state_snapshot);
+		text += ",last_pipeline_barrier=" + pipeline_barrier_payload_summary(l88_label_entry.first_draw_indexed_consumption.last_pipeline_barrier_payload);
+		text += ",serial_gaps={uniform_to_draw=" + itos(int64_t(l88_label_entry.first_draw_indexed_consumption.serial) - int64_t(l88_label_entry.first_draw_indexed_consumption.last_uniform_bind_serial));
+		text += ",vertex_to_draw=" + itos(int64_t(l88_label_entry.first_draw_indexed_consumption.serial) - int64_t(l88_label_entry.first_draw_indexed_consumption.last_vertex_bind_serial));
+		text += ",index_to_draw=" + itos(int64_t(l88_label_entry.first_draw_indexed_consumption.serial) - int64_t(l88_label_entry.first_draw_indexed_consumption.last_index_bind_serial));
+		if (l88_label_entry.first_draw_indexed_consumption.last_pipeline_barrier_serial != 0) {
+			text += ",pipeline_barrier_to_draw=" + itos(int64_t(l88_label_entry.first_draw_indexed_consumption.serial) - int64_t(l88_label_entry.first_draw_indexed_consumption.last_pipeline_barrier_serial));
+		} else {
+			text += ",pipeline_barrier_to_draw=none";
+		}
+		text += "},lifetime_recipe_control={descriptor_set_2=";
+		if (!l88_label_entry.first_draw_indexed_consumption.valid || l88_label_entry.first_draw_indexed_consumption.descriptor_set_indices.is_empty()) {
+			text += "none";
+		} else {
+			bool found_set_2 = false;
+			for (uint32_t i = 0; i < l88_label_entry.first_draw_indexed_consumption.descriptor_set_indices.size(); i++) {
+				if (l88_label_entry.first_draw_indexed_consumption.descriptor_set_indices[i] != 2) {
+					continue;
+				}
+				const uint64_t descriptor_set_handle = i < l88_label_entry.first_draw_indexed_consumption.descriptor_set_handles.size() ? l88_label_entry.first_draw_indexed_consumption.descriptor_set_handles[i] : 0;
+				text += descriptor_set_realization_summary(2, descriptor_set_handle);
+				found_set_2 = true;
+				break;
+			}
+			if (!found_set_2) {
+				text += "missing";
+			}
+		}
+		text += ",first_vertex_buffer=";
+		if (!l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.valid || l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.buffer_ids.is_empty()) {
+			text += "none";
+		} else {
+			const uint64_t first_vertex_offset = l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.offsets.is_empty() ? 0 : l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.offsets[0];
+			text += buffer_realization_summary(l88_label_entry.first_draw_indexed_consumption.vertex_binding_payload.buffer_ids[0], 0, first_vertex_offset, true);
+		}
+		text += ",index_buffer=";
+		if (!l88_label_entry.first_draw_indexed_consumption.index_binding_payload.valid) {
+			text += "none";
+		} else {
+			text += buffer_realization_summary(l88_label_entry.first_draw_indexed_consumption.index_binding_payload.buffer_id, -1, l88_label_entry.first_draw_indexed_consumption.index_binding_payload.offset, false);
+		}
+		text += "}}";
 	}
 	text += ",previous=";
 	if (target_scope_index > 0) {
