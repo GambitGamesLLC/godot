@@ -6920,3 +6920,23 @@ That makes the Task 176 seam stricter than Task 175:
 ### Practical conclusion
 
 Within the approved methodology, the exact first-L88 specialization-constant change that carries the locked crash envelope at failing `submit_serial=9` is the singleton `id=0` integer specialization value flipping from `0` to `2` while the rest of the specialization contract stays fixed. This remains a seam-classification result only; it does **not** reopen specialization-cache theory, request-hash theory, or CPU-side vertex-format-cache theory, and it does not widen into a fix.
+
+## 2026-05-25 — Task 178: explain what the exact first-L88 specialization value flip `id=0`, `int`, `0 -> 2` changes in shader/pipeline terms and why it still preserves the locked crash envelope
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-specialization-meaning-2026-05-25.md`
+
+The narrow source-backed conclusion is:
+
+- first-L88 `constant_id=0` is canvas `sc_packed_0`
+- bit layout is `use_lighting`=`bit0`, `use_msdf`=`bit1`, `use_lcd`=`bit2`
+- the exact `0x0 -> 0x2` flip turns on only `sc_use_msdf()` in the specialized non-ubershader pipeline
+- shader-side, that switches the fragment path from ordinary texture modulation to the MSDF coverage/outline branch in `servers/rendering/renderer_rd/shaders/canvas.glsl`
+- pipeline-side, it creates/binds a different specialized render pipeline while leaving the already-audited surrounding packet shape fixed
+
+Why the crash envelope stays locked:
+
+- the Task 177 value-only run already proved this exact specialization payload flip alone preserves the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)` then `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- the value-only contrast held the rest of the approved comparison surface fixed enough to show the surviving fork is the specialized pipeline recipe itself, not a widened descriptor/sync/draw-argument change
+- `_get_pipeline_specialization_or_ubershader()` zeroes the push-constant specialization shadow for the specialized path, so the forced `0x2` value is actually consumed as the bound pipeline specialization and not overridden by the batch's original `use_msdf=false` selector
