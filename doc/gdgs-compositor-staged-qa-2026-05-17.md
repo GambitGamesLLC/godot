@@ -6196,3 +6196,308 @@ Observed boundary facts:
 ### Practical conclusion
 
 The locked crash seam remains upstream of any hypothetical convergence inside backend command recording. By the time the first failing L88 packet reaches the actual descriptor-bind / vertex-bind / index-bind / `draw_indexed` emission boundary, the three approved cases are still materially different in the concrete backend resources being recorded.
+
+### Audit confirmation
+
+Auditor re-checked the package against `command_emission_boundary_summary.tsv`, `command_emission_boundary_compare_v2.txt`, `command_emission_boundary_results.json`, `outer_crash_identity.json`, and each case's `marker_lines.json`. The honest reading is:
+- divergence is still present at the first emitted descriptor payloads, first emitted vertex payload, first emitted index payload, and the first `draw_indexed` consumer boundary
+- convergence exists only in command scaffolding: descriptor-call split/order (`set 0`, then `sets 2+3`), bind serials (`14/15/16/17`), consumer serial (`18`), draw arguments (`index_count=6`, `instance_count=27`, `first_index=0`, `vertex_offset=0`, `first_instance=0`), index format/offset (`uint16`, `0`), and the shared vertex-buffer offset (`2097152`)
+- the still-divergent backend payload fields are the actual descriptor-set driver IDs for sets `0`, `2`, `3`, the carried set-`1` descriptor-set driver ID at draw time, the concrete vertex-buffer driver ID payloads (plus `vertex_input_only`'s second mirrored binding), and the concrete index-buffer driver ID
+
+That means the next honest seam remains inside the same backend resource-payload family: trace where those exact emitted descriptor-set and buffer driver objects are first realized / sourced, instead of widening back out to upstream request-hash, specialization-cache, or CPU-side vertex-format-cache theories.
+
+## 2026-05-25 — First-L88 earliest backend realization boundary (`submit_serial=9`)
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-015220/`
+- corrected comparison: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-015220/resource_realization_boundary_compare_corrected.txt`
+- corrected parsed payloads: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-015220/resource_realization_boundary_corrected.json`
+
+### Outer crash identity
+
+The same three approved cases were rerun and all preserved the same outer crash identity:
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- exit status still lands at `-6`
+
+### Earliest backend realization findings
+
+New driver-side marker: `l88_resource_realization_boundary=`.
+
+Descriptor-set realization (`vkAllocateDescriptorSets` / `uniform_set_create`) findings for the exact set `0/1/2/3` objects consumed by the first emitted L88 packet:
+- all three cases hit the same realization ordinals for these exact slots: set `2` at create ordinal `3`, set `1` at `32`, set `0` at `35`, set `3` at `36`
+- all three cases keep the same declared set indices, binding counts, write counts, pool-key hashes, and binding-signature hashes for sets `0/1/2/3`
+- despite that structural convergence, the exact descriptor-set payload already diverges at this earliest backend realization boundary:
+  - `resource_object_hash` differs across cases for sets `0`, `1`, `2`, and `3`
+- buffer-backed subpayload realization at descriptor-set creation splits more narrowly:
+  - set `2` keeps the same `buffer_realization_hash` across all three cases, so its buffer-backed realization recipe is converged even though the exact descriptor-set object still differs
+  - sets `0`, `1`, and `3` already differ in `buffer_realization_hash`, so those descriptor-set payload families are structurally divergent as soon as the backend realizes them
+
+First vertex-buffer and index-buffer realization (`buffer_create`) findings for the exact L88-consumed buffer objects:
+- baseline and specialization-only consume one vertex binding; vertex-input-only consumes two bindings, but both bindings point at the same realized buffer object/recipe
+- the first vertex-buffer object keeps the same create ordinal (`385`), usage mask (`0x81`), requested size (`2097152`), allocation size (`4194304`), frames-drawn (`5`), dynamic flag (`true`), frame slot (`1`), and realization recipe hash (`0x78fdd30e`) across all three cases
+- the first index-buffer object keeps the same create ordinal (`25`), usage mask (`0x43`), requested size (`16`), allocation size (`16`), frames-drawn (`3`), dynamic flag (`false`), frame slot (`4294967295`), and realization recipe hash (`0x5e1dfda9`) across all three cases
+- `vertex_input_only`'s only new buffer-side divergence at this boundary is the extra mirrored binding `1`; it does **not** realize a different underlying first vertex-buffer object
+
+### Practical conclusion
+
+For the exact concrete descriptor-set objects consumed by the first failing L88 packet, case divergence is already present at the earliest backend realization boundary. Convergence there survives only in the structural shell (same create ordinals / set indices / binding signatures), not in the exact realized descriptor payloads.
+
+For the first vertex-buffer and index-buffer objects, the earliest backend realization boundary still converges structurally across all three cases. Their first backend recipes match exactly; the only vertex-input-only delta at that boundary is the second mirrored binding that reuses the same realized vertex buffer.
+
+So the locked seam narrows cleanly to this statement:
+- descriptor-set divergence is already backend-realized by `uniform_set_create`
+- first vertex/index buffer realization does **not** introduce new structural divergence; the first buffer recipes converge there
+- the next honest seam, if continued later, would stay inside the descriptor-set payload family rather than widening back into request hashes, specialization caches, or CPU-side vertex-format caches
+
+## 2026-05-25 — Descriptor-set realization contents / backing-resource composition follow-up (`submit_serial=9`)
+
+### Artifact root
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-024754/`
+- slot-level comparison: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-024754/resource_realization_binding_details.txt`
+- parsed slot-level payload: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-024754/resource_realization_binding_details.json`
+
+### Outer crash identity
+
+The same three approved cases were rerun again and still preserved the exact same outer crash identity:
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- exit status still lands at `-6`
+
+### Slot-level descriptor-set realization findings
+
+New follow-up payload: `binding_realizations=` inside the existing `l88_resource_realization_boundary=` marker.
+
+This follow-up answers the narrower question left by the prior hash-only pass: **which concrete bound slots first distinguish the already-divergent sets, and whether that distinction is recipe/state-level or only object-identity-level.**
+
+Control set `2` stays converged in recipe/state terms:
+- set `2` still has only binding `0` (`StorageBuffer`)
+- across all three cases, its stable backing fields remain the same: `requested_size=16`, `allocation_size=16`, `usage_mask=0x23`, `dynamic=false`, `frame_slot=4294967295`, `realization_recipe_hash=0x922906c0`
+- the only differences are fresh object-identity fields (`driver_id`, `buffer_handle`), confirming that new runs naturally allocate fresh backend objects even when the realized buffer recipe is unchanged
+
+Divergent sets `0`, `1`, and `3` split the same way: **their first distinguishing fields are raw bound-object identity fields, not backing recipe/state fields.**
+
+Set `0` (`20` bindings):
+- first differing bound slot is binding `1` (`UniformBuffer`)
+- binding `1` keeps the same stable buffer realization fields across all three cases (`requested_size=320`, `allocation_size=320`, `usage_mask=0x12`, `dynamic=false`, `frame_slot=4294967295`, `realization_recipe_hash=0x737d4ff4`)
+- binding `2` (`StorageBuffer`) behaves the same way, with stable recipe `realization_recipe_hash=0x488b2968`
+- bindings `3`, `4`, `6`, and `7` (`Texture`) keep the same texture recipe fields (`rd_format`, `usage`, `view_type`, `layout`, `recipe_hash`) and differ only in `driver_id` / `image_handle` / `view_handle`
+- bindings `5` and `10..21` (`Sampler`) keep the same sampler `create_ordinal` / `state_hash` and differ only in sampler `driver_id`
+- net: set `0`'s earliest distinguishing contents start at binding `1`, but the split is object identity only; no texture recipe hash, buffer realization recipe hash, or sampler state hash changes across the three cases
+
+Set `1` (`CombinedSampler`, binding `0` only):
+- the sampler half keeps `create_ordinal=4` and `state_hash=0x251d4581` in all three cases; only sampler `driver_id` changes
+- the texture half keeps `rd_format=36`, `usage=0x6`, `view_type=1`, `layout=5`, `recipe_hash=0xacb5d5d9` in all three cases; only `driver_id` / `image_handle` / `view_handle` change
+- net: set `1` diverges immediately at binding `0`, but again only by concrete backend object identity, not by stable sampler/texture realization fields
+
+Set `3` (`4` bindings):
+- all four bindings diverge only in object identity
+- binding `0` texture keeps `rd_format=15`, `usage=0x7`, `view_type=1`, `layout=5`, `recipe_hash=0x31a55154`
+- bindings `1` and `2` textures keep `rd_format=36`, `usage=0x6`, `view_type=1`, `layout=5`, `recipe_hash=0xacb5d5d9`
+- binding `3` sampler keeps `create_ordinal=4`, `state_hash=0x251d4581`
+- net: set `3`'s first differing slot is binding `0`, but every changed field is still object identity only (`driver_id`, `image_handle`, `view_handle`, or sampler `driver_id`)
+
+### Practical conclusion
+
+This narrows the descriptor-set realization seam one more step:
+- the earlier set-level divergence hashes for sets `0`, `1`, and `3` do **not** correspond to any newly changed stable backing recipe/state field at `uniform_set_create`
+- instead, the concrete descriptor contents first distinguish those sets only by which freshly realized backend objects were bound into the descriptor set (`driver_id`, buffer handle, image handle, view handle, sampler handle lineage)
+- stable backing composition stays converged across the three approved cases: buffer realization recipe hashes, texture recipe hashes, and sampler state hashes all remain unchanged at this boundary
+- set `2` remains the useful control because it proves the reruns naturally reallocate fresh backend objects even when the stable realization recipe is unchanged
+
+## 2026-05-25 source-build follow-up — Task 168 (`oc-xmd8`)
+
+This follow-up stayed on the same locked `projection_only__disabled` / host-Vulkan / failing `submit_serial=9` seam and did **not** widen into a fix. Instead of reopening request-hash or cache questions, it extended the existing `l88_resource_realization_boundary=` payload just enough to classify the concrete per-binding realization contents for the already-divergent first-L88 descriptor sets `0`, `1`, and `3`, while keeping set `2` as the converged control.
+
+Artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-024754/`
+
+Key durable artifacts inside that root:
+
+- `resource_realization_contents_compare.txt`
+- `resource_realization_contents.json`
+- `resource_realization_boundary_compare.txt`
+- `resource_realization_boundary_corrected.json`
+
+Auxiliary analysis script staged for this slice:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_contents.py`
+
+Validation command:
+
+- `python3 /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_resource_realization_boundary_qa.py`
+- `python3 /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_contents.py /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-024754`
+
+### Outer crash identity stayed locked
+
+All three approved cases were rerun again and preserved the same outer crash identity:
+
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- exit status still lands at `-6`
+
+### Descriptor-set realization contents classification
+
+The new `binding_realizations=` payload shows that the already-divergent set-level `buffer_realization_hash` split for sets `0`, `1`, and `3` is **not** caused by differing backing resource recipes. Across `baseline`, `specialization_only`, and `vertex_input_only`, the per-binding backing recipes remain converged; what changes is which resource families are still represented by raw driver-object identity fields at descriptor-set realization time.
+
+#### Set `0`
+
+Set `0` stays structurally identical across the three cases, and its buffer-backed bindings still keep matching realized recipes:
+
+- binding `1` (`UniformBuffer`) keeps `realization_recipe_hash=0x737d4ff4`
+- binding `2` (`StorageBuffer`) keeps `realization_recipe_hash=0x488b2968`
+
+The **first** bound slot that actually distinguishes set `0` across the three cases is binding `3` (`Texture`):
+
+- binding `3` keeps the same texture recipe (`recipe_hash=0x731579ab`)
+- but its `driver_id`, `image_handle`, and `view_handle` differ per case
+
+After that, the same identity-only pattern continues through the rest of the non-buffer resources in set `0`:
+
+- binding `4` texture keeps `recipe_hash=0xdfe837f3`, but object identity fields differ
+- binding `5` sampler keeps `state_hash=0xd69d4fbf`, but sampler `driver_id` differs
+- binding `6` texture keeps `recipe_hash=0xacb5d5d9`, but object identity fields differ
+- binding `7` texture and sampler-only bindings `10`..`21` follow the same identity-only split
+
+Interpretation: set `0` first diverges only once the realized payload reaches the first non-buffer slot whose contribution still depends on exact object identity rather than only on buffer realization recipe.
+
+#### Set `1`
+
+Set `1` has only binding `0`, a `CombinedSampler`, and its backing recipe also stays converged across all three cases:
+
+- sampler subpart keeps `state_hash=0xd69d4fbf`
+- texture subpart keeps `recipe_hash=0xacb5d5d9`
+
+What distinguishes the cases is again only object identity:
+
+- sampler `driver_id` differs
+- texture `driver_id`, `image_handle`, and `view_handle` differ
+
+So for set `1`, the first distinguishing slot is immediately binding `0`, but the distinguishing fields are identity fields, **not** sampler-state or texture-recipe fields.
+
+#### Set `3`
+
+Set `3` follows the same pattern as set `1`, but spread across four bindings:
+
+- binding `0` texture is the first distinguishing slot
+- binding `0`'s texture recipe stays converged, while `driver_id`, `image_handle`, and `view_handle` differ per case
+- binding `1` and binding `2` textures also keep converged recipes with identity-only splits
+- binding `3` sampler keeps a converged sampler `state_hash` with identity-only `driver_id` differences
+
+So set `3` diverges immediately at its first texture slot, but again only through object identity / handle fields rather than through differing realized texture or sampler recipes.
+
+#### Set `2` control
+
+Set `2` remains the converged control for this slice:
+
+- its only binding `0` is a `StorageBuffer`
+- that buffer keeps the same `realization_recipe_hash` across all three cases
+- only `driver_id` / `buffer_handle` differ, which does **not** perturb the earlier set-level `buffer_realization_hash` because this path is already recipe-hashed for buffer-backed resources
+
+### Practical conclusion
+
+This closes the next locked seam cleanly:
+
+- the earlier Task 167 set-level divergence for sets `0`, `1`, and `3` does **not** hide a deeper backing-recipe split at descriptor-set realization time
+- instead, those sets first distinguish themselves at the earliest non-buffer slots whose realized payload still carries raw object identity / handle fields (`Texture`, `Sampler`, `CombinedSampler`)
+- set `0` first distinguishes at texture binding `3`
+- set `1` first distinguishes at combined-sampler binding `0`
+- set `3` first distinguishes at texture binding `0`
+- set `2` remains converged because its control payload is only a storage buffer whose contribution is already reduced to a stable realization recipe hash
+
+So the descriptor-set realization family is now narrowed one step further: the cross-case split is identity-backed for non-buffer resources, not recipe-backed for the underlying texture/sampler/buffer realizations on this locked failing lane.
+
+## 2026-05-25 source-build follow-up — Task 169 (`oc-67se`)
+
+This follow-up stayed on the exact same locked failing lane (`projection_only__disabled`, host Vulkan, `submit_serial=9`) and deliberately did **not** widen into a fix. Rather than reopening request-hash or cache questions, it traced one rung farther behind the already-divergent first-L88 descriptor sets `0`, `1`, and `3` to decide whether their backing-resource provenance actually diverges before descriptor-set realization, while keeping set `2` as the converged control.
+
+Fresh artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-133804/`
+
+Key durable artifacts inside that root:
+
+- `resource_backing_provenance.txt`
+- `resource_backing_provenance.json`
+- `resource_realization_binding_details.txt`
+- `resource_realization_binding_details.json`
+- `outer_crash_identity.json`
+- `resource_realization_boundary_compare.txt`
+
+Analyzer / rerun entrypoints used:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_resource_realization_boundary_qa.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_backing_provenance.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_binding_details.py`
+
+### Outer crash identity stayed locked
+
+All three approved reruns preserved the same crash envelope:
+
+- `baseline`
+- `specialization_only`
+- `vertex_input_only`
+- `fence_wait_begin submit_serial=9`
+- `fence_wait_error submit_serial=9`
+- tail still contains `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`
+- later breadcrumbs still reach `BLIT_PASS`
+- exit status stayed `-6`
+
+### Backing-provenance classification
+
+The new backing-provenance comparison shows the descriptor-set split does **not** deepen into a pre-realization recipe/signature divergence for the target sets.
+
+Across both comparisons (`baseline` -> `specialization_only`, `baseline` -> `vertex_input_only`):
+
+- set `0` classifies as `raw_backend_identity_diverged_while_stable_provenance_converged`
+- set `1` classifies as `raw_backend_identity_diverged_while_stable_provenance_converged`
+- set `3` classifies as `raw_backend_identity_diverged_while_stable_provenance_converged`
+- control set `2` also classifies as `raw_backend_identity_diverged_while_stable_provenance_converged`
+
+The important stable hashes do **not** change for any of these sets:
+
+- `stable_resource_provenance_hash_changed=false`
+- `binding_signature_hash_changed=false`
+
+Only the raw descriptor-object identity changes per rerun:
+
+- `resource_object_hash_changed=true`
+- first diffs remain identity fields like buffer/image/view handles or `driver_id`
+- there are no semantic binding diffs (`first_semantic_binding_diff=null` in every compared set)
+
+### Immediate provenance behind the already-divergent sets
+
+The stable backing provenance still converges immediately behind the descriptor bindings that diverge at first L88:
+
+- **set `0`** still first differs at binding `1` (`UniformBuffer`), then binding `2` and later non-buffer slots, but the compared fields remain identity-only (`buffer_handle`, `driver_id`, later texture/sampler handles). The stable buffer realization recipe stays converged (`0x737d4ff4` for binding `1`, `0x488b2968` for binding `2`).
+- **set `1`** still first differs at binding `0` (`CombinedSampler`), but the sampler retains `create_ordinal=4` and `state_hash=0x251d4581`, while the texture retains `recipe_hash=0xacb5d5d9`; only sampler/texture identity fields split.
+- **set `3`** still first differs at binding `0` (`Texture`), with the same texture recipe (`0x31a55154`) preserved across the three cases; the later texture bindings keep `0xacb5d5d9` and the sampler keeps `state_hash=0x251d4581`, again with only identity/handle fields changing.
+- **set `2` control** remains the proof point that fresh reruns naturally reallocate backend objects even when the stable backing provenance is unchanged: its storage buffer keeps `realization_recipe_hash=0x922906c0`, while only `buffer_handle` / `driver_id` vary.
+
+### Practical conclusion
+
+This closes the Task 169 question cleanly:
+
+- the already-divergent first-L88 descriptor sets `0`, `1`, and `3` do **not** first diverge through backing resource recipes, creation signatures, or stable provenance hashes before descriptor-set realization
+- instead, the divergence remains a raw backend object-identity split all the way through the traced backing-resource provenance layer on this locked failing lane
+- set `2` behaves the same way as the converged control, which reinforces that the reruns are simply allocating fresh backend objects while the stable provenance remains converged
+
+So the descriptor-set realization family stays narrowed to an identity-only split for these resources at failing `submit_serial=9`; there is still no evidence here of a stable recipe/provenance fork hiding behind sets `0`, `1`, or `3`.

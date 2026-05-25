@@ -6796,3 +6796,109 @@ Audit verdict: the package is complete and truthful, and it demotes any remainin
 **Results:** Added a new Vulkan-driver `l88_command_emission_boundary=` marker that records the first backend descriptor-set bind payload(s), the first vertex/index bind payloads, and the first `draw_indexed` consumer state for the locked first executed L88 packet. Rebuilt the local source binary with `scons -j8 platform=linuxbsd target=editor dev_build=yes`, reran only `baseline`, `specialization_only`, and `vertex_input_only`, and preserved the same outer crash identity in all three cases (`submit_serial=9`, same `Tonemap (L87)` → `Command Graph (L88)` tail, later `BLIT_PASS`, exit `-6`). Durable artifacts live under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/` with the comparison summarized in `command_emission_boundary_compare_v2.txt` and `command_emission_boundary_results.json`.
 
 Concrete finding: convergence still does **not** first appear at backend command recording. The first actual descriptor-set driver IDs remain case-divergent across all three lanes at the emitted bind payload itself; `specialization_only` already diverges there even while keeping the same one-binding vertex shape as `baseline`. The first vertex bind payload still diverges (`baseline` / `specialization_only`: one binding at offset `2097152`; `vertex_input_only`: two mirrored bindings, both at offset `2097152`), the first index-buffer backend driver ID still diverges while format/offset stay stable (`uint16`, `0`), and the first `draw_indexed` consumer boundary (`serial=18`) consumes those same case-divergent descriptor / vertex / index payloads directly. The carried set-1 descriptor-set driver ID present at the draw consumer boundary also remains case-divergent. That keeps the locked crash seam upstream of any hypothetical convergence inside backend command recording.
+
+---
+
+### Task 166: Audit first-L88 command-emission-boundary divergence and classify the next backend resource-payload seam at failing `submit_serial=9`
+
+**Bead ID:** `oc-qhyb`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-qhyb` at start and continue the already-approved active plan from Task 165's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Audit the refreshed three-case command-emission-boundary package at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/`. Confirm whether baseline vs `specialization_only` vs `vertex_input_only` still diverge at the first backend descriptor/vertex/index payload emission and first `draw_indexed` consumer boundary, identify exactly which backend resource-payload fields truly converge versus still diverge, and classify the next honest seam inside that same divergent payload family. Update this plan with concrete audit findings, cite the decisive artifacts, and close bead `oc-qhyb` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor re-checked the refreshed three-case command-emission-boundary package directly and confirmed the Task 165 reading is honest. Decisive artifacts: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/command_emission_boundary_summary.tsv`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/command_emission_boundary_compare_v2.txt`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/command_emission_boundary_results.json`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/outer_crash_identity.json`, plus the per-case `marker_lines.json` files under `baseline/`, `specialization_only/`, and `vertex_input_only/`. Those artifacts keep the outer crash identity locked in all three fresh launches (`submit_serial=9`, `fence_wait_error submit_serial=9`, tail still includes `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`).
+
+Audit finding: the three lanes still diverge at the first backend descriptor/vertex/index payload emission **and** still diverge unchanged at the first `draw_indexed` consumer boundary. What truly converges is only the command shape and sequencing around those payloads: descriptor binds are still split into the same two backend calls in every case (`serial=16` for `set 0`, then `serial=17` for `sets 2+3`), the first vertex bind still lands at `serial=14`, the first index bind still lands at `serial=15`, the first consumer stays `draw_indexed` at `serial=18`, and the draw arguments remain identical (`index_count=6`, `instance_count=27`, `first_index=0`, `vertex_offset=0`, `first_instance=0`). Within the payloads themselves, only a few structural fields converge: descriptor call topology (`first_set_index`, `set_count`, slot numbers), index format/offset (`uint16`, `0`), and the shared vertex-buffer offset (`2097152`).
+
+The backend-owned resource identities remain case-divergent everywhere that still matters inside this packet. The emitted descriptor-set driver IDs differ per case for sets `0`, `2`, and `3`, and the carried set-`1` descriptor-set driver ID seen by the `draw_indexed` consumer also differs per case. The first vertex payload still differs by actual backend buffer identity in all three lanes, with `baseline` and `specialization_only` sharing the same one-binding shape while `vertex_input_only` still emits two mirrored bindings. The first index payload also keeps a per-case backend buffer identity even though format/offset converge. So convergence does **not** first appear at backend command emission or at the first consumer boundary; only the scaffolding around the resource payloads converges.
+
+The next honest seam therefore stays inside this same divergent backend resource-payload family: trace the earliest backend provenance / realization boundary for the concrete descriptor-set and buffer objects that feed this first emitted packet — especially the per-case descriptor-set driver IDs for sets `0/1/2/3`, plus the first vertex-buffer and index-buffer driver objects — rather than reopening request-hash, specialization-cache, or CPU-side vertex-format-cache theories or widening into a fix.
+
+---
+
+### Task 167: Trace earliest backend provenance boundary for first-L88 emitted descriptor-set and buffer driver objects at failing `submit_serial=9`
+
+**Bead ID:** `oc-01rj`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-01rj` at start and continue the already-approved active plan from Task 166's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Stay inside the same divergent backend resource-payload family and trace the earliest backend provenance / realization boundary for the exact descriptor-set and buffer driver objects that feed the first emitted L88 packet on failing `submit_serial=9` — especially descriptor sets `0/1/2/3`, plus the first vertex-buffer and index-buffer driver objects. Determine whether those concrete backend resource objects are already case-divergent at their earliest backend realization boundary or whether convergence first appears there. Rerun only the same three approved cases (`baseline`, `specialization_only`, `vertex_input_only`), preserve the same outer crash identity checks, write durable artifact notes, update this plan with concrete findings, and close bead `oc-01rj` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_resource_realization_boundary_qa.py`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_boundary.py`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new driver-side `l88_resource_realization_boundary=` marker in `rendering_device_driver_vulkan.*` that traces the earliest backend realization metadata for the exact descriptor-set and buffer objects consumed by the first emitted L88 packet on failing `submit_serial=9`. The rerun artifact root is `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-015220/`; see `resource_realization_boundary_compare_corrected.txt` plus `resource_realization_boundary_corrected.json` there for the corrected parsed comparison. Concrete finding: the exact descriptor-set objects for sets `0/1/2/3` are already case-divergent at their earliest backend realization boundary (`uniform_set_create`) even though their create ordinals, set indices, binding counts, write counts, pool-key hashes, and binding-signature hashes stay converged. Set `2` keeps the same `buffer_realization_hash` across all three cases, but sets `0`, `1`, and `3` already diverge in `buffer_realization_hash` at descriptor-set realization time. By contrast, the first vertex-buffer and first index-buffer recipes stay converged at `buffer_create`: same ordinals, sizes, usage masks, dynamic flags, and realization hashes across all three cases; `vertex_input_only` only adds a second mirrored binding that reuses the same realized first vertex buffer. Outer crash identity remained locked (`fence_wait_begin submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`).
+
+---
+
+### Task 168: Classify descriptor-set realization contents for first-L88 divergent sets `0`, `1`, and `3` at failing `submit_serial=9`
+
+**Bead ID:** `oc-xmd8`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-xmd8` at start and continue the already-approved active plan from Task 167's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Stay inside the descriptor-set realization family and classify the concrete realization contents/backing resource composition for the already-divergent first-L88 descriptor sets `0`, `1`, and `3` on failing `submit_serial=9`. Determine which bound resource slots or backing resource-realization fields first distinguish those descriptor sets across `baseline`, `specialization_only`, and `vertex_input_only`, while keeping set `2` as the converged control. Rerun only the same three approved cases (`baseline`, `specialization_only`, `vertex_input_only`), preserve the same outer crash identity checks, write durable artifact notes, update this plan with concrete findings, and close bead `oc-xmd8` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_binding_details.py`
+
+**Status:** ✅ Complete
+
+**Results:** Extended the existing `l88_resource_realization_boundary=` instrumentation so each first-L88 descriptor set now carries a `binding_realizations=` payload with per-binding/per-resource realization contents: sampler state hashes, texture recipe hashes, and buffer realization summaries alongside the raw bound backend object identities. Rebuilt the source binary and reran only the same three approved cases using `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_resource_realization_boundary_qa.py`; the fresh artifact root is `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-024754/`. `resource_realization_binding_details.txt` and `resource_realization_binding_details.json` there show the concrete classification: for set `0`, the first distinguishing slot is binding `1` (`UniformBuffer`), but its stable realization fields still match across `baseline`, `specialization_only`, and `vertex_input_only` (`requested_size=320`, `allocation_size=320`, `usage_mask=0x12`, `dynamic=false`, `frame_slot=4294967295`, `realization_recipe_hash=0x737d4ff4`); binding `2` (`StorageBuffer`) behaves the same way with stable `realization_recipe_hash=0x488b2968`, and the later texture/sampler bindings also split only by raw object identity while their texture recipe hashes and sampler state hashes stay converged. For set `1`, the first and only distinguishing slot is binding `0` (`CombinedSampler`): sampler `create_ordinal=4` / `state_hash=0x251d4581` and texture `recipe_hash=0xacb5d5d9` stay converged, while only sampler/texture identity fields differ. For set `3`, the first distinguishing slot is binding `0` (`Texture`), followed by the other texture slots and sampler slot with the same identity-only split; the stable texture recipes (`0x31a55154` for binding `0`, `0xacb5d5d9` for bindings `1/2`) and sampler state hash (`0x251d4581`) remain converged. Set `2` remains the converged control because its only binding `0` is a `StorageBuffer` whose stable realization fields stay unchanged (`realization_recipe_hash=0x922906c0`); only `driver_id` / `buffer_handle` change there, which confirms that fresh reruns naturally allocate new backend objects even when the realized recipe is unchanged. Net: sets `0`, `1`, and `3` do already diverge at `uniform_set_create`, but the first distinguishing fields are only raw backend object-identity fields rather than any changed stable backing recipe/state field. Outer crash identity stayed locked (`fence_wait_begin submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`).
+
+---
+
+### Task 169: Trace stable provenance behind first-L88 descriptor-set backing resources `0`, `1`, and `3` while keeping set `2` as converged control at failing `submit_serial=9`
+
+**Bead ID:** `oc-67se`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-67se` at start and continue the already-approved active plan from Task 168's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Stay inside the descriptor-set realization family and trace the stable provenance immediately behind the already-divergent first-L88 descriptor sets `0`, `1`, and `3` on failing `submit_serial=9`, while keeping set `2` as the converged control. Determine whether the backing resource recipes / creation signatures / provenance hashes behind those descriptor bindings first diverge before descriptor-set realization, or whether only raw backend object identity diverges while the stable backing provenance still converges. Rerun only the same three approved cases (`baseline`, `specialization_only`, `vertex_input_only`), preserve the same outer crash identity checks, write durable artifact notes, update this plan with concrete findings, and close bead `oc-67se` with a clear reason if complete. Do not reopen request-hash, specialization-cache, or CPU-side vertex-format-cache questions, and do not widen into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- backend provenance instrumentation / analysis files as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Reused the existing first-L88 descriptor-set realization instrumentation and reran only the same three approved source-built cases (`baseline`, `specialization_only`, `vertex_input_only`) through `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_resource_realization_boundary_qa.py`, producing fresh artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-resource-realization-boundary-vulkan-sourcebuild-20260525-133804/`. Postprocessed that rerun with `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_backing_provenance.py` plus `analyze_resource_realization_binding_details.py` and appended durable notes to `REF-07`.
+
+The concrete finding is that the already-divergent first-L88 descriptor sets `0`, `1`, and `3` still do **not** fork through backing resource recipes / creation signatures / stable provenance before descriptor-set realization. In both `baseline -> specialization_only` and `baseline -> vertex_input_only`, each focus set classifies as `raw_backend_identity_diverged_while_stable_provenance_converged`, with `resource_object_hash_changed=true` but `stable_resource_provenance_hash_changed=false` and `binding_signature_hash_changed=false`. There are no semantic binding diffs (`first_semantic_binding_diff=null`) for any compared target set, while the first actual diffs remain identity-only fields exactly at the already-known slots: set `0` first at binding `1` (`UniformBuffer`) via `buffer_handle` / `driver_id`, set `1` first at binding `0` (`CombinedSampler`) via sampler `driver_id` plus texture `driver_id` / `image_handle` / `view_handle`, and set `3` first at binding `0` (`Texture`) via `driver_id` / `image_handle` / `view_handle`.
+
+The stable backing provenance immediately behind those bindings still converges across all three cases. Set `0` keeps the same buffer realization recipes (`binding 1 -> 0x737d4ff4`, `binding 2 -> 0x488b2968`); set `1` keeps sampler `create_ordinal=4` / `state_hash=0x251d4581` and texture `recipe_hash=0xacb5d5d9`; set `3` keeps texture `recipe_hash=0x31a55154` at binding `0`, `0xacb5d5d9` at bindings `1/2`, and sampler `state_hash=0x251d4581` at binding `3`. Control set `2` lands on the same classification with stable `realization_recipe_hash=0x922906c0` and only identity-only `buffer_handle` / `driver_id` changes, confirming that fresh reruns naturally allocate new backend objects without introducing a stable provenance fork. Outer crash identity stayed locked in all three reruns (`fence_wait_begin submit_serial=9`, `fence_wait_error submit_serial=9`, tail `Tonemap (L87) (Draw)` then `Command Graph (L88) (Draw)`, later `BLIT_PASS`, exit `-6`).
