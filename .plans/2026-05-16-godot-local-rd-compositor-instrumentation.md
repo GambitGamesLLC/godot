@@ -7190,6 +7190,248 @@ The only surviving specialization-side delta is that singleton entry's value pay
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
 
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-**Results:** Pending.
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-derivative-coverage-math-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on the exact first-L88 preserved-crash packet, the live `sc_use_msdf()` seam is narrower than “general MSDF outline behavior.” The already-approved first-kept batch/prereq artifacts pin the packet to `params.msdf={px_range=1.0, outline=0.0}` with `texpixel_size=(1/256, 1/256)`, so the outline-capable sub-branch is dormant on this packet. The exact live specialized math reduces to the same texture sample at the same `uv`, then `dest_size = 1.0 / fwidth(uv)`, `px_size = max(0.5 * dot((vec2(1.0) / msdf_size), dest_size), 1.0)`, `d = median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, `a = clamp((d - 0.5) * px_size + 0.5, 0.0, 1.0)`, and finally `color.a = a * color.a`.
+
+Compared with the non-MSDF `color *= texture(...)` path, the exact surviving fork is therefore a **local fragment derivative/coverage alpha rewrite** inside the same already-locked packet shell, not a widened descriptor/bind/draw structural change. That classification still preserves the same outer crash envelope because Task 177's approved value-only `packed_0 0x0 -> 0x2` experiment already proved this exact branch swap reproduces the unchanged `submit_serial=9` / `fence_wait_error` / `Tonemap (L87)` -> `Command Graph (L88)` / later `BLIT_PASS` / exit `-6` identity while the surrounding first-L88 prereq shell stays fixed.
+
+Validation for this documentation slice:
+- `git diff --check -- doc/gdgs-first-l88-msdf-derivative-coverage-math-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+---
+
+### Task 181: Separate the derivative-driven `px_size` term from the median-distance `d` reconstruction inside the exact first-L88 no-outline MSDF branch and classify which live ingredient preserves the locked crash envelope at failing `submit_serial=9`
+
+**Bead ID:** `oc-61e8`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-61e8` at start and continue the already-approved active plan from Task 180's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The live seam is now the exact no-outline MSDF coverage formula on the first-L88 packet. Separate the remaining two live MSDF-specific ingredients — the derivative-driven `px_size` term and the median-distance `d` reconstruction — and classify which of those ingredients preserves the same locked crash envelope at failing `submit_serial=9`, using the narrowest source-backed analysis and any already-approved artifact evidence. Prefer documentation/analysis or the smallest reversible diagnostic contrast that stays on this packet only. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-61e8` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or broadening into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- derivative-vs-median isolation notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-px-size-vs-median-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on the exact first-L88 preserved-crash packet, the derivative-driven `px_size` term does **not** survive as the tighter preserved seam. Using only the already-approved packet facts from prior artifacts — `px_range=1.0`, `outline=0.0`, `texpixel_size=(1/256, 1/256)`, source rect `14x16`, destination rect `14x16` — the live no-outline MSDF branch can be reduced one rung farther. The 1:1 `14x16 -> 14x16` mapping implies the nominal UV advance is one texel per destination pixel, so `fwidth(uv) ≈ (1/256, 1/256)` and therefore `dest_size ≈ (256, 256)`. Substituting those exact packet values into the shader expression yields `px_size = max(0.5 * dot((1/256, 1/256), (256, 256)), 1.0) = 1.0`. Once that derivative term collapses to the neutral floor, the live no-outline formula simplifies from `a = clamp((d - 0.5) * px_size + 0.5, 0.0, 1.0)` to `a = clamp(d, 0.0, 1.0)`, which for normalized sampled channels is effectively `a = d`.
+
+That means the surviving live MSDF-specific ingredient on this exact packet is the **median-distance reconstruction** `d = median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, not the derivative gain term. This stays inside the same locked `submit_serial=9` / `fence_wait_error` / `Tonemap (L87)` -> `Command Graph (L88)` / later `BLIT_PASS` envelope already preserved by Task 177's approved value-only `packed_0 0x0 -> 0x2` experiment; it does **not** widen into a fix or reopen specialization-cache, request-hash, or CPU-side vertex-format-cache theories.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- doc/gdgs-first-l88-msdf-px-size-vs-median-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+---
+
+### Task 182: Separate the surviving first-L88 median-distance seam into raw sampled-channel relationship versus `median(r, g, b)` collapse, or `d` versus the final alpha rewrite `color.a = a * color.a`, and classify the tighter preserved carrier at failing `submit_serial=9`
+
+**Bead ID:** `oc-eymk`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-eymk` at start and continue the already-approved active plan from Task 181's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The surviving live seam is now the median-distance side of the exact first-L88 no-outline MSDF packet. Separate that seam as narrowly as possible: either raw sampled-channel relationship versus the `median(r, g, b)` collapse, or `d` itself versus the final alpha rewrite `color.a = a * color.a`, whichever yields the tighter source-backed preserved carrier while staying on this exact packet only. Prefer documentation/analysis or the smallest reversible diagnostic contrast that stays on this packet. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-eymk` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or broadening into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-vs-alpha-rewrite-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-vs-alpha-rewrite-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on the exact first-L88 preserved-crash packet, the tighter surviving carrier is the **median-distance reconstruction** `d = median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, not the outer final alpha-application shell `color.a = a * color.a`. This slice stayed documentation-only and used the already-approved Task 181 reduction as its starting point: with `px_range=1.0`, `outline=0.0`, `texpixel_size=(1/256, 1/256)`, and the exact `14x16 -> 14x16` packet geometry, the no-outline branch had already been reduced to `px_size = 1.0`, so the live packet form was effectively `color.a = d * color.a`. Reading the exact shader source one rung farther shows why the seam tightens onto `d`: the branch-only reinterpretation lives at `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, while the trailing `* color.a` applies that value into inherited fragment alpha state that already exists before branch selection (`vec4 color = color_interp;` and upstream `color_interp = color;` in the shared vertex/modulation path). In other words, once derivative scaling is demoted, the remaining MSDF-only semantic fork is the median-distance factor itself; the final alpha rewrite is a generic carrier, not the narrower preserved source of divergence.
+
+This stays inside the same locked `submit_serial=9` / `fence_wait_error` / `Tonemap (L87)` -> `Command Graph (L88)` / later `BLIT_PASS` envelope already preserved by Task 177's approved value-only `packed_0 0x0 -> 0x2` experiment, and it does **not** widen into a fix or reopen specialization-cache, request-hash, or CPU-side vertex-format-cache theories.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- doc/gdgs-first-l88-msdf-d-vs-alpha-rewrite-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+---
+
+### Task 183: Separate the first-L88 surviving median-distance carrier into the raw sampled RGB channel relationship versus the `median(r, g, b)` collapse and classify the tighter preserved seam at failing `submit_serial=9`
+
+**Bead ID:** `oc-ckn7`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-ckn7` at start and continue the already-approved active plan from Task 182's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The surviving live seam is now the median-distance carrier on the exact first-L88 no-outline MSDF packet. Separate that seam one rung farther: distinguish the raw sampled RGB channel relationship from the `median(r, g, b)` collapse itself, and classify which is the tighter preserved seam while staying on this exact packet only. Prefer documentation/analysis or the smallest reversible diagnostic contrast that stays on this packet. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-ckn7` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or broadening into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- median-collapse isolation notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-rgb-vs-median-collapse-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on the exact first-L88 preserved-crash packet, the tighter surviving carrier is the **`median(r, g, b)` collapse itself**, not the broader raw sampled RGB channel relationship alone. This slice stayed documentation-only and used the already-approved Task 182 reduction as its starting point: the live no-outline packet had already been reduced to `msdf_sample = texture(...)`, `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, `color.a = d * color.a`. Reading the exact shader source one rung farther shows why the seam tightens onto the collapse rather than the raw channels: the baseline non-MSDF branch also samples the same texture at the same `uv` via `color *= texture(...)`, so the existence of the raw RGB triplet is still a shared sampled input surface rather than the narrowest specialization-only divergence. The branch-local preserved fork is the exact `msdf_median(...)` transform that collapses that shared RGB payload into the surviving scalar carrier `d` used by the already-reduced no-outline packet. In other words, once outline, derivative scaling, and the generic alpha-application shell are all demoted, the tightest remaining preserved seam is not “sampled RGB exists,” but “sampled RGB is collapsed into a median-distance scalar.”
+
+This stays inside the same locked `submit_serial=9` / `fence_wait_error` / `Tonemap (L87)` -> `Command Graph (L88)` / later `BLIT_PASS` envelope already preserved by Task 177's approved value-only `packed_0 0x0 -> 0x2` experiment, and it does **not** widen into a fix or reopen specialization-cache, request-hash, or CPU-side vertex-format-cache theories.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- doc/gdgs-first-l88-msdf-rgb-vs-median-collapse-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+---
+
+### Task 184: Separate the surviving first-L88 `msdf_median(...)` seam into the broader three-channel ordering relationship versus the exact selected middle-value scalar output and classify the tighter preserved carrier at failing `submit_serial=9`
+
+**Bead ID:** `oc-lnuk`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-lnuk` at start and continue the already-approved active plan from Task 183's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The surviving live seam is now inside the exact `msdf_median(...)` collapse on the first-L88 no-outline MSDF packet. Separate that seam one rung farther: distinguish the broader three-channel ordering relationship from the exact selected middle-value scalar output that `msdf_median(...)` emits, and classify which is the tighter preserved seam while staying on this exact packet only. Prefer documentation/analysis or the smallest reversible diagnostic contrast that stays on this packet. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-lnuk` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or broadening into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- median-internal isolation notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-median-ordering-vs-selected-middle-value-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on the exact first-L88 preserved-crash no-outline MSDF packet, the tighter surviving seam *inside* `msdf_median(...)` is the **exact selected middle-value scalar output returned as `d`**, not the broader three-channel ordering relationship used internally to choose it. This stayed documentation-only and continued directly from the already-approved Task 183 reduction: the live packet had already been reduced to `msdf_sample = texture(...)`, `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, `color.a = d * color.a`, with the broader raw sampled RGB relationship already demoted in favor of the branch-only median collapse. Reading the exact helper source one rung farther shows that `max(min(r, g), min(max(r, g), b))` uses the full ordering relationship only as internal decision structure; it does not export that ordering as a carried packet value. What actually leaves the helper and survives forward into the already-reduced packet is only the selected middle-value scalar `d`. So the broader ordering relationship remains an internal comparison mechanism, while the selected scalar output is the tighter preserved carrier actually forwarded by the live packet.
+
+This keeps the same already-locked outer envelope only as packet-local classification (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`) and does not widen into a fix or reopen specialization-cache, request-hash, or CPU-side vertex-format-cache theories.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- doc/gdgs-first-l88-msdf-median-ordering-vs-selected-middle-value-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+---
+
+### Task 185: Separate the surviving first-L88 selected median-scalar seam into the exact contributing source-channel identity versus the emitted scalar value and classify the tighter preserved carrier at failing `submit_serial=9`
+
+**Bead ID:** `oc-2izj`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-2izj` at start and continue the already-approved active plan from Task 184's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The surviving live seam is now the selected middle-value scalar emitted by `msdf_median(...)` on the exact first-L88 no-outline MSDF packet. Separate that seam one rung farther: distinguish the exact contributing source-channel identity from the emitted scalar value itself, and classify which is the tighter preserved seam while staying on this exact packet only. Prefer documentation/analysis or the smallest reversible diagnostic contrast that stays on this packet. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-2izj` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or broadening into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- median-scalar identity isolation notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-selected-channel-identity-vs-emitted-scalar-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on the exact first-L88 preserved-crash no-outline MSDF packet, the tighter surviving seam is the **emitted scalar `d`** from `msdf_median(...)`, not the exact contributing source-channel identity (`r` / `g` / `b`) that happened to supply that middle value. This stayed documentation-only and continued directly from the already-approved Task 184 reduction: the live packet had already been reduced to a branch-local median collapse whose broader three-channel ordering relationship was already demoted in favor of the exported selected middle-value scalar. Reading the helper one rung farther shows why channel identity does not survive as the tighter packet-local carrier: whichever component happens to be the median is only internal provenance for how `d` was chosen, while what actually leaves `msdf_median(...)` and is carried forward by the already-reduced packet is only the scalar value `d` itself. The exact source-channel identity is therefore not a separately forwarded packet-local carrier.
+
+This keeps the same already-locked outer envelope only as packet-local classification (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`) and does not widen into a fix or reopen specialization-cache, request-hash, or CPU-side vertex-format-cache theories.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md doc/gdgs-compositor-staged-qa-2026-05-17.md doc/gdgs-first-l88-msdf-selected-channel-identity-vs-emitted-scalar-2026-05-26.md`
+
+---
+
+### Task 186: Determine whether the surviving first-L88 emitted scalar `d` can be narrowed any further as a packet-local preserved seam, or whether `d` is the irreducible carrier without widening beyond the current exact packet
+
+**Bead ID:** `oc-qzj6`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-qzj6` at start and continue the already-approved active plan from Task 185's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The surviving live seam is now the emitted scalar `d` carried forward by the exact first-L88 no-outline MSDF packet. Determine whether that seam can be narrowed any further while staying packet-local, or whether `d` is now the irreducible preserved carrier unless the investigation widens beyond the current exact packet. Prefer documentation/analysis or the smallest reversible diagnostic contrast that stays on this packet. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-qzj6` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or broadening into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-irreducible-carrier-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only packet-local classification pass on the same locked crash seam, without widening into a fix or adding new runtime instrumentation. Wrote durable note `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-irreducible-carrier-2026-05-26.md` and linked it from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`. Concrete finding: on the exact first-L88 preserved-crash no-outline MSDF packet, the emitted scalar `d` is now the **irreducible preserved packet-local carrier**. After the prior approved reductions, there is no smaller honest packet-local sideband left to carry the seam: outline is already dormant (`outline=0.0`), derivative gain is already neutral (`px_size=1.0`), `msdf_median(...)` exports no ordering witness or channel label, and the packet does not further collapse `d` into a smaller boolean/enum before rejoining shared flow. The downstream multiply `color.a = d * color.a` is not a tighter MSDF-only carrier because the inherited `color.a` is shared pre-branch fragment state that was already demoted in Task 182. So any further honest narrowing would require widening beyond the current exact packet rather than continuing the same packet-local reduction ladder. Validation for this slice: `git diff --check -- .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md doc/gdgs-compositor-staged-qa-2026-05-17.md doc/gdgs-first-l88-msdf-d-irreducible-carrier-2026-05-26.md`. Exact next seam now becomes clear only if the investigation is allowed to widen beyond packet-local classification — e.g. into downstream use/consequence of `d` outside this exact packet — because the packet-local ladder itself is exhausted here.
+
+---
+
+### Task 187: Trace the first downstream use/consequence of the exact first-L88 emitted scalar `d` beyond packet-local classification and identify the earliest point where the preserved crash path becomes structurally different outside the packet
+
+**Bead ID:** `oc-3qre`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-3qre` at start and continue the already-approved active plan from Task 186's stop point. Derrick has explicitly approved widening beyond packet-local classification. Stay focused on the same preserved crash path, but step outward from the exact first-L88 packet. Trace the first downstream use/consequence of the emitted scalar `d` and identify the earliest point where the preserved crash path becomes structurally different outside the packet. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from the completed packet-local ladder. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-3qre` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping all the way to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- downstream-consequence tracing notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only downstream-tracing slice, widening exactly one rung beyond Task 186's exhausted packet-local ladder without adding new runtime instrumentation or reopening the already-demoted broader theories. Wrote durable note `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-downstream-blend-seam-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: once the exact first-L88 no-outline MSDF packet has reduced to irreducible emitted scalar `d`, the first honest downstream trace beyond packet-local classification is `d -> color.a -> frag_color.a` through the shared fragment tail of `servers/rendering/renderer_rd/shaders/canvas.glsl`. But the **earliest point where the preserved crash path becomes structurally different outside the packet** is not the intermediate shared-flow carry itself; it is the live `Command Graph (L88) (Draw)` preserve-content **mix-blend boundary** against loaded root contents. Source-backed reason: the packet exports `frag_color = color`, while the live `L88` canvas pass in `servers/rendering/renderer_rd/storage_rd/material_storage.cpp` uses `BLEND_MODE_MIX` with `src_color_blend_factor = SRC_ALPHA` and `dst_color_blend_factor = ONE_MINUS_SRC_ALPHA`; the durable `REF-07` artifact already shows that exact lane as `UI_PASS` with `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `first_destination_color_blend_mode="mix"`, and `CanvasShaderRD:0` with `blend_enabled_attachment_mask="0x1"`. So the first external structural consequence of `d` is that its exported alpha immediately becomes part of the source-alpha weighting that merges the exact packet with already-present root attachment contents.
+
+This keeps the same already-locked outer envelope only as downstream classification (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`) and does not widen into a fix.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md doc/gdgs-compositor-staged-qa-2026-05-17.md doc/gdgs-first-l88-msdf-d-downstream-blend-seam-2026-05-26.md`
+
+Exact next seam now becomes clear only if the investigation continues outward from this newly identified boundary: split the first external consequence at the preserve-content `L88` blend boundary itself rather than reopening packet-local `d` classification.
+
+---
+
+### Task 185: Separate the surviving first-L88 selected median-scalar seam into the exact contributing source-channel identity versus the emitted scalar value and classify the tighter preserved carrier at failing `submit_serial=9`
+
+**Bead ID:** `oc-2izj`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-2izj` at start and continue the already-approved active plan from Task 184's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The surviving live seam is now the selected middle-value scalar emitted by `msdf_median(...)` on the exact first-L88 no-outline MSDF packet. Separate that seam one rung farther: distinguish the exact contributing source-channel identity from the emitted scalar value itself, and classify which is the tighter preserved seam while staying on this exact packet only. Prefer documentation/analysis or the smallest reversible diagnostic contrast that stays on this packet. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-2izj` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or broadening into a fix.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- median-scalar identity isolation notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-selected-channel-identity-vs-emitted-scalar-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on the exact first-L88 preserved-crash no-outline MSDF packet, the tighter surviving seam one rung farther downstream is the **emitted scalar value `d` returned by `msdf_median(...)`**, not the exact contributing source-channel identity behind that selected value. This stayed documentation-only and continued directly from the already-approved Task 184 reduction: the live packet had already been reduced to `msdf_sample = texture(...)`, `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, `color.a = d * color.a`, with the broader three-channel ordering relationship already demoted in favor of the exact selected scalar output. Reading the exact helper source one rung farther shows that the selected source-channel identity (`r`, `g`, or `b`) remains only internal provenance behind the chosen middle value; `msdf_median(...)` exports no channel label or sideband identity bit. What actually leaves the helper and survives forward into the already-reduced packet is only the scalar `d` itself. So the source-channel identity remains a broader internal provenance fact, while the emitted scalar value is the tighter preserved carrier actually forwarded by the live packet.
+
+This keeps the same already-locked outer envelope only as packet-local classification (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`) and does not widen into a fix or reopen specialization-cache, request-hash, or CPU-side vertex-format-cache theories.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- doc/gdgs-first-l88-msdf-selected-channel-identity-vs-emitted-scalar-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`

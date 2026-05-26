@@ -6927,6 +6927,7 @@ Durable note for this slice:
 
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-specialization-meaning-2026-05-25.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-fragment-path-2026-05-25.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-derivative-coverage-math-2026-05-26.md`
 
 The narrow source-backed conclusion is:
 
@@ -6941,3 +6942,248 @@ Why the crash envelope stays locked:
 - the Task 177 value-only run already proved this exact specialization payload flip alone preserves the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)` then `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
 - the value-only contrast held the rest of the approved comparison surface fixed enough to show the surviving fork is the specialized pipeline recipe itself, not a widened descriptor/sync/draw-argument change
 - `_get_pipeline_specialization_or_ubershader()` zeroes the push-constant specialization shadow for the specialized path, so the forced `0x2` value is actually consumed as the bound pipeline specialization and not overridden by the batch's original `use_msdf=false` selector
+
+## 2026-05-26 — Task 180: exact first-L88 MSDF derivative / coverage / outline math
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-derivative-coverage-math-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- the live specialized branch is still in `servers/rendering/renderer_rd/shaders/canvas.glsl` under `if (sc_use_msdf())`
+- the exact packet inputs already established by approved artifacts are `px_range=1.0`, `outline=0.0`, and `texpixel_size=(1/256, 1/256)` with `held_use_msdf=false` in the value-only forcing run
+- because `outline_thickness == 0.0`, the outline-capable sub-branch is **dormant** on this packet; the preserved-crash seam does not require outline-specific behavior
+- the exact live math therefore reduces to:
+  - same `texture(color_texture, uv)` sample as baseline
+  - `dest_size = 1.0 / fwidth(uv)`
+  - `px_size = max(0.5 * dot((vec2(1.0) / msdf_size), dest_size), 1.0)` with this packet's effective `msdf_size=256x256`
+  - `d = median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`
+  - `a = clamp((d - 0.5) * px_size + 0.5, 0.0, 1.0)`
+  - `color.a = a * color.a`
+- compared with the non-MSDF `color *= texture(...)` path, the semantic fork is local fragment ALU only: derivative-scaled coverage reconstruction plus alpha rewrite, not a new descriptor / draw / bind shell
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only contrast already proved the exact `packed_0 0x0 -> 0x2` branch swap preserves the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- the exact first-kept batch/prereq artifacts still keep the same surrounding first-L88 shell: same prereq scissor/uniform-set/draw-binding package, same indexed draw family, same packet lane
+- so the most specific preserved-crash classification is that the live first-L88 specialized seam is the **no-outline MSDF derivative/coverage alpha path inside the same already-locked packet shell**, not a widened structural fork elsewhere
+
+## 2026-05-26 — Task 181: exact first-L88 no-outline MSDF `px_size` versus median-distance split
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-px-size-vs-median-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- the already-approved packet facts keep the same exact no-outline MSDF lane: `px_range=1.0`, `outline=0.0`, `texpixel_size=(1/256, 1/256)`, source rect `14x16`, destination rect `14x16`
+- with that exact geometry, the nominal UV advance is one texel per destination pixel, so `fwidth(uv) ≈ (1/256, 1/256)` and `dest_size ≈ (256, 256)`
+- substituting those packet facts into the live branch reduces the derivative-driven term to a neutral floor value:
+  - `px_size = max(0.5 * dot((1/256, 1/256), (256, 256)), 1.0) = 1.0`
+- once `px_size` collapses to `1.0`, the no-outline alpha formula simplifies from `a = clamp((d - 0.5) * px_size + 0.5, 0.0, 1.0)` to `a = clamp(d, 0.0, 1.0)` and therefore, for normalized sampled channels, effectively to `a = d`
+- that demotes the derivative-driven `px_size` term on this exact packet and leaves the median-distance reconstruction `d = median(r, g, b)` as the surviving live MSDF-specific semantic fork inside the already-locked packet shell
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only contrast already proved the exact `packed_0 0x0 -> 0x2` branch swap preserves the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Task 180 already demoted outline behavior by proving `outline=0.0` on this packet
+- this Task 181 split now demotes the derivative-driven scale term as well, because the exact packet geometry reduces `px_size` to `1.0`
+- so the narrowest surviving preserved-crash classification is that the exact first-L88 no-outline MSDF seam tracks the **median-distance reconstruction / alpha rewrite**, not the derivative gain term
+
+## 2026-05-26 — Task 182: exact first-L88 median-distance versus final alpha rewrite split
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-median-vs-alpha-rewrite-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- Task 181 already reduced the packet to the no-outline live form `a = d` and therefore effectively `color.a = d * color.a`
+- in `servers/rendering/renderer_rd/shaders/canvas.glsl`, the surviving branch-local reinterpretation step is `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`
+- the final application shell `color.a = a * color.a` uses inherited fragment alpha from the already-shared upstream path (`vec4 color = color_interp;` with `color_interp = color;` emitted from the vertex side), so the trailing `* color.a` is not the specialization-only semantic fork
+- with `px_size` already demoted to `1.0`, the remaining branch-only factor inside the exact packet is therefore the median-distance value `d`, while the alpha rewrite is the generic carrier that applies that branch-local result into the shared fragment color state
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only contrast already proved the exact `packed_0 0x0 -> 0x2` branch swap preserves the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Task 180 already demoted the outline sub-branch on this packet because `outline=0.0`
+- Task 181 already demoted the derivative gain term on this packet because the exact `14x16 -> 14x16` geometry and `1/256` texel size reduce `px_size` to `1.0`
+- so this Task 182 split leaves the **median-distance reconstruction** as the tightest surviving preserved carrier inside the same already-locked first-L88 packet shell, not the generic final alpha-application shell
+
+## 2026-05-26 — Task 183: exact first-L88 raw sampled RGB relationship versus `median(r, g, b)` collapse split
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-rgb-vs-median-collapse-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- Task 182 already reduced the live packet to the effective form `msdf_sample = texture(...)`, `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, `color.a = d * color.a`
+- the raw sampled RGB triplet is a **shared sampled input surface**, not the tightest branch-only seam, because the baseline non-MSDF path also samples the same texture at the same `uv` via `color *= texture(...)`
+- the tighter specialization-only transform is the `msdf_median(...)` collapse itself: it is the exact operation that turns the shared RGB triplet into the surviving scalar carrier `d` used by the already-reduced no-outline packet
+- put differently: the raw sampled RGB relationship is still required input, but the branch-local preserved divergence does not tighten onto “RGB exists”; it tightens onto the **collapse of that shared RGB payload into the median-distance scalar**
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only contrast already proved the exact `packed_0 0x0 -> 0x2` branch swap preserves the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Task 180 already demoted the outline sub-branch on this packet because `outline=0.0`
+- Task 181 already demoted the derivative gain term on this packet because the exact `14x16 -> 14x16` geometry and `1/256` texel size reduce `px_size` to `1.0`
+- Task 182 already demoted the generic final alpha-application shell because `color.a` is inherited shared fragment state
+- so this Task 183 split leaves the **`median(r, g, b)` collapse** as the tightest surviving preserved carrier inside the same already-locked first-L88 packet shell, not the broader raw sampled RGB relationship alone
+
+## 2026-05-26 — coder note for bead `oc-eymk` (first-L88 no-outline MSDF `d` versus final alpha rewrite)
+
+Stayed strictly on the exact first-L88 no-outline MSDF packet and did a documentation-only split of the remaining live seam instead of widening into new runtime work.
+
+Durable note added:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-vs-alpha-rewrite-2026-05-26.md`
+
+What this slice locked:
+
+- Task 181 had already reduced the exact packet to `px_size = 1.0`, so the no-outline formula on this packet simplifies from `a = clamp((d - 0.5) * px_size + 0.5, 0.0, 1.0)` to `a = d`.
+- That means the exact surviving branch is `color.a = d * color.a`.
+- The tighter preserved MSDF-specific carrier is therefore `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, not the downstream alpha rewrite.
+- Source reason: `d` is the first irreversible MSDF-owned collapse from the sampled RGB relationship to one scalar, while `color.a = d * color.a` only applies that scalar through the already-existing inherited `color.a` carrier (`vec4 color = color_interp;`).
+
+Why this is the tighter seam:
+
+- upstream raw sampled RGB is broader than the resolved scalar actually used by the exact no-outline packet
+- downstream `color.a = d * color.a` is broader than `d` because it mixes the MSDF-owned scalar with preexisting fragment alpha
+- so the surviving live seam stays pinned on the median-distance scalar itself
+
+This preserves the same already-locked outer envelope only as a classification statement:
+
+- exact packet: first clipped preserve-rect `Command Graph (L88)` no-outline MSDF packet
+- same outer identity: `submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`
+- no widening into a fix and no reopening of specialization-cache, request-hash, or CPU-side vertex-format-cache theories
+
+## 2026-05-26 — Task 184: exact first-L88 `msdf_median(...)` ordering relationship versus selected middle-value split
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-median-ordering-vs-selected-middle-value-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- Task 183 already demoted the broader raw sampled RGB relationship in favor of the branch-only `median(r, g, b)` collapse itself
+- the remaining honest split is therefore internal to `msdf_median(...)`: broader three-channel ordering relationship versus the exact selected middle-value scalar output returned as `d`
+- reading the exact helper source one rung farther shows that the ordering relationship is only the broader internal decision structure used to choose the median; it does not survive as an exported packet value
+- what actually leaves the helper and is forwarded by the already-reduced no-outline packet is only the selected scalar `d`, so the tighter preserved seam inside the helper is the **selected middle-value scalar output**, not the broader ordering relationship
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only branch swap already preserved the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Task 180 already demoted outline behavior on this packet because `outline = 0.0`
+- Task 181 already demoted derivative scaling on this packet because `px_size = 1.0`
+- Task 182 already demoted the downstream alpha shell in favor of `d`
+- Task 183 already demoted the broader raw sampled RGB relationship in favor of the median collapse itself
+- so this Task 184 slice only tightens that same packet-local classification one rung farther: inside `msdf_median(...)`, the surviving seam is the exact selected middle-value scalar output, not the broader internal ordering relationship
+
+## 2026-05-26 — Task 183: exact first-L88 raw sampled RGB relationship versus median-collapse split
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-raw-rgb-vs-median-collapse-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- prior packet-local reductions already fixed this branch to the no-outline live form `a = d` and therefore `color.a = d * color.a`
+- the remaining honest split is therefore upstream raw sampled RGB relationship (`msdf_sample.r/g/b`) versus the branch-local scalar collapse `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`
+- reading the exact shader source one rung farther shows that `msdf_median(...)` is the first irreversible MSDF-only collapse on this packet: it resolves the three sampled channels to one order-statistic scalar and discards channel identity once the middle value is chosen
+- that makes the raw sampled RGB relationship the broader upstream input bundle, while `d` is the tighter preserved carrier actually forwarded by the live packet
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only branch swap already preserved the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Task 180 already demoted outline behavior on this packet because `outline = 0.0`
+- Task 181 already demoted derivative scaling on this packet because `px_size = 1.0`
+- Task 182 already demoted the downstream alpha shell in favor of `d`, so this Task 183 slice only tightens that same packet-local classification one rung farther: the surviving seam is the **median collapse**, not the full upstream raw sampled RGB relationship
+
+## 2026-05-26 — Task 184: exact first-L88 `msdf_median(...)` ordering relationship versus selected middle-value split
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-median-ordering-vs-selected-middle-value-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- Task 183 already reduced the live packet to `msdf_sample = texture(...)`, `d = msdf_median(msdf_sample.r, msdf_sample.g, msdf_sample.b)`, `color.a = d * color.a`
+- inside `msdf_median(...)`, the broader three-channel ordering relationship is only the internal comparison structure used to determine which sampled channel value is the middle order statistic
+- what actually leaves the helper and survives forward into the already-reduced packet is only the exact selected middle-value scalar `d`
+- that makes the ordering relationship a broader internal selection mechanism, while the selected scalar output is the tighter preserved carrier actually forwarded by the live packet
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only branch swap already preserved the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Task 180 already demoted outline behavior on this packet because `outline = 0.0`
+- Task 181 already demoted derivative scaling on this packet because `px_size = 1.0`
+- Task 182 already demoted the downstream alpha shell in favor of `d`
+- Task 183 already demoted the broader raw sampled RGB relationship in favor of the branch-local median collapse, so this Task 184 slice only tightens the same packet-local classification one rung farther: the surviving seam inside `msdf_median(...)` is the **selected scalar output**, not the broader ordering relationship
+
+## 2026-05-26 — Task 185: exact first-L88 selected median source-channel identity versus emitted scalar split
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-selected-channel-identity-vs-emitted-scalar-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- Task 184 already demoted the broader three-channel ordering relationship in favor of the exact selected middle-value scalar emitted by `msdf_median(...)`
+- reading the same helper one rung farther shows that the exact contributing source-channel identity (`r`, `g`, or `b`) remains only internal provenance behind the selected value; the helper exports no channel label or sideband identity bit
+- what actually leaves `msdf_median(...)` and survives into the already-reduced packet is only the emitted scalar `d`
+- that makes the source-channel identity the broader internal provenance fact, while the emitted scalar value is the tighter preserved carrier actually forwarded by the live packet
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only branch swap already preserved the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Task 180 already demoted outline behavior on this packet because `outline = 0.0`
+- Task 181 already demoted derivative scaling on this packet because `px_size = 1.0`
+- Task 182 already demoted the downstream alpha shell in favor of `d`
+- Task 183 already demoted the broader raw sampled RGB relationship in favor of the branch-local median collapse
+- Task 184 already demoted the broader three-channel ordering relationship in favor of the exact selected scalar, so this Task 185 slice only tightens the same packet-local classification one rung farther: the surviving seam is the **emitted scalar value `d`**, not the contributing source-channel identity
+
+## 2026-05-26 — Task 186: exact first-L88 emitted scalar `d` irreducibility check
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-irreducible-carrier-2026-05-26.md`
+
+Narrow source-backed classification for the exact first-L88 packet:
+
+- Task 185 already demoted the exact contributing source-channel identity and reduced the surviving packet-local handoff to `float d = msdf_median(...); color.a = d * color.a;`
+- re-reading the exact no-outline packet one rung farther shows there is no smaller packet-local sideband attached to `d`: outline is already dormant, derivative gain is already neutral, `msdf_median(...)` exports no ordering witness or channel label, and the packet does not collapse `d` into a later boolean/enum before rejoining shared flow
+- the downstream multiply result is not a tighter MSDF-only carrier because inherited `color.a` is shared pre-branch fragment state; Task 182 already demoted that shell in favor of `d`
+- so the emitted scalar `d` is now the **irreducible preserved packet-local carrier** on this exact branch; any further honest narrowing would require widening beyond the current exact packet rather than continuing the same packet-local reduction ladder
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only branch swap already preserved the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Task 180 already demoted outline behavior on this packet because `outline = 0.0`
+- Task 181 already demoted derivative scaling on this packet because `px_size = 1.0`
+- Task 182 already demoted the downstream alpha shell in favor of `d`
+- Task 183 already demoted the broader raw sampled RGB relationship in favor of the branch-local median collapse
+- Task 184 already demoted the broader three-channel ordering relationship in favor of the exact selected scalar
+- Task 185 already demoted the contributing source-channel identity in favor of emitted scalar `d`, so this Task 186 slice only closes the packet-local reduction ladder: there is no smaller honest carrier left on this exact packet
+
+## 2026-05-26 — Task 187: first downstream use/consequence of exact first-L88 emitted scalar `d` beyond packet-local classification
+
+Durable note for this slice:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-downstream-blend-seam-2026-05-26.md`
+
+Narrow source-backed downstream classification for the exact first-L88 packet:
+
+- Task 186 exhausted the packet-local ladder at irreducible emitted scalar `d`, so the next honest trace has to step outward from the exact no-outline packet rather than trying to split `d` further inside the same branch
+- source re-read of `servers/rendering/renderer_rd/shaders/canvas.glsl` shows the first downstream carry beyond that packet-local handoff is `color.a = d * color.a` -> shared fragment `color` -> `vec4 base_color = color` -> optional shared `canvas_modulation` multiply -> exported `frag_color = color`
+- that means the first downstream use/consequence of `d` beyond packet-local classification is: `d` survives only as shared/exported fragment alpha (`color.a` then `frag_color.a`), not as a new smaller MSDF-local sideband
+- the earliest point where the preserved crash path becomes **structurally different outside the packet** is the live `L88` preserve-content blend boundary, not the earlier shared-flow carries, because this is the first step where a new external participant enters: prior root attachment contents loaded under `UI_PASS`
+- the same durable `REF-07` evidence already matches that source read: `owner_label="Command Graph (L88) (Draw)" ... attachment_load_ops=[0:LOAD]`, `batch_summary={...,first_blend_mode="mix",first_destination_color_blend_mode="mix"}`, and `CanvasShaderRD:0` with `blend_enabled_attachment_mask="0x1"`
+- the corresponding source blend contract in `servers/rendering/renderer_rd/storage_rd/material_storage.cpp` confirms why this is the first structural downstream seam: `BLEND_MODE_MIX` uses `src_color_blend_factor = SRC_ALPHA` and `dst_color_blend_factor = ONE_MINUS_SRC_ALPHA`, so the exported alpha carrying `d` immediately becomes part of the source-alpha weighting that merges the exact packet with already-present root contents
+
+Why the locked crash envelope stays preserved:
+
+- the approved Task 177 value-only branch swap already preserved the same outer identity (`submit_serial=9`, `fence_wait_error submit_serial=9`, `Tonemap (L87)`, `Command Graph (L88)`, later `BLIT_PASS`, exit `-6`)
+- Tasks 180–186 already exhausted the packet-local MSDF ladder down to emitted scalar `d`
+- this Task 187 slice only widens one rung farther into the next source-backed downstream seam: exported alpha feeding the preserve-content `L88` mix-blend boundary against loaded root contents
