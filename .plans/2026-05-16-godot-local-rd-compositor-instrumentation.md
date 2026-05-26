@@ -7395,6 +7395,1081 @@ Validation for this documentation/analysis slice:
 
 **Status:** ✅ Complete
 
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-downstream-blend-seam-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: after Task 186 exhausted the packet-local ladder at irreducible emitted scalar `d`, the first honest downstream carry is `d -> color.a -> frag_color.a`. But the earliest point where the preserved crash path becomes structurally different outside the packet is the live `Command Graph (L88) (Draw)` preserve-content blend boundary: exported alpha carrying `d` feeds `BLEND_MODE_MIX`, the pass loads prior root contents (`attachment_load_ops=[0:LOAD]`), and the first external structural consequence is therefore the source-alpha-weighted merge against already-present root contents. This stayed documentation-only and did not widen into speculative fixes.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md doc/gdgs-compositor-staged-qa-2026-05-17.md doc/gdgs-first-l88-msdf-d-downstream-blend-seam-2026-05-26.md`
+
+**Commits:**
+- `807730cd` - `docs: trace first L88 d downstream blend seam`
+
+---
+
+### Task 188: Classify the narrowest downstream structural consequence at the exact `L88` preserve-content blend boundary: source-alpha color weighting versus alpha writeback versus preserve/load dependency
+
+**Bead ID:** `oc-jn1q`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-jn1q` at start and continue the already-approved active plan from Task 187's stop point. Stay on the same preserved crash path and do not jump to speculative fixes. The next widened seam is the exact `Command Graph (L88)` preserve-content blend boundary. Classify the narrowest downstream structural consequence there: determine whether the tightest seam is best located at source-alpha color weighting, alpha writeback, or the preserve/load dependency at that exact attachment-level merge. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from Task 187. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-jn1q` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- blend-boundary consequence notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-blend-boundary-consequence-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the tightest downstream structural consequence at the exact `Command Graph (L88)` preserve-content blend boundary is **source-alpha color weighting**. The alternatives were demoted as follows: preserve/load dependency is real, but broader boundary context/prerequisite (`attachment_load_ops=[0:LOAD]` keeps destination contents alive); alpha writeback is real downstream effect, but broader/later than the first active role; source-alpha color weighting is the tightest seam because under live `BLEND_MODE_MIX` the exported source alpha descended from `d` is the first active coefficient that controls both incoming packet color and preserved destination/root color retention.
+
+Validation for this documentation/analysis slice:
+- `git diff --check -- doc/gdgs-compositor-staged-qa-2026-05-17.md doc/gdgs-first-l88-preserve-blend-boundary-consequence-2026-05-26.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+---
+
+### Task 190: Determine whether the returned preserve/load co-condition is required purely as destination-retention prerequisite, or whether a narrower attachment-level `LOAD` consequence remains at the exact preserved `L88` merge
+
+**Bead ID:** `oc-9kuj`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-9kuj` at start and continue the already-approved active plan from Task 189's stop point. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the exact preserved `L88` attachment merge after Task 189 restored preserve/load as an independently live co-condition. Determine whether that returned `LOAD` / preserve condition is required purely as destination-retention prerequisite, or whether there is a narrower source-backed attachment-level consequence of that `LOAD` state at the exact merge before any wider fix theory is introduced. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from Task 189. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-9kuj` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-load-consequence-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only merge-semantics classification pass on the same preserved crash path, without adding runtime instrumentation or widening into a speculative fix. I re-used Task 189’s exact stop point, re-read the same live `BLEND_MODE_MIX` attachment recipe in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, and kept the existing preserve-content `REF-07` lane context fixed. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-load-consequence-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the returned preserve/load co-condition is required **purely as destination-retention prerequisite** at the exact preserved `Command Graph (L88)` merge. There is no narrower honest source-backed attachment-level `LOAD` consequence remaining on the current approved evidence. The exact role of `LOAD` here is only that the destination side consumed as `dst.rgb` / `dst.a` remains prior retained root contents rather than a discarded/cleared/undefined destination participant. It does not introduce a smaller active coefficient, selector bit, alpha-only micro-carrier, or other tighter merge-local witness. So after Task 190 the hierarchy is: source-alpha weighting remains the tighter active carrier *inside* the merge, preserve/load remains the independently live preserved-path co-condition, and that returned preserve/load role can now be stated more narrowly as destination retention only.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-load-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the same approved merge framing is now exhausted on the `LOAD` side, so any further honest continuation would need to step back onto the still-live source-alpha-driven color-weighting side of the exact preserved merge or introduce a tiny reversible contrast beyond documentation; there is no smaller attachment-level `LOAD` semantic left to classify here without widening scope.
+
+---
+
+### Task 191: Classify whether the surviving exact `L88` source-alpha color-weighting seam is tighter at incoming packet-color admission or preserved destination-retention under the same `BLEND_MODE_MIX` coefficient
+
+**Bead ID:** `oc-exdp`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-exdp` at start and continue the already-approved active plan from Task 190's stop point. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the surviving source-alpha-driven color-weighting side of the exact preserved `L88` merge after Task 190 exhausted the `LOAD` side as destination-retention-only context. Classify whether that still-live seam is tighter at incoming packet-color admission or at preserved destination-retention under the same `BLEND_MODE_MIX` coefficient. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from Task 190. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-exdp` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-vs-destination-retention-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only downstream classification pass on the same preserved crash path, without adding new runtime instrumentation or widening into a speculative fix. I re-used Task 190’s exact stop point, re-read the live `BLEND_MODE_MIX` attachment recipe in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, re-read the packet-local no-outline MSDF alpha/export carry in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl`, and kept the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-vs-destination-retention-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: under the exact preserved `Command Graph (L88)` `BLEND_MODE_MIX` merge, the surviving source-alpha-driven color-weighting seam is tighter at **incoming packet-color admission** than at preserved destination-retention. The same coefficient still modulates both halves of the color equation (`src.rgb * src.a` and `dst.rgb * (1 - src.a)`), but the packet-local carrier from the no-outline MSDF lane (`d -> a -> color.a -> frag_color.a`) first becomes active as the admission weight for new packet color. After Task 190, the preserved destination side remains real only as the already-restored retained participant/context under `attachment_load_ops=[0:LOAD]`; it is no longer the tighter surviving side of this source-alpha seam. Best current wording after this slice: the preserved `L88` crash path still hinges on source-alpha-driven `BLEND_MODE_MIX` color weighting over loaded preserved destination/root contents, and within that weighting seam the tightest surviving side is incoming packet-color admission rather than the already-restored retained destination side.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-vs-destination-retention-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the source-alpha side is now reduced to incoming packet-color admission under the preserved `L88` merge framing, so any further honest continuation would need either to split that admission side one rung deeper from exact source-backed packet/export facts or to introduce a tiny reversible contrast; the destination-retention side should stay demoted unless new evidence contradicts Task 190.
+
+---
+
+### Task 192: Classify the surviving source-alpha admission seam one rung deeper: exported source-alpha carrier versus the later admitted incoming color term at the exact preserved `L88` merge
+
+**Bead ID:** `Pending`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, continue the already-approved active plan from Task 191's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the surviving source-alpha-driven admission side of the exact preserved `L88` merge after Task 191 reduced it to incoming packet-color admission. Classify whether that admission-side seam is tighter at the exported source-alpha carrier itself (`frag_color.a` / `src.a`) or only one step later at the full admitted incoming color term `src.rgb * src.a`. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from Task 191. Write durable artifact notes, update this plan with concrete findings, and close the bead if one is later created. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-export-vs-color-term-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only downstream classification pass recovered directly from Task 191's explicit next seam, because no newly materialized pending task block existed yet. I re-read the live `BLEND_MODE_MIX` attachment recipe in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, re-read the packet-local no-outline MSDF alpha/export carry in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl`, and kept the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-export-vs-color-term-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: one rung deeper than Task 191, the surviving source-alpha admission seam is tighter at the **exported source-alpha carrier itself** (`frag_color.a` / `src.a`) rather than at the later full incoming color term `src.rgb * src.a`. The full admitted color term is still the first incoming color contribution, but it is broader because it already bundles the packet RGB payload with the already-live exported alpha coefficient. So the tightest surviving source-backed carrier on the admission side is the exported packet alpha, while `src.rgb * src.a` is the first broader composite consequence of that carrier.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-export-vs-color-term-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the admission side is now reduced to the exported source-alpha carrier itself, so any further honest continuation would need to split that carrier one rung deeper from exact packet/export facts or introduce a tiny reversible contrast; the later composite color term should stay demoted unless new evidence contradicts this slice.
+
+---
+
+### Task 193: Classify the surviving exported source-alpha carrier one rung deeper: shader export identity `frag_color.a` versus the immediate blend-side alias `src.a` at the exact preserved `L88` merge
+
+**Bead ID:** `Pending`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, continue the already-approved active plan from Task 192's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the surviving exported source-alpha carrier itself after Task 192 demoted the later composite incoming color term. Classify whether that carrier is tightest at the shader export identity `frag_color.a` or only one step later at the immediate blend-side alias `src.a` under the exact preserved `L88` merge. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from Task 192. Write durable artifact notes, update this plan with concrete findings, and close the bead if one is later created. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-export-vs-blend-consumer-alias-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only downstream classification pass recovered directly from Task 192's explicit next seam, because no newly materialized pending task block existed yet. I re-read the exact packet export in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl` (`frag_color = color`), re-read the live `BLEND_MODE_MIX` fixed-function consume side in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp` (`src_color_blend_factor = SRC_ALPHA`), and kept the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-export-vs-blend-consumer-alias-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: one rung deeper than Task 192, the tightest surviving source-backed carrier naming lands at **`frag_color.a`** rather than at the later fixed-function alias `src.a`. There is no smaller new value hiding between those names on the current approved evidence: `src.a` is simply the immediate merge-side consumer alias of the same exported carrier. So the surviving seam is tightest at the last exact programmable/source-backed identity before the merge boundary, while `src.a` remains the first consumer-side name for that same carrier.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-export-vs-blend-consumer-alias-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the surviving source-alpha side is now reduced to the exported shader alpha identity itself, so any further honest continuation would need either to split that export-side carrier one rung deeper from exact packet-local/writeback facts or to introduce a tiny reversible contrast; the later consumer alias and composite color term should stay demoted unless new evidence contradicts this slice.
+
+---
+
+### Task 194: Split the surviving exact `L88` exported shader-alpha carrier one rung deeper from exact packet-local/writeback facts without widening into fix theories
+
+**Bead ID:** `oc-43eg`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-43eg` at start and continue the already-approved active plan from Task 193's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the surviving exported shader-alpha carrier itself after Task 193 demoted the later consumer alias and earlier broader color-term framing. Split that carrier one rung deeper using exact packet-local/writeback facts only, or the smallest reversible contrast if truly needed, without widening into fix theories. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-43eg` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- exported-alpha deeper-split notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-packet-carrier-vs-export-writeback-2026-05-26.md` and linked it from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: one rung deeper than Task 193, the surviving exported shader-alpha carrier splits into packet-local/shared-fragment `color.a` versus the export/writeback alias `frag_color.a`. The tighter surviving carrier is **`color.a`**. `frag_color.a` is only the terminal fragment-output/writeback alias created by `frag_color = color`; it does not introduce a smaller independently live carrier. This stayed documentation-only and did not reopen the already-demoted later consumer alias `src.a`, broader admitted color term, specialization-cache theory, request-hash theory, or CPU-side vertex-format-cache theory.
+
+Validation for this documentation slice:
+- `git diff --check -- doc/gdgs-first-l88-source-alpha-packet-carrier-vs-export-writeback-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+---
+
+### Task 195: Split the surviving exact `L88` packet-local `color.a` carrier into inherited pre-MSDF packet alpha versus packet-local multiplier `a` and classify the tighter preserved seam
+
+**Bead ID:** `oc-oflq`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-oflq` at start and continue the already-approved active plan from Task 194's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the surviving packet-local `color.a` carrier itself after Task 194 demoted the later export/writeback alias `frag_color.a`. Split that carrier one rung deeper: distinguish inherited pre-MSDF packet alpha from the packet-local multiplier `a`, and classify which is the tighter preserved seam while staying inside exact packet-local/writeback facts only unless a tiny reversible contrast is truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-oflq` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- packet-alpha versus multiplier notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-alpha-inherited-vs-local-multiplier-2026-05-26.md` and linked it from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: one rung deeper than Task 194, the surviving packet-local/shared-fragment alpha carrier `color.a` splits into the **inherited pre-MSDF packet alpha** already present from `vec4 color = color_interp;` versus the **packet-local multiplier `a`** later applied by `color.a = a * color.a;`. The tighter preserved seam is **`a`**. The inherited pre-MSDF alpha is broader because it already exists before the exact no-outline MSDF rewrite, while `a` is the branch-local ingredient introduced by that rewrite. On the already-fixed exact packet facts, `px_size = 1.0`, so this narrower side immediately rejoins the existing packet-local reduction `a = d` rather than reopening later export/writeback aliases or blend-consumer framing.
+
+Validation for this documentation slice:
+- `git diff --check -- doc/gdgs-first-l88-packet-alpha-inherited-vs-local-multiplier-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+Exact next seam that becomes clear from this stop point: if the plan wants one more honest rung on the same packet-local ladder, the surviving local side is now `a`, and on this exact packet that immediately collapses back to the already-established `d` carrier because `px_size = 1.0`; so any continuation should explicitly decide whether to treat that as a completed rejoin with the prior `d` ladder or to restate the exact `a = d` alias as the final packet-local bridge.
+
+---
+
+### Task 196: Restate the exact first-L88 packet-local `a = d` alias as the final bridge back into the already-established `d` ladder
+
+**Bead ID:** `oc-fhus`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-fhus` at start and continue the already-approved active plan from Task 195's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the packet-local multiplier `a` after Task 195 demoted the inherited pre-MSDF packet alpha as the broader operand inside `color.a`. On this exact packet, classify the narrowest honest bridge from `a` back into the already-established packet-local `d` ladder by restating the exact `a = d` alias and confirming whether that closes the local split without widening beyond exact packet-local facts. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-fhus` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `a-equals-d bridge note / tiny reversible instrumentation as needed`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new durable note at `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-bridge-2026-05-26.md` and linked it from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on this exact first-L88 no-outline MSDF packet, the narrowest honest bridge from Task 195's packet-local multiplier `a` back into the already-established packet-local ladder is simply the exact alias **`a = d`**. Re-reading `servers/rendering/renderer_rd/shaders/canvas.glsl` keeps the live source relation fixed as `float d = msdf_median(...)`, `float a = clamp((d - 0.5) * px_size + 0.5, 0.0, 1.0)`, `color.a = a * color.a`; and with the already-established packet fact `px_size = 1.0`, that multiplier relation collapses directly back to `a = d`. That means Task 195's local split closes cleanly on packet-local facts alone: no narrower packet-local distinction survives between `a` and `d`, and there is no need to widen into later export/writeback aliases, blend-consumer framing, or speculative fix theory just to reconnect the ladder.
+
+Validation for this documentation slice:
+- `git diff --check -- doc/gdgs-first-l88-a-equals-d-bridge-2026-05-26.md doc/gdgs-compositor-staged-qa-2026-05-17.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+Exact next seam that becomes clear from this stop point: the packet-local `a` versus `d` split is now fully rejoined, so any continuation should explicitly decide whether to step outward from the rejoined packet-local `d` ladder into the first downstream non-packet-local consequence, or stop here as the completed local rejoin.
+
+---
+
+### Task 197: Step outward from the rejoined exact first-L88 packet-local `d` ladder and classify the first downstream non-packet-local consequence after the `a = d` bridge
+
+**Bead ID:** `oc-w9fp`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-w9fp` at start and continue the already-approved active plan from Task 196's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The packet-local `a` versus `d` split is now fully rejoined on the exact first-L88 packet. Step outward from that rejoined packet-local `d` ladder and classify the first downstream non-packet-local consequence after the `a = d` bridge, using the narrowest source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-w9fp` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-first-downstream-non-packet-local-consequence-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only downstream classification pass that stayed on the same preserved crash path and did not widen into a speculative fix or require a reversible runtime contrast. Re-read the exact no-outline packet/export path in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl` and the live `BLEND_MODE_MIX` attachment contract in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, while keeping the locked `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable note written to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-first-downstream-non-packet-local-consequence-2026-05-26.md` and linked from `REF-07`. Concrete finding: after the exact first-L88 packet-local ladder is rejoined as `a = d`, the immediate `color.a` / `frag_color.a` steps are still packet-owned carry/export aliases rather than the first non-packet-local consequence. The first downstream consequence that is no longer packet-local appears at the preserved `Command Graph (L88)` `BLEND_MODE_MIX` merge over loaded root contents, where the exported source alpha descended from `d` becomes the **source-alpha admission coefficient for incoming packet color**. Broader preserve/load framing, destination retention, and later alpha writeback remain real context/consequences, but they are not tighter than that first active non-packet-local admission role. Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-first-downstream-non-packet-local-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that now becomes clear: continue outward only inside that same preserved `L88` merge framing if more narrowing is desired; do not reopen the rejoined packet-local `a` / `d` ladder.
+
+---
+
+### Task 198: Classify the tightest surviving non-packet-local source-alpha admission seam inside the preserved `Command Graph (L88)` merge after the `a = d` rejoin
+
+**Bead ID:** `oc-mn52`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-mn52` at start and continue the already-approved active plan from Task 197's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The packet-local `a = d` rejoin is complete; stay inside the preserved `Command Graph (L88)` merge framing and narrow the admission-side consequence there. Classify the tightest surviving non-packet-local source-alpha admission seam without reopening the packet-local ladder, using the narrowest source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-mn52` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-non-packet-local-source-alpha-admission-seam-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only merge-side classification pass on the same preserved crash path, with no new runtime instrumentation and no reopening of the rejoined packet-local `a = d` ladder. I re-used Task 197’s exact stop point, re-read the live `BLEND_MODE_MIX` attachment contract in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, kept the packet/export provenance fixed in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl`, and held the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-non-packet-local-source-alpha-admission-seam-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: after the packet-local ladder is explicitly closed as `a = d`, the tightest surviving **non-packet-local** source-alpha admission seam inside the preserved `Command Graph (L88)` merge is the immediate blend-side admission coefficient **`src.a`**, not the later admitted incoming color term `src.rgb * src.a`. This is the honest merge-local narrowing because `src.a` is the first value identity that exists only inside the fixed-function merge contract rather than inside packet/export naming, while `src.rgb * src.a` is already broader: it bundles the packet RGB payload with that already-live coefficient. The earlier packet/export-side names (`color.a`, `frag_color.a`) remain true provenance, but they are no longer the right seam once the question is constrained to the non-packet-local admission side of the preserved merge.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-non-packet-local-source-alpha-admission-seam-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to classify a narrower source-backed consequence of the merge-side `src.a` admission coefficient itself, not reopen the packet-local/export ladder or broaden back out to the already-demoted destination-retention side.
+
+---
+
+### Task 199: Classify the next narrower source-backed consequence of the preserved `L88` merge-side `src.a` admission coefficient without reopening the packet-local ladder or broadening back to destination-retention
+
+**Bead ID:** `oc-mmaw`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-mmaw` at start and continue the already-approved active plan from Task 198's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the tightest surviving non-packet-local source-alpha admission seam at the preserved `Command Graph (L88)` merge, now classified at the merge-side coefficient `src.a`. Classify the next narrower source-backed consequence of that admission coefficient without reopening the packet-local ladder or broadening back to the already-demoted destination-retention side. Use the narrowest source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-mmaw` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-src-a-source-backed-consequence-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only merge-side continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of the packet-local/export ladder or the already-demoted destination-retention side. I re-used Task 198’s exact stop point, re-read the live `BLEND_MODE_MIX` attachment contract in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, kept the packet/export provenance fixed in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl`, and held the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)", `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-src-a-source-backed-consequence-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: once the preserved `L88` merge-side non-packet-local source-alpha admission seam is already fixed at the immediate coefficient **`src.a`**, the next honest source-backed continuation stays on that same source-admission lane and narrows to the first admitted incoming source-color contribution **`src.rgb * src.a`**. The competing source-side alpha term **`src.a * 1`** is still real under the same `BLEND_MODE_MIX` contract, but it is the broader sibling post-merge alpha consequence rather than the tightest continuation of the already-selected source-admission seam. This keeps the destination-retention side closed and avoids stepping backward into `color.a` / `frag_color.a` provenance after Task 198 already fixed `src.a` as the tightest non-packet-local carrier.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-src-a-source-backed-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to stay on the admitted source-color side and classify whether `src.rgb * src.a` should remain whole or be split one rung deeper without reopening packet-local RGB composition or broadening back toward destination-retention.
+
+---
+
+### Task 200: Split the preserved `L88` admitted source-color term `src.rgb * src.a` one rung deeper without reopening packet-local RGB composition or widening back toward destination-retention
+
+**Bead ID:** `oc-xwyv`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-xwyv` at start and continue the already-approved active plan from Task 199's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the admitted source-color side of the preserved `Command Graph (L88)` merge, now reduced to `src.rgb * src.a`. Split that term one rung deeper without reopening packet-local RGB composition or broadening back toward the already-demoted destination-retention side. Use the narrowest source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-xwyv` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-color-carrier-vs-admitted-color-term-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only source-admission continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of packet-local RGB composition, the earlier alpha/export ladder, or the already-demoted destination-retention side. I re-used Task 199’s exact stop point, re-read the live `BLEND_MODE_MIX` attachment contract in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, kept the export/merge provenance fixed in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl` (`frag_color = color`), and held the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)", `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-color-carrier-vs-admitted-color-term-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: once the preserved `L88` source-admission lane is already reduced to the admitted source-color term **`src.rgb * src.a`**, the next honest one-rung-deeper split on that same lane lands at the merge-visible incoming source-color carrier **`src.rgb`** itself. The broader admitted term **`src.rgb * src.a`** remains real, but at this rung it is already composite because it bundles that carrier with the already-fixed admission coefficient `src.a`. This keeps the source-admission classification moving inward without stepping backward into packet-local RGB composition or outward toward destination-retention.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-color-carrier-vs-admitted-color-term-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to stay on the already merge-visible source-color carrier side and classify a narrower source-backed consequence of `src.rgb` without reopening packet-local RGB composition or broadening back toward destination-retention.
+
+---
+
+### Task 201: Classify a narrower source-backed consequence of the preserved `L88` merge-visible source-color carrier `src.rgb` without reopening packet-local RGB composition or widening toward destination-retention
+
+**Bead ID:** `oc-gmzv`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-gmzv` at start and continue the already-approved active plan from Task 200's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the preserved `Command Graph (L88)` merge-visible source-color carrier `src.rgb` on the already-selected source-admission lane. Classify a narrower source-backed consequence of that carrier without reopening packet-local RGB composition or broadening back toward the already-demoted destination-retention side. Use the narrowest source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-gmzv` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-merge-visible-src-rgb-terminal-stop-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only terminal-classification slice on the same preserved crash path, with no new runtime instrumentation and no reopening of packet-local RGB composition, the earlier alpha/export ladder, or the already-demoted destination-retention side. I re-used Task 200’s exact stop point, re-read the merge-visible export handoff in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl` (`frag_color = color`), re-read the live `BLEND_MODE_MIX` attachment contract in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, and held the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)", `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-merge-visible-src-rgb-terminal-stop-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: once the preserved `L88` source-admission lane is already reduced to the merge-visible source-color carrier **`src.rgb`**, there is **no still-narrower source-backed consequence** of that carrier available under the current approved constraints. Any next inward split would reopen forbidden packet-local RGB composition, while any next outward continuation immediately returns to the already-broader admitted composite term **`src.rgb * src.a`**. So on the current evidence, `src.rgb` is the terminal merge-visible source-color carrier for this lane rather than a springboard to another narrower same-scope consequence.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-merge-visible-src-rgb-terminal-stop-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: none inside the current approved source-color lane without breaking scope; any further progress on this branch now requires either explicit approval to reopen packet-local RGB composition or a separate approved seam outside this terminal stop point.
+
+---
+
+### Task 202: Reopen the exact first-`L88` packet-local RGB composition immediately upstream of terminal merge-visible `src.rgb` on the preserved source-admission lane
+
+**Bead ID:** `oc-mzv1`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-mzv1` at start with `bd update oc-mzv1 --status in_progress --json` and continue the already-approved active plan from Task 201's terminal stop point. Derrick has explicitly authorized immediate continuation and any needed tests in this session. Stay on the same preserved crash path and do not jump to speculative fixes. Task 201 proved that `src.rgb` is the terminal merge-visible source-color carrier under the old constraint set. Reopen the next honest inward seam by classifying the exact packet-local RGB composition immediately upstream of that merge-visible `src.rgb` on the same first-`Command Graph (L88)` lane, using the narrowest source-backed tracing or smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-mzv1` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-local-rgb-upstream-of-src-rgb-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward reopening on the same preserved crash path, with no new runtime instrumentation and no widening back toward destination-retention, pipeline/cache theory, or speculative fixes. I re-used Task 201's terminal stop point, re-read the exact fragment-side packet flow in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl`, and held the existing preserved-lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`, same locked outer crash envelope). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-local-rgb-upstream-of-src-rgb-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: reopening the forbidden inward seam does **not** place the immediate upstream RGB carrier at `msdf_sample.rgb` on this exact no-outline MSDF packet. The exact packet-local RGB chain immediately upstream of merge-visible `src.rgb` is:
+
+```text
+color_interp.rgb -> color.rgb -> frag_color.rgb -> src.rgb
+```
+
+Source-backed reason: the fragment begins with `vec4 color = color_interp;`, the exact no-outline `sc_use_msdf()` branch mutates only `color.a` via `d -> a -> color.a`, and the fragment ends with `frag_color = color;`. So on this preserved first-`L88` lane, the tightest packet-local/shared-fragment RGB carrier immediately upstream of merge-visible `src.rgb` is **`color.rgb`**, whose exact packet-local composition is the unchanged inherited packet RGB **`color_interp.rgb`**. `frag_color.rgb` is only the immediate export/writeback alias of that same carrier, while `msdf_sample.r/g/b` remains upstream only of the already-classified alpha-distance ladder rather than the live RGB carrier on this slice.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-local-rgb-upstream-of-src-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now made explicit: if continuation is still wanted on the same preserved lane, the next honest inward split is `color.rgb -> color_interp.rgb`, i.e. classify the exact rect-path source that populates `color_interp` for this packet rather than jumping back to sampled MSDF RGB or outward to the merge composite.
+
+---
+
+### Task 203: Classify the exact rect-path source that populates first-`L88` packet-local `color_interp.rgb` on the preserved source-admission lane
+
+**Bead ID:** `oc-y4hc`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-y4hc` at start with `bd update oc-y4hc --status in_progress --json` and continue the already-approved active plan from Task 202's explicit next seam. Derrick has explicitly authorized immediate continuation and any needed tests in this session. Stay on the same preserved crash path and do not jump to speculative fixes. Task 202 proved that the exact packet-local RGB composition immediately upstream of merge-visible `src.rgb` is `color_interp.rgb -> color.rgb -> frag_color.rgb -> src.rgb`, with the MSDF branch mutating only alpha. Continue one rung inward only by classifying the exact rect-path source that populates `color_interp.rgb` for that same first-`L88` packet, using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-y4hc` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or sampled-MSDF-alpha questions already settled elsewhere.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-path-source-of-color-interp-rgb-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of destination-retention, cache theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-used Task 202’s exact stop point, re-read the non-attribute rect path in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl`, the owning rect-instance producer in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`, the matching `InstanceData` layout in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`, and the cull-stage `final_modulate` assignment in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-path-source-of-color-interp-rgb-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, packet-local `color_interp.rgb` is **not** populated from sampled MSDF texture RGB. On the non-attribute rect path, `canvas.glsl` sets `vec4 color = read_draw_data_modulation;` and then `color_interp = color;`, with `read_draw_data_modulation` defined as shader input `attrib_C`. The exact owning rect-path source of that payload is the CPU-side rect instance modulation written in `renderer_canvas_render_rd.cpp`: `Color base_color = p_item->final_modulate;` then `Color modulated = rect->modulate * base_color;`, followed by `instance_data->modulation[0..3] = modulated.r/g/b/a`. Because `renderer_canvas_render_rd.h` stores that rect payload as `InstanceData.modulation[4]`, the exact source-backed chain for this slice is `rect->modulate.rgb * p_item->final_modulate.rgb -> instance_data->modulation.rgb -> attrib_C.rgb -> read_draw_data_modulation.rgb -> color_interp.rgb`. The cull stage sets `p_item->final_modulate` as `ci->final_modulate = p_modulate * ci->self_modulate`, but this slice stops there rather than reopening farther ancestor modulation provenance.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-path-source-of-color-interp-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward split is the CPU-side modulation product itself — classify whether `rect->modulate.rgb * p_item->final_modulate.rgb` should remain whole or split one rung deeper between the rect command contribution and the already-cull-composed item contribution.
+
+---
+
+### Task 204: Split the first-`L88` rect-path modulation product feeding packet-local `color_interp.rgb`
+
+**Bead ID:** `oc-39lt`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-39lt` at start with `bd update oc-39lt --status in_progress --json` and continue the already-approved active plan from Task 203's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 203 proved that first-`L88` packet-local `color_interp.rgb` is populated from the rect-path modulation payload `rect->modulate.rgb * p_item->final_modulate.rgb -> instance_data->modulation.rgb -> attrib_C.rgb -> read_draw_data_modulation.rgb -> color_interp.rgb`. Continue one rung inward only by classifying whether the tightest surviving RGB identity should remain at the CPU-side modulation product as a whole or split one rung deeper between the rect command contribution `rect->modulate.rgb` and the already-cull-composed item contribution `p_item->final_modulate.rgb`. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-39lt` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory beyond this exact modulation seam, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulation-product-split-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of destination-retention theory, specialization/request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-used Task 203’s exact stop point, re-read the rect-path modulation composition in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`, the exact rect/MSDF command-side `rect->modulate` producer in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp`, and the earlier cull-stage `final_modulate` composition in the same file. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulation-product-split-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the CPU-side source product feeding first-`L88` packet-local `color_interp.rgb` should **not** remain whole once we move one rung inward from Task 203. In `renderer_canvas_render_rd.cpp`, the immediate producer is explicitly composite: `Color modulated = rect->modulate * base_color;` with `base_color = p_item->final_modulate`. So the honest inward split for this slice is `rect->modulate.rgb × p_item->final_modulate.rgb`. Within that split, `rect->modulate.rgb` is the tighter exact packet-owned contribution on this rung because `renderer_canvas_cull.cpp` writes it directly into the exact rect/MSDF command (`rect->modulate = p_modulate`), while `p_item->final_modulate.rgb` is already the broader inherited item-side sibling because the cull stage composes it earlier as `ci->final_modulate = p_modulate * ci->self_modulate` before the render path consumes it as `base_color`. So the product remains the immediate renderer-side producer of `InstanceData.modulation.rgb`, but the tighter surviving exact packet-owned RGB factor after this one-rung split is `rect->modulate.rgb`, not the whole product.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulation-product-split-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the tightest next inward continuation is to stay on the exact rect-command-owned side and classify whether `rect->modulate.rgb` is terminal for this lane or has a still-earlier source identity worth tracing, rather than jumping outward to the broader inherited `p_item->final_modulate.rgb` side.
+
+---
+
+### Task 205: Classify whether first-`L88` rect-command `rect->modulate.rgb` is terminal or has a still-earlier source identity
+
+**Bead ID:** `oc-qc8b`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-qc8b` at start with `bd update oc-qc8b --status in_progress --json` and continue the already-approved active plan from Task 204's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 204 proved that the first-`L88` rect-path modulation product feeding packet-local `color_interp.rgb` should split one rung deeper, with `rect->modulate.rgb` as the tighter exact packet-owned RGB factor and `p_item->final_modulate.rgb` as the broader inherited item-side sibling. Continue one rung inward only on the tighter rect-command-owned side by classifying whether `rect->modulate.rgb` is terminal for this lane or has a still-earlier source identity worth tracing. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-qc8b` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-command-modulate-source-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of destination-retention theory, specialization/request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-used Task 204’s exact stop point, re-read the exact `rect->modulate` assignment sites in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp`, the `CommandRect` layout in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_render.h`, and the higher API forwarding path in `/home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.cpp`, `/home/derrick/.openclaw/workspace/projects/godot/scene/resources/image_texture.cpp`, and `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_server.h`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-command-modulate-source-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, `rect->modulate.rgb` is **not terminal**. The exact owning write on the relevant rect/MSDF command path in `renderer_canvas_cull.cpp` is simply `rect->modulate = p_modulate`, so the next honest inward provenance step is the direct alias `p_modulate.rgb -> rect->modulate.rgb`. There is no additional renderer-internal RGB composition between those two identities on this path. Live source also preserves that same provenance at the higher API layers: `CanvasItem::draw_msdf_texture_rect_region(..., p_modulate, ...)` forwards the modulation argument directly to `RenderingServer::canvas_item_add_msdf_texture_rect_region(...)`, and `ImageTexture::draw_msdf_rect_region(..., p_modulate, ...)` likewise forwards it unchanged. So the still-earlier source identity worth tracing after Task 204 is the caller-side MSDF draw modulation argument `p_modulate.rgb`, not another renderer-internal rect-path factor.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-command-modulate-source-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact caller-side source of `p_modulate.rgb` feeding `canvas_item_add_msdf_texture_rect_region(..., p_modulate, ...)`, while keeping the broader inherited `p_item->final_modulate.rgb` sibling lane closed.
+
+---
+
+### Task 206: Classify the exact caller-side source of first-`L88` MSDF draw `p_modulate.rgb`
+
+**Bead ID:** `oc-oelt`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-oelt` at start with `bd update oc-oelt --status in_progress --json` and continue the already-approved active plan from Task 205's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 205 proved that first-`L88` rect-command `rect->modulate.rgb` is not terminal and is instead a direct alias of the caller-side MSDF draw modulation argument `p_modulate.rgb`. Continue one rung inward only by classifying the exact caller-side source of that `p_modulate.rgb` for the preserved first-`L88` packet. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-oelt` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-side-source-of-p-modulate-rgb-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of destination-retention theory, specialization/request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-used Task 205’s exact stop point, re-read the MSDF glyph draw path in `/home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp`, the forwarding path in `/home/derrick/.openclaw/workspace/projects/godot/scene/resources/image_texture.cpp`, and the broader text/font draw surfaces in `/home/derrick/.openclaw/workspace/projects/godot/scene/resources/font.cpp`, `/home/derrick/.openclaw/workspace/projects/godot/servers/text/text_server.cpp`, and `/home/derrick/.openclaw/workspace/projects/godot/servers/text/text_server.h`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-side-source-of-p-modulate-rgb-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the exact caller-side source of the packet’s MSDF draw `p_modulate.rgb` is **`p_color.rgb`**, not another renderer-side factor. On the live no-outline MSDF glyph path in `text_server_adv.cpp`, the code first does `Color modulate = p_color;` and then calls `draw_msdf_rect_region(..., modulate, 0, ...)`. `ImageTexture::draw_msdf_rect_region(..., const Color &p_modulate, ...)` forwards that modulation unchanged to `RenderingServer::canvas_item_add_msdf_texture_rect_region(...)`, so the exact source-backed chain for this slice is `p_color.rgb -> modulate.rgb -> p_modulate.rgb -> rect->modulate.rgb`. Broader public text/font APIs preserve the same identity rather than recomposing it: `TextServer::font_draw_glyph(..., p_color, ...)`, `Font::draw_char(..., p_modulate, ...)` forwarding to `font_draw_glyph`, and `TextServer::shaped_text_draw(..., p_color, ...)` forwarding `p_color` into `font_draw_glyph`. So the next honest inward provenance step after Task 205 lands at the glyph draw color input `p_color.rgb`.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-side-source-of-p-modulate-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact higher caller-side source of `p_color.rgb` for the preserved packet, while keeping the broader inherited `p_item->final_modulate.rgb` sibling lane closed.
+
+---
+
+### Task 207: Classify the exact higher caller-side source of first-`L88` glyph-draw `p_color.rgb`
+
+**Bead ID:** `oc-h4t3`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-h4t3` at start with `bd update oc-h4t3 --status in_progress --json` and continue the already-approved active plan from Task 206's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 206 proved that the preserved packet's MSDF draw `p_modulate.rgb` comes from glyph-draw `p_color.rgb` via the local `modulate` alias. Continue one rung inward only by classifying the exact higher caller-side source of that `p_color.rgb` for the preserved packet. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-h4t3` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-higher-caller-side-source-of-p-color-rgb-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of destination-retention theory, specialization/request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-used Task 206’s exact stop point, re-read the shared shaped-text draw forwarding in `/home/derrick/.openclaw/workspace/projects/godot/servers/text/text_server.cpp`, the MSDF glyph draw implementation in `/home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp`, and the nearby higher text/font caller surfaces in `/home/derrick/.openclaw/workspace/projects/godot/scene/resources/font.cpp`, `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/label.cpp`, and other `font_draw_glyph(...)` call sites. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-higher-caller-side-source-of-p-color-rgb-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the next honest higher caller-side source of glyph-draw `p_color.rgb` is the shared text-layout draw parameter on `TextServer::shaped_text_draw(..., p_color, ...)`, not another renderer-side factor. In `servers/text/text_server.cpp`, that function forwards its own `p_color` unchanged into repeated `font_draw_glyph(..., p_color, ...)` submissions while drawing shaped glyphs. `TextServerAdvanced::_font_draw_glyph(...)` then receives the same `p_color` and, on the already-classified no-outline MSDF path, does `Color modulate = p_color;` before forwarding it into the MSDF rect draw. So the exact higher shared provenance chain for this slice is `TextServer::shaped_text_draw(..., p_color, ...) -> TextServer::font_draw_glyph(..., p_color, ...) -> TextServerAdvanced::_font_draw_glyph(..., p_color, ...) -> modulate.rgb -> p_modulate.rgb -> rect->modulate.rgb`. Important limit: static source does **not** yet justify collapsing that farther to one unique widget/control caller for the preserved packet, because above this rung the engine fans out into multiple callers such as direct widget `font_draw_glyph(..., font_color)` paths and `Font::draw_char(..., p_modulate, ...)`.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-higher-caller-side-source-of-p-color-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact higher caller-side source of `TextServer::shaped_text_draw(..., p_color, ...)` for the preserved packet, or explicitly prove that the packet instead comes from one of the direct widget/control `font_draw_glyph(..., font_color)` call sites.
+
+---
+
+### Task 208: Classify the exact higher caller-side source of first-`L88` `TextServer::shaped_text_draw(..., p_color, ...)` or prove a direct widget `font_draw_glyph` caller
+
+**Bead ID:** `oc-p8xs`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-p8xs` at start with `bd update oc-p8xs --status in_progress --json` and continue the already-approved active plan from Task 207's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 207 proved that the next higher shared caller-side source of the preserved packet's glyph-draw `p_color.rgb` is `TextServer::shaped_text_draw(..., p_color, ...)`, while static source alone does not yet justify collapsing farther to one unique widget/control caller. Continue one rung inward only by classifying the exact higher caller-side source of that `TextServer::shaped_text_draw(..., p_color, ...)` for the preserved packet, or by proving instead that the packet comes from one of the direct widget/control `font_draw_glyph(..., font_color)` call sites. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-p8xs` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-above-shaped-text-draw-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of destination-retention theory, specialization/request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-used Task 207’s exact stop point, re-read the shared shaped-text draw forwarding in `/home/derrick/.openclaw/workspace/projects/godot/servers/text/text_server.cpp`, the MSDF glyph draw implementation in `/home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp`, and the immediate higher caller families in `/home/derrick/.openclaw/workspace/projects/godot/scene/resources/text_line.cpp`, `/home/derrick/.openclaw/workspace/projects/godot/scene/resources/text_paragraph.cpp`, `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/code_edit.cpp`, plus representative direct widget/control `font_draw_glyph(..., font_color)` call sites in `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/label.cpp` and `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-above-shaped-text-draw-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, static source does **not** justify collapsing the provenance one rung farther to one exact higher caller above `TextServer::shaped_text_draw(..., p_color, ...)`, and it also does **not** prove that the packet instead came from a direct widget/control `font_draw_glyph(..., font_color)` path. Live `shaped_text_draw(..., p_color, ...)` callers include multiple distinct families such as `TextLine::draw(...)`, `TextParagraph::draw(...)`, and `CodeEdit::_draw_line_numbers()`. Live direct widget/control glyph callers also exist in parallel, including `Label`, `RichTextLabel`, `LineEdit`, and `TextEdit`. So the honest result for this rung is a precise ambiguity: the preserved packet's provenance remains valid up to the shared `TextServer::shaped_text_draw(..., p_color, ...)` rung, but above that point the code fans into multiple live caller families and no unique winner is proven by static source alone.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-above-shaped-text-draw-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest seam is not another static-source-only collapse; it is a narrow evidence step to distinguish the higher caller family for the preserved packet, such as source-backed breadcrumbing or the smallest reversible contrast that can separate the shared `shaped_text_draw(..., p_color, ...)` family from the direct widget/control `font_draw_glyph(..., font_color)` family.
+
+---
+
+### Task 209: Distinguish the preserved first-`L88` higher caller family: shared `shaped_text_draw` path vs direct widget `font_draw_glyph` path
+
+**Bead ID:** `oc-0i1e`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-0i1e` at start with `bd update oc-0i1e --status in_progress --json` and continue the already-approved active plan from Task 208's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 208 proved that static source narrows provenance only up to the shared `TextServer::shaped_text_draw(..., p_color, ...)` rung and cannot uniquely choose one higher caller family without new evidence. Continue one rung only by taking the narrowest evidence step that can distinguish whether the preserved packet comes from the shared `shaped_text_draw(..., p_color, ...)` family or from a direct widget/control `font_draw_glyph(..., font_color)` family. Prefer source-backed breadcrumbing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-0i1e` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-family-shaped-vs-direct-font-draw-glyph-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as the narrowest evidence-step follow-through from Task 208's explicit seam, without reopening broader theories and without adding new runtime instrumentation. Instead of inventing another contrast run, I resolved the ambiguity by combining the smallest already-collected distinguishing evidence on the same preserved lane: the later owner-attribution slice fixed the packet to the direct runtime path `/root/GdgsHappyPathControl/CanvasLayer/HudMargin/HudLabel`, and the later owner-path source walk fixed the matching emission step inside that direct owner path as `RichTextLabel::NOTIFICATION_DRAW -> RichTextLabel::_draw_line(...) -> DRAW_STEP_TEXT -> TS->font_draw_glyph(..., font_color)`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-family-shaped-vs-direct-font-draw-glyph-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the higher caller family is now best classified as the **direct widget/control `font_draw_glyph(..., font_color)` family**, not the shared `TextServer::shaped_text_draw(..., p_color, ...)` family. Task 208 remained an honest static-source stop point, but once the packet was later pinned to the direct `HudLabel` RichTextLabel owner path and then to the direct `DRAW_STEP_TEXT` glyph loop on that same path, the ambiguity between the shared `shaped_text_draw(...)` family and the direct widget/control glyph family was resolved without needing a broader experiment.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-family-shaped-vs-direct-font-draw-glyph-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on the fixed direct `HudLabel` route and split one rung deeper into the exact first line-0 heading glyph emission itself and/or the immediate `font_color` / `frid` selection received by that `DRAW_STEP_TEXT` call.
+
+---
+
+### Task 204: Classify whether the first-`L88` CPU-side modulation product `rect->modulate.rgb * p_item->final_modulate.rgb` should remain whole or split one rung deeper between the rect-command contribution and the already-cull-composed item contribution
+
+**Bead ID:** `oc-suqd`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-suqd` at start with `bd update oc-suqd --status in_progress --json` and continue the already-approved active plan from Task 203's explicit next seam. Derrick has explicitly authorized immediate continuation and any needed tests in this session. Stay on the same preserved crash path and do not jump to speculative fixes. Task 203 proved that first-`L88` packet-local `color_interp.rgb` comes from the CPU-side modulation chain `rect->modulate.rgb * p_item->final_modulate.rgb -> instance_data->modulation.rgb -> attrib_C.rgb -> read_draw_data_modulation.rgb -> color_interp.rgb`. Continue one rung inward only by classifying whether that CPU-side modulation product should remain whole or split one rung deeper between the rect-command contribution and the already-cull-composed item contribution, using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-suqd` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulate-identity-vs-item-final-modulate-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of destination-retention, specialization-cache, request-hash, CPU-side vertex-format-cache, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-used the exact first-L88 rect-command artifacts already captured under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/` and re-read the owning CPU-side rect composition in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`, the cull-stage item modulation composition in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp`, and the prior Task 203 rect-path source note. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulate-identity-vs-item-final-modulate-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the exact preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the CPU-side modulation product should **not** remain whole. The already-approved packet artifact logs the exact rect command with `modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}`, while `renderer_canvas_render_rd.cpp` composes `Color modulated = rect->modulate * base_color` with `base_color = p_item->final_modulate`. Substituting the exact packet-local rect-command identity collapses the broader product to `rect->modulate.rgb * p_item->final_modulate.rgb = (1,1,1) * p_item->final_modulate.rgb = p_item->final_modulate.rgb`. Because `renderer_canvas_cull.cpp` sets `ci->final_modulate = p_modulate * ci->self_modulate`, the surviving non-identity RGB carrier after this one-rung split is the already-cull-composed item contribution `p_item->final_modulate.rgb`, not the broader two-factor CPU product.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulate-identity-vs-item-final-modulate-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward split is the cull-composed item modulation itself — classify whether `p_item->final_modulate.rgb = p_modulate.rgb * ci->self_modulate.rgb` should remain whole or split one rung deeper between the inherited cull input `p_modulate.rgb` and the item-local contribution `ci->self_modulate.rgb`.
+
+---
+
+### Task 205: Classify whether first-`L88` cull-side item modulation `p_item->final_modulate.rgb = p_modulate.rgb * ci->self_modulate.rgb` should remain whole or split one rung deeper between inherited cull input and item-local contribution
+
+**Bead ID:** `oc-nkdx`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-nkdx` at start with `bd update oc-nkdx --status in_progress --json` and continue the already-approved active plan from Task 204's explicit next seam. Derrick has explicitly authorized immediate continuation and any needed tests in this session. Stay on the same preserved crash path and do not jump to speculative fixes. Task 204 proved that the exact first-`L88` CPU-side modulation product collapses to `p_item->final_modulate.rgb` because the exact rect-command `rect->modulate.rgb` is identity white on this preserved packet. Continue one rung inward only by classifying whether the cull-side item modulation `p_item->final_modulate.rgb = p_modulate.rgb * ci->self_modulate.rgb` should remain whole or split one rung deeper between the inherited cull input `p_modulate.rgb` and the item-local contribution `ci->self_modulate.rgb`, using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-nkdx` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory beyond this exact modulation seam, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of destination-retention, specialization-cache, request-hash, CPU-side vertex-format-cache theory beyond this exact modulation seam, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-used Task 204's exact stop point (`p_item->final_modulate.rgb`) and re-read the owning cull-side composition plus recursion in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp`, along with the CanvasItem / RenderingServer docs that distinguish inherited `modulate` from item-local `self_modulate`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-item-final-modulate-inherited-vs-self-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the exact preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the cull-side item modulation should **not** remain whole as `p_item->final_modulate.rgb`. Source shows it already splits one rung deeper as `p_modulate.rgb * ci->self_modulate.rgb`, where `p_modulate.rgb` is the broader inherited cull input arriving from the parent/ancestor modulation chain, while `ci->self_modulate.rgb` is the tighter exact item-local self-only contribution for the packet's owning canvas item. So on this rung the tighter exact item-owned RGB factor is `ci->self_modulate.rgb`, not the broader inherited carrier and not the unsplit product.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-item-final-modulate-inherited-vs-self-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on the exact item-local side and classify whether `ci->self_modulate.rgb` is terminal for this lane or has a still-earlier exact source identity worth tracing for the preserved packet, rather than jumping back out to the broader inherited `p_modulate.rgb` side.
+
+---
+
+### Task 206: Classify whether first-`L88` item-local `ci->self_modulate.rgb` is terminal for this lane or has a still-earlier exact source identity worth tracing
+
+**Bead ID:** `oc-4nsa`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-4nsa` at start with `bd update oc-4nsa --status in_progress --json` and continue the already-approved active plan from Task 205's explicit next seam. Derrick has explicitly authorized immediate continuation and any needed tests in this session. Stay on the same preserved crash path and do not jump to speculative fixes. Task 205 proved that the surviving cull-side item modulation should split one rung deeper between the broader inherited `p_modulate.rgb` side and the tighter item-local `ci->self_modulate.rgb` side. Continue one rung inward only on the tighter item-local side by classifying whether `ci->self_modulate.rgb` is terminal for this lane or has a still-earlier exact source identity worth tracing, using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-4nsa` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only source-tracing pass from Task 205's explicit next seam, with no new runtime instrumentation and no widening into speculative fixes. I stayed on the same preserved first-`Command Graph (L88)` no-outline MSDF rect packet and re-read the exact item-local cull composition in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp`, the scene-side property/setter path in `/home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.cpp` and `/home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.h`, plus the public contract text in `/home/derrick/.openclaw/workspace/projects/godot/doc/classes/CanvasItem.xml` and `/home/derrick/.openclaw/workspace/projects/godot/doc/classes/RenderingServer.xml`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-self-modulate-terminal-vs-caller-source-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for this lane, `ci->self_modulate.rgb` is **not terminal for the full provenance path**. It is terminal only as the last renderer-cull storage slot before composition into `ci->final_modulate`, because the exact cull setter is merely `canvas_item->self_modulate = p_color`. The still-earlier exact source identity worth tracing is the scene/API-side CanvasItem property lane: `CanvasItem::self_modulate` / `CanvasItem::set_self_modulate(const Color &p_self_modulate)`, which stores `self_modulate = p_self_modulate` and forwards that same value through `RenderingServer::canvas_item_set_self_modulate(canvas_item, self_modulate)` before the renderer-cull copy is made. So the honest one-rung-earlier identity is `CanvasItem.self_modulate.rgb`, not the copied `ci->self_modulate.rgb` field alone.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-self-modulate-terminal-vs-caller-source-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on this item-local side and classify the still-earlier owner/caller of the preserved packet's `CanvasItem.self_modulate.rgb` value — i.e. whether the owning CanvasItem simply retains the default white property or receives a specific non-default `set_self_modulate(...)` / RenderingServer write from an identifiable scene-side caller.
+
+---
+
+### Task 207: Classify whether the preserved packet's `CanvasItem.self_modulate.rgb` remains default white or comes from an identifiable non-default scene-side write
+
+**Bead ID:** `oc-2xz0`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-2xz0` at start with `bd update oc-2xz0 --status in_progress --json` and continue the already-approved active plan from Task 206's explicit next seam. Derrick has explicitly authorized immediate continuation and any needed tests in this session. Stay on the same preserved crash path and do not jump to speculative fixes. Task 206 proved that `ci->self_modulate.rgb` is not terminal for the full provenance lane and instead traces back to the scene/API-side `CanvasItem.self_modulate` property path. Continue one rung inward only by classifying whether the preserved packet's `CanvasItem.self_modulate.rgb` simply remains the default white property or comes from an identifiable non-default `set_self_modulate(...)` / RenderingServer write from a concrete scene-side caller, using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-2xz0` with a clear reason if complete. Avoid reopening destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward classification pass on the same preserved crash lane, without reopening wider theories or adding new runtime experiments. I re-used Task 206's engine-side property chain (`CanvasItem::self_modulate = Color(1, 1, 1, 1)`, `CanvasItem::set_self_modulate(...)`, `RendererCanvasCull::canvas_item_set_self_modulate(...)`), scanned the entire reproducer project `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/` for `self_modulate`, `set_self_modulate`, and `canvas_item_set_self_modulate`, and re-read the reproducer's only scene-authored UI text path in `scenes/gdgs_happy_path_control.tscn` plus `scripts/build_control_scene.gd`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-self-modulate-default-vs-scene-write-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the exact preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the earlier scene/API-side lane `CanvasItem.self_modulate.rgb` is best classified as **default white**, not as an identifiable non-default scene-side write. The evidence is narrow and source-backed: `CanvasItem.self_modulate` defaults to `Color(1, 1, 1, 1)` in engine source; the reproducer project contains no serialized `self_modulate` override, no script-side `set_self_modulate(...)`, and no direct RenderingServer self-modulate write anywhere in `*.tscn`, `*.gd`, or `*.cs`; and the preserved packet artifact still logs a white modulation payload (`modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}`), which is consistent with that default-property reading. The only remaining narrow ambiguity is packet-owner strictness — whether the exact first clipped packet belongs to the `HudLabel` CanvasItem directly or a RichTextLabel-internal item on the same label path — but that does not change the classification because the project still contains no non-default self-modulate authoring path on either route.
+
+Validation for this documentation slice: `grep -RIn "self_modulate\|set_self_modulate\|canvas_item_set_self_modulate" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.tscn' --include='*.gd' --include='*.cs' || true`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '56,78p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '68,88p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.h | sed -n '84,94p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.cpp | sed -n '580,592p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp | sed -n '696,706p'`; `grep -RIn "temp_diag_first_clipped_preserve_rect_batch=\|modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 5`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-self-modulate-default-vs-scene-write-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if stricter packet-owner proof is still wanted on this same item-local side, the next honest seam is to attribute the exact first clipped preserve-rect packet to its owning CanvasItem/RID/path and decide whether it comes from the `HudLabel` CanvasItem directly or a RichTextLabel-internal item on the same label path; that seam would strengthen owner identity only and is not required for the current default-white classification.
+
+---
+
+### Task 208: Attribute the exact first clipped preserve-rect packet to its owning CanvasItem/RID/path on the preserved first-`L88` lane
+
+**Bead ID:** `oc-q0dv`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-q0dv` at start with `bd update oc-q0dv --status in_progress --json` and continue the already-approved active plan from Task 207's explicit next seam. Derrick has explicitly authorized immediate continuation and any needed tests in this session. Stay on the same preserved crash path and do not jump to speculative fixes. Task 207 proved that the preserved packet's `CanvasItem.self_modulate.rgb` is best classified as default white rather than a concrete non-default scene-side write. Continue only by attributing the exact first clipped preserve-rect packet to its owning CanvasItem/RID/path so we can decide whether it belongs directly to `CanvasLayer/HudMargin/HudLabel` or to a RichTextLabel-internal item on that same label path. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-q0dv` with a clear reason if complete. Avoid reopening the now-demoted non-default-self-modulate theory, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow owner-attribution pass from Task 207's explicit next seam, without reopening broader theories. I added the durable note `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-owner-hudlabel-vs-richtext-internal-2026-05-26.md` and linked it from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the exact first clipped preserve-rect packet is best classified as belonging directly to the `HudLabel` RichTextLabel canvas item, not to a separate RichTextLabel-internal canvas item owner. The source-backed chain is: `RichTextLabel::NOTIFICATION_DRAW` and `RichTextLabel::_draw_line(...)` both begin from `RID ci = get_canvas_item()`, pass that same `ci` through `TS->font_draw_glyph(...)` / `TS->font_draw_glyph_outline(...)`, and the text-server implementations keep that owner RID through the eventual `texture->draw_rect_region(p_canvas, ...)` call. To pin the exact live RID/path instead of stopping at source-only classification, I used the smallest reversible trace in `scripts/gdgs_tweak_matrix_harness.gd`, ran `~/.local/bin/godot --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit-after 3`, recorded the printed owner, and reverted the script immediately afterward. That validation run resolved the packet owner to runtime path `/root/GdgsHappyPathControl/CanvasLayer/HudMargin/HudLabel` with `HudLabel.get_canvas_item().get_id() == 128849018881`. The only internal child `CanvasItem` exposed by `HudLabel.get_children(true)` was the internal `VScrollBar`, and it had a different RID (`146028888066`), so it does not displace the direct glyph-owner route.
+
+Validation for this documentation slice: `grep -nE "RID ci = get_canvas_item\(|font_draw_glyph\(|font_draw_glyph_outline\(|canvas_item_add_rect\(" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1,40p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1064,1080p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1624,1640p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '2712,2810p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4316,4362p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2958,3004p'`; temporary validation trace, then reverted: `~/.local/bin/godot --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit-after 3`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '56,72p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '58,84p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-owner-hudlabel-vs-richtext-internal-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+
+Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on the now-fixed direct `HudLabel` owner route and classify which exact RichTextLabel text/glyph emission step produces the first clipped white no-outline MSDF rect packet inside that direct owner path, rather than reopening owner identity or broader theories.
+
+---
+
+### Task 209: Classify which exact RichTextLabel text/glyph emission step produces the first clipped white no-outline MSDF rect packet inside the direct `HudLabel` owner path
+
+**Bead ID:** `oc-h5t9`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-h5t9` at start with `bd update oc-h5t9 --status in_progress --json` and continue the already-approved active plan from Task 208's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 208 proved that the preserved packet belongs directly to the `HudLabel` RichTextLabel canvas item. Continue one rung inward only by classifying which exact RichTextLabel text/glyph emission step produces the first clipped white no-outline MSDF rect packet inside that direct owner path, using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-h5t9` with a clear reason if complete. Avoid reopening owner identity, non-default-self-modulate theory, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-richtextlabel-emission-step-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a source-backed inward classification pass from Task 208's explicit next seam, without reopening wider theories and without adding new runtime instrumentation. I re-read the direct `RichTextLabel` draw order in `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp` and `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`, re-read the direct-owner conclusion from Task 208, and checked the authored `HudLabel` opening content in `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn` plus `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-richtextlabel-emission-step-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: inside the now-fixed direct `HudLabel` owner path, the first clipped white no-outline rect packet is best classified as the RichTextLabel main text-pass glyph emission step, not a hidden internal owner and not a later/wider text helper. More exactly, the surviving emission surface is `RichTextLabel::NOTIFICATION_DRAW -> RichTextLabel::_draw_line(...) -> DRAW_STEP_TEXT -> TS->font_draw_glyph(frid, ci, glyphs[i].font_size, fx_offset + char_off, gl, font_color)`. The preserved packet facts line up with that branch: background/foreground steps emit rects instead of glyph packets, outline/shadow branches call `font_draw_glyph_outline(...)` or shadow-offset glyph draws, and the direct-owner route inside `_draw_line(...)` does not go through `TextServer::shaped_text_draw(...)` for this packet. The authored `HudLabel` text starts with the bold heading `[b]GDGS render-path tweak harness[/b]`, so the first matching direct-owner body on this route is the line-0 heading body rather than a later list-prefix/helper line.
+
+Validation for this documentation slice: `grep -n "DRAW_STEP_" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '2712,2795p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1198,1248p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1330,1645p'`; `grep -RIn "\[color\|\[fgcolor\|\[bgcolor\|\[outline" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts || true`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '62,72p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '72,88p'`; `grep -RIn "temp_diag_first_clipped_preserve_rect_batch=\|modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 5`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-richtextlabel-emission-step-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+
+Exact next seam now materialized: if continuation is still wanted on the same preserved lane, split the newly fixed `line-0 heading -> DRAW_STEP_TEXT -> font_draw_glyph(...)` packet one rung deeper into the exact first heading glyph emission itself and/or its immediate `font_color` / `frid` selection, without reopening owner identity or broader theories.
+
+---
+
+### Task 210: Split the fixed line-0 heading `DRAW_STEP_TEXT -> font_draw_glyph(...)` packet into first heading glyph emission versus immediate `font_color` / `frid` selection
+
+**Bead ID:** `oc-lsz2`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-lsz2` at start with `bd update oc-lsz2 --status in_progress --json` and continue the already-approved active plan from Task 209's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 209 proved that the preserved packet on the direct `HudLabel` route is emitted by `RichTextLabel::_draw_line(...) -> DRAW_STEP_TEXT -> TS->font_draw_glyph(...)`. Continue one rung inward only by splitting that fixed line-0 heading packet into the exact first heading glyph emission itself and/or its immediate `font_color` / `frid` selection, using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-lsz2` with a clear reason if complete. Avoid reopening owner identity, shadow/outline branches, non-default-self-modulate theory, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-vs-font-selection-2026-05-26.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward split on the same preserved crash lane, without reopening broader theories or adding new runtime experiments. I re-used Task 209's fixed direct owner-side text branch, re-read the immediate text-step input construction in `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp`, confirmed the default runtime RichTextLabel theme values in `/home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp`, and re-read the authored heading in `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-vs-font-selection-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the fixed direct `line-0 heading -> DRAW_STEP_TEXT -> font_draw_glyph(...)` packet, the tighter next rung is the immediate draw-call input provenance, not stopping at the broader prose label of the first heading glyph alone. `font_color` collapses directly to default white because `_find_color(it, p_base_color)` falls back to `theme_cache.default_color`, the default runtime RichTextLabel theme sets `default_color = Color(1, 1, 1)`, and the heading route has no `[color]` / `[fgcolor]` override. The heading begins with `[b]GDGS render-path tweak harness[/b]`, and RichTextLabel parses `[b]` with `_push_def_font(RTL_BOLD_FONT)`, while later font resolution maps that lane to `theme_cache.bold_font` and its effective size; so the `frid` side remains the shaped glyph RID outcome of the heading's bold-font selection lane. The first visible heading glyph is still source-backed as the leading `G`, but that is a slightly broader semantic label than the immediate draw-call input provenance itself. Best narrow wording after this slice: the packet should now be described as `DRAW_STEP_TEXT -> font_draw_glyph(...)` with `font_color = white` and `frid` coming from the heading's `[b] -> RTL_BOLD_FONT -> theme_cache.bold_font` lane.
+
+Validation for this documentation slice: `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1350,1368p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1482,1492p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3767,3779p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '5614,5624p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3440,3466p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1221,1238p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '67,72p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-vs-font-selection-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on this immediate input split and classify the still-unfinished bold-font `frid` lane itself — for example, resolving the exact theme font/size path behind the heading's `[b]` selection — while keeping the already-collapsed white `font_color` side closed.
+
+---
+
+### Task 211: Classify the exact heading bold-font `frid` lane behind the first-L88 RichTextLabel `font_draw_glyph(...)` packet while keeping white `font_color` closed
+
+**Bead ID:** `oc-ttwr`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-ttwr` at start with `bd update oc-ttwr --status in_progress --json` and continue the already-approved active plan from Task 210's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 210 collapsed the immediate draw-call input provenance to `font_color = white` plus `frid` coming from the heading's `[b] -> RTL_BOLD_FONT -> theme_cache.bold_font` lane. Continue one rung inward only by classifying that still-open bold-font `frid` lane itself — for example, the exact theme font/size resolution path behind the heading's `[b]` selection — while keeping the white `font_color` side closed. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-ttwr` with a clear reason if complete. Avoid reopening owner identity, shadow/outline branches, non-default-self-modulate theory, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-frid-lane-2026-05-26.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of `font_color`, owner identity, shadow/outline branches, destination-retention theory, specialization/request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-read the heading BBCode parse path in `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp`, the `ItemFont` / `_push_def_font(...)` setup and `_find_font(...)` resolution path in that same file plus `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`, the RichTextLabel theme bindings in `scene/gui/rich_text_label.cpp`, the default-theme RichTextLabel font and size defaults in `/home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp`, and the fallback semantics in `/home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp` and `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp`. I also re-checked the repro scene/script to confirm there are still no `HudLabel` theme/font/font-size overrides. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-frid-lane-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the still-open `frid` side behind the preserved first-`Command Graph (L88)` direct `HudLabel` heading packet now collapses to a specific theme-backed lane. The heading `[b]` tag selects `_push_def_font(RTL_BOLD_FONT)`, which creates an `ItemFont` with `def_font = RTL_BOLD_FONT` and `def_size = true`. `_find_font(...)` later resolves that exact lane to `theme_cache.bold_font`, and because `def_size` is true it also resolves the size side to `theme_cache.bold_font_size`. RichTextLabel binds both as normal theme items (`bold_font`, `bold_font_size`), the default theme sets the `bold_font` slot explicitly and stores `bold_font_size = -1`, and source-backed theme lookup shows that a non-positive named font-size slot falls through to the theme default font size. Since the repro scene/scripts still do not override `HudLabel` theme/font/font-size, `_shape_line(...).add_string(tx, font, font_size, ...)` feeds the stock resolved RichTextLabel bold-font object plus theme-default size path into shaping before draw later consumes `glyphs[i].font_rid`. Best narrow wording after this slice: the packet's `frid` lane is `heading [b] -> RTL_BOLD_FONT -> theme_cache.bold_font + theme_cache.bold_font_size (default-theme -1 slot -> theme default font size) -> _shape_line(...).add_string(...) -> glyphs[i].font_rid`.
+
+Validation for this documentation slice: `grep -n "tag == \"b\"\|_push_def_font(RTL_BOLD_FONT)\|_push_def_font(RTL_BOLD_ITALICS_FONT)" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3440,3466p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '4754,4782p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '717,753p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '8038,8062p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '92,97p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1210,1216p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '542,548p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '660,666p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '3720,3744p'`; `grep -RInE "theme_override|add_theme_font_override|add_theme_font_size_override|theme =|bold_font|bold_font_size" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.tscn' --include='*.gd' --include='*.cs' | head -n 50`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-frid-lane-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+
+Exact next seam now materialized: if continuation is still wanted on the same preserved lane, split one rung deeper inside this now-fixed theme-backed lane by resolving the exact concrete font resource that populates `theme_cache.bold_font` and/or the exact numeric theme-default font size that the `-1` `bold_font_size` slot falls through to on the preserved runtime path.
+
+---
+
+### Task 212: Resolve the exact concrete bold-font resource and/or exact theme-default size behind the first-L88 heading `frid` lane
+
+**Bead ID:** `oc-uzft`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-uzft` at start with `bd update oc-uzft --status in_progress --json` and continue the already-approved active plan from Task 211's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 211 resolved the broad heading bold-font `frid` lane to `[b] -> RTL_BOLD_FONT -> theme_cache.bold_font + theme_cache.bold_font_size (default-theme -1 slot -> theme default font size) -> _shape_line(...).add_string(...) -> glyphs[i].font_rid`. Continue one rung inward only by resolving the exact concrete font resource that populates `theme_cache.bold_font` and/or the exact numeric theme-default font size that the `-1` `bold_font_size` slot falls through to on the preserved runtime path, while keeping the already-closed white `font_color` side and broad theme-path classification closed. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-uzft` with a clear reason if complete. Avoid reopening caller-family identity, owner identity, shadow/outline branches, non-default-self-modulate theory, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-resource-and-size-2026-05-26.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only inward continuation on the same preserved crash path, with no new runtime instrumentation and no reopening of `font_color`, caller-family identity, owner identity, shadow/outline branches, destination-retention theory, specialization/request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes. I re-read the default-theme construction in `/home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp`, the RichTextLabel theme bindings in `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp`, the theme and Control lookup semantics in `/home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp`, `/home/derrick/.openclaw/workspace/projects/godot/scene/theme/theme_owner.cpp`, and `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp`, and re-checked the repro project for any custom GUI font or `HudLabel` theme/font/font-size overrides. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-resource-and-size-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the now-concrete heading bold-font lane tightens further on both the font-object and size sides. Because the repro project still shows no custom GUI font/theme override path, the `HudLabel` packet stays on the engine default-theme route. On that route, `theme_cache.bold_font` is constructed in `default_theme.cpp` as a `FontVariation` whose base font is `default_font` and whose embolden setting is `1.2`; when no custom project font is supplied, that `default_font` is a `FontFile` instantiated from the embedded `_font_OpenSans_SemiBold` payload. On the size side, RichTextLabel stores `bold_font_size = -1`, and source-backed theme lookup means that non-positive slot falls through to the theme default font size, which the default theme sets to `Math::round(16 * scale)`. So on the ordinary default-scale runtime path, the exact numeric fallback is `16 px`. Best narrow wording after this slice: the packet's `frid` lane is `heading [b] -> RTL_BOLD_FONT -> theme_cache.bold_font = FontVariation(base_font = embedded OpenSans SemiBold default font, embolden = 1.2) + theme_cache.bold_font_size = -1 -> theme default font size Math::round(16 * scale) -> 16 px at scale 1.0 -> _shape_line(...).add_string(...) -> glyphs[i].font_rid`.
+
+Validation for this documentation slice: `grep -RInE "custom_font|default_font|gui/theme|gui/common/default_font|font_subpixel|font_hinting|font_antialiasing|font_msdf" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/project.godot /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.godot' --include='*.cfg' --include='*.tscn' --include='*.gd' | head -n 120`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '50,50p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '92,97p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1210,1216p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1387,1411p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '542,548p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '660,666p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/theme_owner.cpp | sed -n '360,381p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-resource-and-size-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+
+Exact next seam now materialized: if continuation is still wanted on the same preserved lane, split one rung deeper from this now-concrete theme resource/size lane into the shaped-glyph side itself by resolving where the resolved `FontVariation` + `16 px` inputs become the eventual `glyphs[i].font_rid` / glyph index pair for the first visible heading `G`.
+
+---
+
+### Task 213: Resolve the final shaped-glyph transition from the concrete bold theme inputs to the first heading glyph's `font_rid` / glyph-index pair
+
+**Bead ID:** `oc-b8la`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-b8la` at start with `bd update oc-b8la --status in_progress --json` and continue the already-approved active plan from Task 212's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 212 resolved the heading bold-font lane to the concrete default-theme font object/resource and exact default-size fallback (`FontVariation(base_font = embedded OpenSans SemiBold default font, embolden = 1.2)` and `16 px` on the ordinary default-scale path). Continue one rung inward only by resolving the final shaped-glyph transition from those now-concrete theme inputs to the eventual `glyphs[i].font_rid` / glyph index pair for the first visible heading `G`, using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-b8la` with a clear reason if complete. Avoid reopening `font_color`, caller-family identity, owner identity, shadow/outline branches, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-shaping-font-rid-and-index-2026-05-26.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as the narrowest required inward continuation from Task 212's explicit next seam. Source alone had already closed the direct `HudLabel` heading route up to shaping, but it could not honestly supply the exact runtime numeric `font_rid` / glyph-index pair for the first visible heading `G`. So I used the smallest reversible runtime trace: a temporary headless probe script loaded the repro scene, fetched `HudLabel`'s actual `bold_font` / `bold_font_size`, shaped the heading body `GDGS render-path tweak harness`, and printed the first shaped glyph entry. I ran that probe on both the current managed runtime and the preserved repro runtime to avoid widening the conclusion beyond the approved lane. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-shaping-font-rid-and-index-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: on the preserved repro runtime (`/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`, `4.7.dev5.official.a8643700c`), the first visible heading glyph `G` shapes to the exact first-glyph pair `font_rid = RID(687194767361)`, `font_size = 16`, `glyph index = 42`, with the first shaped glyph covering `start=0`, `end=1`. The managed `4.6.2.stable` runtime produced the same first-glyph index `42` at size `16` but, as expected, a different runtime-instance RID value (`RID(450971566081)`). The direct `TextServer.font_get_glyph_index(first["font_rid"], first["font_size"], 'G', 0)` check returned `42` on both runtimes, so the shaped first-glyph mapping is now closed for the preserved lane without reopening broader theories.
+
+Validation for this documentation slice: temporary probe script `/home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd`; `~/.local/bin/godot --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd --quit`; `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd --quit`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-shaping-font-rid-and-index-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+
+Exact next seam now materialized: if continuation is still wanted on the same preserved lane, decide whether the first preserved clipped MSDF rect packet can now be pinned directly to this exact shaped heading `G` emission, or whether one last minimal packet-bridge trace is still needed to bridge from the shaped first-glyph pair to the first clipped packet selection itself.
+
+---
+
+### Task 214: Decide whether the first preserved clipped MSDF packet is directly the shaped heading `G` emission or still needs one last packet-bridge trace
+
+**Bead ID:** `oc-ol8e`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-ol8e` at start with `bd update oc-ol8e --status in_progress --json` and continue the already-approved active plan from Task 213's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 213 resolved the first visible heading glyph's shaped pair on the preserved runtime to `font_rid = RID(687194767361)`, `font_size = 16`, `glyph index = 42`. Continue one rung inward only by deciding whether the first preserved clipped MSDF rect packet can now be pinned directly to that exact shaped heading `G` emission, or whether one last minimal packet-bridge trace is still needed to bridge from the shaped first-glyph pair to the first clipped packet selection itself. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-ol8e` with a clear reason if complete. Avoid reopening `font_color`, caller-family identity, owner identity, shadow/outline branches, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-vs-first-clipped-packet-2026-05-26.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a source-backed inward decision pass from Task 213's explicit next seam, without reopening broader theories and without adding another runtime trace. I re-used Task 213's exact preserved-runtime shaped-glyph closure, re-read the direct RichTextLabel per-line / per-step / per-glyph emission order in `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp` and `/home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`, and re-read the MSDF glyph draw implementation in `/home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp` plus `/home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp`. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-vs-first-clipped-packet-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the first preserved clipped white no-outline MSDF rect packet can now be pinned directly to the exact first shaped heading `G` emission on the preserved runtime; one last packet-bridge trace is **not** honestly needed. The now-closed chain is contiguous and source-backed: `HudLabel -> RichTextLabel::_draw_line(...) -> DRAW_STEP_TEXT -> first visible heading glyph G -> preserved-runtime shaped pair (font_rid RID(687194767361), font_size 16, glyph index 42) -> TS->font_draw_glyph(...)`. On the MSDF path, `TextServerAdvanced::_font_draw_glyph(...)` and `TextServerFallback::_font_draw_glyph(...)` each emit a single `draw_msdf_rect_region(...)` packet for the glyph, so there is no remaining multi-packet ambiguity to bridge once the first visible heading glyph has already been fixed. Because the earlier competing forks were already closed — no alternate owner, no prefix lane, no shadow/outline branch, no `shaped_text_draw(...)` helper on this direct-owner route — the first preserved clipped packet is best classified as directly the first shaped heading `G` packet on this route.
+
+Validation for this documentation slice: `grep -n "DRAW_STEP_" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1198,1248p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1596,1641p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4330,4348p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2972,2990p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-vs-first-clipped-packet-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+
+Exact next seam now materialized: if continuation is still wanted on the same preserved lane, move to a genuinely new adjacent packet-local fact on the now-fixed first `G` packet — for example, the deeper geometric/clip relation of that first packet itself — rather than reopening provenance links already closed.
+
+---
+
+### Task 215: Classify the deeper packet-local geometric/clip relation of the fixed first heading `G` packet on the preserved first-`L88` lane
+
+**Bead ID:** `oc-lx21`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-lx21` at start with `bd update oc-lx21 --status in_progress --json` and continue the already-approved active plan from Task 214's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 214 proved that the first preserved clipped white no-outline MSDF rect packet is directly the first shaped heading `G` emission on the fixed direct `HudLabel` RichTextLabel route. Continue one rung inward only by classifying a genuinely new adjacent packet-local fact on that now-fixed first `G` packet — preferably the deeper geometric/clip relation of the packet itself on the preserved route — using source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-lx21` with a clear reason if complete. Avoid reopening `font_color`, caller-family identity, owner identity, shadow/outline branches, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-packet-clip-geometry-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow packet-local geometry pass from Task 214's explicit next seam, without reopening broader theories and without changing the already-closed packet identity. I re-used the preserved first-clipped packet artifact in `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log`, re-read the MSDF glyph rect emission in `/home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp` and `/home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp`, and used the smallest reversible runtime anchor check to confirm the direct `HudLabel` position on both runtimes. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-packet-clip-geometry-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the fixed first heading `G` packet on the preserved first-`L88` lane, the deeper packet-local geometric/clip relation is a **single-edge left clip by exactly 1 pixel**. The preserved packet artifact already records `clip_rect={x=16,y=16,w=504,h=460}` and `command.rect={x=-1,y=3,w=14,h=16}`. The reversible anchor probe showed that the direct `HudLabel` sits at global `(16,16)` with local position `(0,0)` under `HudMargin`. Combining those facts yields the tight packet/clip relation: local packet rect `(-1,3,14,16)` translates to global packet rect `(15,19,14,16)` against global clip rect `(16,16,504,460)`, so only the leftmost 1-pixel column overhangs the clip boundary while the packet's top, bottom, and right edges remain inside the clip. Best narrow wording after this slice: the first preserved clipped white no-outline MSDF packet is the first heading `G` packet, and its clipping is specifically a 1-pixel left-edge overhang case rather than a broader multi-edge clip.
+
+Validation for this documentation slice: `grep -n "temp_diag_first_clipped_preserve_rect_batch=" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 1`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4337,4344p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2979,2986p'`; temporary reversible anchor probe `/home/derrick/.openclaw/workspace/.temp/gdgs-label-rect-probe.gd` run against both `~/.local/bin/godot` and `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-packet-clip-geometry-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+
+Exact next seam now materialized: if continuation is still wanted on the same preserved lane, split one rung deeper inside this now-fixed geometry result — for example, whether the 1-pixel left overhang comes directly from the glyph's own MSDF rect/bearing (`fgl.rect.position.x = -1` after scale) versus some upstream line/layout offset, and/or the exact source of the packet's `y=3` inset on the same first-`G` route.
+
+---
+
+### Task 216: Resolve whether the first heading `G` packet's 1-pixel left overhang comes directly from the glyph MSDF rect/bearing or from an upstream layout offset
+
+**Bead ID:** `oc-zo3z`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-zo3z` at start with `bd update oc-zo3z --status in_progress --json` and continue the already-approved active plan from Task 215's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 215 proved that the fixed first heading `G` packet is clipped only by a 1-pixel left-edge overhang relative to the direct `HudLabel` clip boundary. Continue one rung inward only by resolving whether that 1-pixel left overhang comes directly from the glyph's own MSDF rect/bearing (`fgl.rect.position.x = -1` after scale) or from some upstream line/layout offset on the same route, and if the answer becomes clear source-only also note the exact source of the packet's `y=3` inset when useful. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-zo3z` with a clear reason if complete. Avoid reopening `font_color`, caller-family identity, owner identity, shadow/outline branches, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-left-overhang-origin-2026-05-26.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a narrow glyph-geometry continuation on the same preserved crash path, with no reopening of broader provenance links or speculative theories. I re-used the fixed first heading `G` packet identity and clip geometry from Task 215, re-read the MSDF glyph rect emission path in `/home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp`, and used the smallest reversible preserved-runtime probe to inspect the first shaped glyph plus direct font glyph metrics for the exact preserved-runtime pair (`font_rid RID(687194767361)`, `font_size 16`, `glyph index 42`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-left-overhang-origin-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: the first heading `G` packet's 1-pixel left overhang comes directly from the glyph's own MSDF rect/bearing, not from an upstream line/layout offset. On the preserved runtime, the first shaped glyph itself reports `offset=(0,0)`, so there is no extra shaped-glyph layout shift before the glyph-local rectangle is applied. The same probe reports `font_get_glyph_offset(...) = (-1,-14)` and `font_get_glyph_size(...) = (14,16)` for the fixed `G` pair, which matches the preserved packet-local rect's horizontal side exactly: packet local `x=-1`, `w=14`. That makes the left overhang glyph-local. On the same route, the packet local `y=3` is also consistent with the glyph-local vertical bearing `-14` applied to a baseline-side draw anchor at `y=17`, so the remaining unresolved adjacent seam is the source-backed origin of that baseline-side anchor, not the left overhang itself.
+
+Validation for this documentation slice: temporary preserved-runtime probe `/home/derrick/.openclaw/workspace/.temp/gdgs-glyph-overhang-origin-probe.gd` run with `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-glyph-overhang-origin-probe.gd --quit`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4329,4344p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-left-overhang-origin-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+
+Exact next seam now materialized: if continuation is still wanted on the same preserved lane, move to the remaining adjacent geometry rung — the exact source-backed origin of the baseline-side draw anchor behind packet local `y=3` on the same first-`G` route, and/or a stricter source-only tie between `font_get_glyph_offset(...)` and internal `fgl.rect.position` for this MSDF glyph.
+
+---
+
+### Task 217: Resolve the baseline-side draw anchor behind the first heading `G` packet's local `y=3` inset on the preserved route
+
+**Bead ID:** `oc-r0qa`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-r0qa` at start with `bd update oc-r0qa --status in_progress --json` and continue the already-approved active plan from Task 216's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. Task 216 proved that the first heading `G` packet's 1-pixel left overhang is glyph-local and not from an upstream line/layout offset. Continue one rung inward only by resolving the exact source-backed origin of the baseline-side draw anchor behind packet local `y=3` on the same first-`G` route, and if useful also note any stricter source-only tie between `font_get_glyph_offset(...)` and internal `fgl.rect.position` for this MSDF glyph. Use source-backed tracing or the smallest reversible contrast only if truly required. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-r0qa` with a clear reason if complete. Avoid reopening `font_color`, caller-family identity, owner identity, shadow/outline branches, destination-retention theory, specialization-cache theory, request-hash theory, sampled-MSDF-alpha questions already settled elsewhere, or speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-y-inset-origin-2026-05-26.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Next seam materialized from Task 216 and bead `oc-r0qa` created during heartbeat continuation. Awaiting coder execution on the same preserved lane.
+
+---
+
+### Task 194: Split the surviving exact `L88` exported shader-alpha carrier one rung deeper from exact packet-local/writeback facts without widening into fix theories
+
+**Bead ID:** `oc-43eg`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-43eg` at start and continue the already-approved active plan from Task 193's explicit next seam. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the surviving exported shader-alpha carrier itself after Task 193 demoted the later consumer alias and earlier broader color-term framing. Split that carrier one rung deeper using exact packet-local/writeback facts only, or the smallest reversible contrast if truly needed, without widening into fix theories. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-43eg` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-packet-carrier-vs-export-writeback-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only downstream classification pass from Task 193's explicit next seam, with no new runtime instrumentation and no widening into speculative fixes. I re-read the exact packet-local no-outline alpha write in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl` (`color.a = a * color.a`) and the terminal fragment-output writeback in the same file (`frag_color = color`), while keeping the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-packet-carrier-vs-export-writeback-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: one rung deeper than Task 193, the surviving exported shader-alpha carrier splits into the last packet-local/shared-fragment carrier **`color.a`** versus the later export/writeback slot **`frag_color.a`**. The tighter surviving carrier is **`color.a`**. `frag_color.a` is still the exact same live value at the merge boundary, but as a name it is already one step later: the immediate fragment-output/writeback alias created by the final whole-vector copy. So the deeper split does not reveal a new transform between them; it only shows that the last packet-local/shared-fragment identity is the tighter carrier, while the export slot name remains the first outward-facing alias of that same value.
+
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-packet-carrier-vs-export-writeback-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the surviving source-alpha side is now reduced to the last packet-local/shared-fragment alpha carrier itself, so any further honest continuation would need to split **inside `color.a`'s packet-local composition** (for example, the inherited pre-MSDF packet alpha versus the packet-local multiplier `a`) rather than reopening the later export slot alias, consumer alias, or broader admitted color term.
+
+---
+
+### Task 189: Determine whether the preserved `L88` crash path needs only the source-alpha-driven color weighting seam, or whether preserve/load dependency is also an independently live condition at the exact attachment merge
+
+**Bead ID:** `oc-1mys`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-1mys` at start and continue the already-approved active plan from Task 188's stop point. Stay on the same preserved crash path and do not jump to speculative fixes. The current seam is the exact `L88` preserve-content attachment merge. Determine whether the preserved path needs only the source-alpha-driven color weighting seam, or whether preserve/load dependency must also return as an independently live condition at that exact attachment merge. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from Task 188. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-1mys` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-merge-co-condition-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only downstream classification pass on the same preserved crash path, without adding new runtime instrumentation or widening into a speculative fix. I re-used Task 188’s exact stop point, re-read the live `BLEND_MODE_MIX` attachment recipe in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, re-read the already-reduced fragment/export carry in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl`, and kept the existing `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-merge-co-condition-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: for the exact preserved `Command Graph (L88)` crash path, **source-alpha-driven color weighting is not sufficient by itself** as the full preserved-path seam. It remains the tightest **active** carrier inside the merge, because the live color equation still uses `src_color_blend_factor = SRC_ALPHA` and `dst_color_blend_factor = ONE_MINUS_SRC_ALPHA`, so exported packet alpha descended from `d` is still the first active coefficient at the attachment boundary. But the preserve/load dependency must now return as an **independently live co-condition** at that same merge, because the destination-retention half of that exact preserved-content path only exists if prior root contents are still live under `attachment_load_ops=[0:LOAD]`. Without that `LOAD`-preserved destination participant, the path would still have a source-alpha coefficient, but it would no longer be the same preserved-content merge against already-loaded root contents that Tasks 187-188 identified. Alpha writeback stays demoted: it is still a real downstream effect of the same merge, but it is not the returned co-condition that makes this specifically a preserve-content path.
+
+Best current wording after this slice: the preserved `L88` crash path requires the source-alpha-driven `BLEND_MODE_MIX` color merge **over loaded preserved destination/root contents**. Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-merge-co-condition-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: stay at the same exact `L88` preserve-content merge and, only if another slice is wanted, split whether the returned independently live preserve/load co-condition is required purely as a destination-retention prerequisite or whether there is a narrower source-backed attachment-level consequence of that `LOAD` state before any wider fix theory is introduced.
+
+---
+
+### Task 188: Classify the narrowest downstream structural consequence at the exact `L88` preserve-content blend boundary: source-alpha color weighting versus alpha writeback versus preserve/load dependency
+
+**Bead ID:** `oc-jn1q`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-jn1q` at start and continue the already-approved active plan from Task 187's stop point. Stay on the same preserved crash path and do not jump to speculative fixes. The next widened seam is the exact `Command Graph (L88)` preserve-content blend boundary. Classify the narrowest downstream structural consequence there: determine whether the tightest seam is best located at source-alpha color weighting, alpha writeback, or the preserve/load dependency at that exact attachment-level merge. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from Task 187. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-jn1q` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping straight to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-blend-boundary-consequence-2026-05-26.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a documentation-only downstream classification pass on the same preserved crash path, without adding new runtime instrumentation or widening into a speculative fix. I re-used the exact Task 187 stop point and re-read the live source contracts in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl`, and the existing `REF-07` artifact-backed preserve-content UI lane classification already recorded in this plan. Durable notes were added to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-blend-boundary-consequence-2026-05-26.md` and linked from `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
+
+Concrete finding: at the exact `Command Graph (L88)` preserve-content attachment-level merge, the tightest downstream structural consequence is **source-alpha color weighting**, not alpha writeback and not the broader preserve/load dependency alone. The preserve/load dependency (`attachment_load_ops=[0:LOAD]`) remains the exact external prerequisite/context because it keeps prior root contents live as the destination participant, and alpha writeback remains a real downstream effect because `src_alpha_blend_factor=ONE` / `dst_alpha_blend_factor=ONE_MINUS_SRC_ALPHA` still feed the stored post-merge alpha channel. But the narrowest seam is earlier/tighter than either of those framings: under the live `BLEND_MODE_MIX` contract (`src_color_blend_factor=SRC_ALPHA`, `dst_color_blend_factor=ONE_MINUS_SRC_ALPHA`), the exported source alpha descended from packet-local `d` is the first active coefficient that simultaneously determines how much new packet color enters and how much preserved destination/root color remains at the exact blend boundary.
+
+Said plainly: after Task 187 identified the preserve-content `L88` blend boundary as the first widened external seam, Task 188 classifies the tightest carrier inside that boundary as the **first-L88 preserve-content `BLEND_MODE_MIX` source-alpha color merge over loaded root contents**, with alpha writeback and preserve/load retained as broader consequence/context rather than the narrowest carrier. Validation for this documentation slice: `git diff --check -- doc/gdgs-compositor-staged-qa-2026-05-17.md doc/gdgs-first-l88-preserve-blend-boundary-consequence-2026-05-26.md .plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now becomes clear only if the investigation continues one rung farther *inside that same merge framing*: the next honest split would be whether the surviving preserved path needs only the source-alpha-driven **color weighting** itself or whether the still-broader preserve/load dependency at that exact attachment merge must be reintroduced as an independently live condition by a future tiny reversible contrast.
+
+---
+
+### Task 187: Trace the first downstream use/consequence of the exact first-L88 emitted scalar `d` beyond packet-local classification and identify the earliest point where the preserved crash path becomes structurally different outside the packet
+
+**Bead ID:** `oc-3qre`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-3qre` at start and continue the already-approved active plan from Task 186's stop point. Derrick has explicitly approved widening beyond packet-local classification. Stay focused on the same preserved crash path, but step outward from the exact first-L88 packet. Trace the first downstream use/consequence of the emitted scalar `d` and identify the earliest point where the preserved crash path becomes structurally different outside the packet. Prefer the narrowest source-backed downstream tracing or the smallest reversible diagnostic contrast that follows from the completed packet-local ladder. Write durable artifact notes, update this plan with concrete findings, and close bead `oc-3qre` with a clear reason if complete. Avoid reopening specialization-cache theory, request-hash theory, CPU-side vertex-format-cache theory, or jumping all the way to speculative fixes.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- downstream-consequence tracing notes / tiny reversible instrumentation as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+**Status:** ✅ Complete
+
 **Results:** Completed as a documentation-only downstream-tracing slice, widening exactly one rung beyond Task 186's exhausted packet-local ladder without adding new runtime instrumentation or reopening the already-demoted broader theories. Wrote durable note `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-downstream-blend-seam-2026-05-26.md` and linked it from `REF-07` in `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`.
 
 Concrete finding: once the exact first-L88 no-outline MSDF packet has reduced to irreducible emitted scalar `d`, the first honest downstream trace beyond packet-local classification is `d -> color.a -> frag_color.a` through the shared fragment tail of `servers/rendering/renderer_rd/shaders/canvas.glsl`. But the **earliest point where the preserved crash path becomes structurally different outside the packet** is not the intermediate shared-flow carry itself; it is the live `Command Graph (L88) (Draw)` preserve-content **mix-blend boundary** against loaded root contents. Source-backed reason: the packet exports `frag_color = color`, while the live `L88` canvas pass in `servers/rendering/renderer_rd/storage_rd/material_storage.cpp` uses `BLEND_MODE_MIX` with `src_color_blend_factor = SRC_ALPHA` and `dst_color_blend_factor = ONE_MINUS_SRC_ALPHA`; the durable `REF-07` artifact already shows that exact lane as `UI_PASS` with `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `first_destination_color_blend_mode="mix"`, and `CanvasShaderRD:0` with `blend_enabled_attachment_mask="0x1"`. So the first external structural consequence of `d` is that its exported alpha immediately becomes part of the source-alpha weighting that merges the exact packet with already-present root attachment contents.
