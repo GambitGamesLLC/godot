@@ -3157,6 +3157,7 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 		if (wait_result != VK_SUCCESS) {
 			print_line(vformat("[gdgs-vk] fence_wait_error submit_serial=%d queue_family=%d queue_index=%d wait_result=%d wait_summary=%s wait_provenance=%s signal_summary=%s signal_provenance=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)wait_result, fence->last_wait_semaphore_summary, fence->last_wait_provenance_summary, fence->last_signal_semaphore_summary, fence->last_signal_provenance_summary, fence->last_command_buffer_summary));
 			_debug_submit9_completion_trace_log_fence_wait_end(fence, fence_status, wait_result, vkGetFenceStatus(vk_device, fence->vk_fence));
+			_debug_submit9_clear_command_buffer_watch(fence);
 		}
 		ERR_FAIL_COND_V_MSG(wait_result != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", wait_result));
 	}
@@ -3164,6 +3165,7 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	VkResult post_wait_status = vkGetFenceStatus(vk_device, fence->vk_fence);
 	print_line(vformat("[gdgs-vk] fence_wait_end submit_serial=%d queue_family=%d queue_index=%d fence_status=%d", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)post_wait_status));
 	_debug_submit9_completion_trace_log_fence_wait_end(fence, fence_status, wait_result, post_wait_status);
+	_debug_submit9_clear_command_buffer_watch(fence);
 	VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence);
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't reset Vulkan fence (VkResult error %d).", err));
 
@@ -3385,6 +3387,22 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 			fence->last_signal_provenance_summary = _debug_signal_semaphore_provenance_summary(p_cmd_semaphores, p_swap_chains, fence);
 			fence->last_command_buffer_summary = _debug_command_buffer_summary(p_cmd_buffers);
 			fence->last_command_buffer_identity_hash = _debug_command_buffer_identity_hash(p_cmd_buffers);
+			fence->last_command_buffer_handles.clear();
+			for (uint32_t i = 0; i < p_cmd_buffers.size(); i++) {
+				const CommandBufferInfo *tracked_command_buffer = (const CommandBufferInfo *)(p_cmd_buffers[i].id);
+				fence->last_command_buffer_handles.push_back((uint64_t)tracked_command_buffer->vk_command_buffer);
+			}
+			fence->last_submit9_wait_payload_summary = String();
+			fence->last_submit9_signal_payload_summary = String();
+			fence->last_submit9_command_buffer_payload_summary = String();
+			fence->last_submit9_command_buffer_residency_summary = String();
+			if (_debug_submit9_sync_payload_enabled() && _debug_submit9_completion_trace_is_target_submit(fence->last_submit_serial)) {
+				fence->last_submit9_wait_payload_summary = _debug_submit9_wait_payload_summary(wait_semaphores, wait_semaphores_stages);
+				fence->last_submit9_signal_payload_summary = _debug_submit9_signal_payload_summary(signal_semaphores);
+				fence->last_submit9_command_buffer_payload_summary = _debug_submit9_command_buffer_payload_summary(p_cmd_buffers);
+				_debug_submit9_watch_command_buffers(fence, p_cmd_buffers);
+				fence->last_submit9_command_buffer_residency_summary = _debug_submit9_command_buffer_residency_summary(fence);
+			}
 			print_line(vformat("[gdgs-vk] queue_submit submit_serial=%d queue_family=%d queue_index=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s wait_summary=%s wait_provenance=%s signal_summary=%s signal_provenance=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false", fence->last_wait_semaphore_summary, fence->last_wait_provenance_summary, fence->last_signal_semaphore_summary, fence->last_signal_provenance_summary, fence->last_command_buffer_summary));
 			_debug_submit9_completion_trace_log_queue_submit(fence, fence_status_before_submit);
 		}
@@ -3548,6 +3566,7 @@ bool RenderingDeviceDriverVulkan::command_pool_reset(CommandPoolID p_cmd_pool) {
 	DEV_ASSERT(p_cmd_pool);
 
 	CommandPool *command_pool = (CommandPool *)(p_cmd_pool.id);
+	_debug_submit9_note_command_pool_reset(command_pool);
 	VkResult err = vkResetCommandPool(vk_device, command_pool->vk_command_pool, 0);
 	ERR_FAIL_COND_V_MSG(err, false, vformat("Couldn't reset Vulkan command pool (VkResult error %d).", err));
 
@@ -3558,6 +3577,7 @@ void RenderingDeviceDriverVulkan::command_pool_free(CommandPoolID p_cmd_pool) {
 	DEV_ASSERT(p_cmd_pool);
 
 	CommandPool *command_pool = (CommandPool *)(p_cmd_pool.id);
+	_debug_submit9_note_command_pool_free(command_pool);
 	for (CommandBufferInfo *command_buffer : command_pool->command_buffers_created) {
 		VersatileResource::free(resources_allocator, command_buffer);
 	}
@@ -3589,12 +3609,16 @@ RDD::CommandBufferID RenderingDeviceDriverVulkan::command_buffer_create(CommandP
 
 	CommandBufferInfo *command_buffer = VersatileResource::allocate<CommandBufferInfo>(resources_allocator);
 	command_buffer->vk_command_buffer = vk_command_buffer;
+	command_buffer->debug_owner_pool = command_pool;
+	command_buffer->debug_record_begin_serial = 0;
 	command_pool->command_buffers_created.push_back(command_buffer);
 	return CommandBufferID(command_buffer);
 }
 
 bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buffer) {
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
+	_debug_submit9_note_command_buffer_begin(command_buffer);
+	command_buffer->debug_record_begin_serial = ++debug_command_buffer_begin_serial;
 	command_buffer->active_framebuffer = nullptr;
 	command_buffer->active_render_pass = nullptr;
 	command_buffer->active_render_subpass = 0;
@@ -3660,6 +3684,8 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	Framebuffer *framebuffer = (Framebuffer *)(p_framebuffer.id);
 	RenderPassInfo *render_pass = (RenderPassInfo *)(p_render_pass.id);
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
+	_debug_submit9_note_command_buffer_begin(command_buffer);
+	command_buffer->debug_record_begin_serial = ++debug_command_buffer_begin_serial;
 	command_buffer->active_framebuffer = framebuffer;
 	command_buffer->active_render_pass = render_pass;
 	command_buffer->active_render_subpass = p_subpass;
@@ -12895,29 +12921,218 @@ bool RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_enabled() cons
 	return enabled;
 }
 
+bool RenderingDeviceDriverVulkan::_debug_submit9_sync_payload_enabled() const {
+	static const bool enabled = []() {
+		const char *value = getenv("GODOT_GDGS_DEBUG_SUBMIT9_SYNC_PAYLOAD");
+		return value != nullptr && value[0] != '\0' && value[0] != '0';
+	}();
+	return enabled;
+}
+
 bool RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_is_target_submit(uint64_t p_submit_serial) const {
-	return _debug_submit9_completion_trace_enabled() && p_submit_serial == 9;
+	return p_submit_serial == 9;
+}
+
+String RenderingDeviceDriverVulkan::_debug_submit9_wait_payload_summary(const LocalVector<VkSemaphore> &p_wait_semaphores, const LocalVector<VkPipelineStageFlags> &p_wait_stage_masks) const {
+	if (p_wait_semaphores.size() == 0) {
+		return "[]";
+	}
+	String text = "[";
+	for (uint32_t i = 0; i < p_wait_semaphores.size(); i++) {
+		if (i > 0) {
+			text += ", ";
+		}
+		const VkPipelineStageFlags stage_mask = i < p_wait_stage_masks.size() ? p_wait_stage_masks[i] : 0;
+		text += "{index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)p_wait_semaphores[i]);
+		text += ",stage_mask=\"" + _debug_pipeline_stage_to_string(stage_mask) + "\"";
+		text += ",stage_mask_bits=" + itos((uint64_t)stage_mask) + "}";
+	}
+	text += "]";
+	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_submit9_signal_payload_summary(const LocalVector<VkSemaphore> &p_signal_semaphores) const {
+	if (p_signal_semaphores.size() == 0) {
+		return "[]";
+	}
+	String text = "[";
+	for (uint32_t i = 0; i < p_signal_semaphores.size(); i++) {
+		if (i > 0) {
+			text += ", ";
+		}
+		text += "{index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)p_signal_semaphores[i]);
+		text += ",stage_mask=\"legacy_vkQueueSubmit_none\",stage_mask_bits=0}";
+	}
+	text += "]";
+	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_submit9_command_buffer_payload_summary(VectorView<CommandBufferID> p_cmd_buffers) const {
+	if (p_cmd_buffers.size() == 0) {
+		return "[]";
+	}
+	String text = "[";
+	for (uint32_t i = 0; i < p_cmd_buffers.size(); i++) {
+		const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)(p_cmd_buffers[i].id);
+		if (i > 0) {
+			text += ", ";
+		}
+		text += "{index=" + itos(i);
+		text += ",vk=" + itos((uint64_t)command_buffer->vk_command_buffer);
+		text += ",pool=" + itos(command_buffer->debug_owner_pool != nullptr ? (uint64_t)command_buffer->debug_owner_pool->vk_command_pool : 0);
+		text += ",begin_serial=" + itos(command_buffer->debug_record_begin_serial);
+		text += ",backend_command_serial=" + itos(command_buffer->debug_backend_command_serial);
+		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"";
+		if (!command_buffer->debug_last_label.is_empty()) {
+			text += ",last_label=\"" + command_buffer->debug_last_label + "\"";
+		}
+		text += "}";
+	}
+	text += "]";
+	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_submit9_command_buffer_residency_summary(const Fence *p_fence) const {
+	if (p_fence == nullptr || p_fence->last_command_buffer_handles.is_empty()) {
+		return "[]";
+	}
+	String text = "[";
+	for (uint32_t i = 0; i < p_fence->last_command_buffer_handles.size(); i++) {
+		const uint64_t vk_command_buffer = p_fence->last_command_buffer_handles[i];
+		if (i > 0) {
+			text += ", ";
+		}
+		text += "{index=" + itos(i);
+		text += ",vk=" + itos(vk_command_buffer);
+		const DebugSubmit9WatchedCommandBufferState *state = debug_submit9_watched_command_buffers.getptr(vk_command_buffer);
+		if (state == nullptr) {
+			text += ",tracked=false}";
+			continue;
+		}
+		text += ",tracked=true";
+		text += ",pool=" + itos(state->command_pool);
+		text += ",submitted_begin_serial=" + itos(state->submitted_begin_serial);
+		text += ",reset_before_wait_end=" + String(state->reset_before_wait_end ? "true" : "false");
+		text += ",reset_count=" + itos(state->reset_count);
+		text += ",recycled_before_wait_end=" + String(state->recycled_before_wait_end ? "true" : "false");
+		text += ",recycle_count=" + itos(state->recycle_count);
+		text += ",freed_before_wait_end=" + String(state->freed_before_wait_end ? "true" : "false");
+		text += ",free_count=" + itos(state->free_count);
+		if (!state->last_event.is_empty()) {
+			text += ",last_event=\"" + state->last_event + "\"";
+		}
+		text += "}";
+	}
+	text += "]";
+	return text;
+}
+
+void RenderingDeviceDriverVulkan::_debug_submit9_watch_command_buffers(const Fence *p_fence, VectorView<CommandBufferID> p_cmd_buffers) {
+	if (!_debug_submit9_sync_payload_enabled() || p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
+		return;
+	}
+	for (uint32_t i = 0; i < p_cmd_buffers.size(); i++) {
+		const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)(p_cmd_buffers[i].id);
+		DebugSubmit9WatchedCommandBufferState &state = debug_submit9_watched_command_buffers[(uint64_t)command_buffer->vk_command_buffer];
+		state.vk_command_buffer = (uint64_t)command_buffer->vk_command_buffer;
+		state.command_pool = command_buffer->debug_owner_pool != nullptr ? (uint64_t)command_buffer->debug_owner_pool->vk_command_pool : 0;
+		state.submit_serial = p_fence->last_submit_serial;
+		state.submitted_begin_serial = command_buffer->debug_record_begin_serial;
+		state.reset_before_wait_end = false;
+		state.reset_count = 0;
+		state.recycled_before_wait_end = false;
+		state.recycle_count = 0;
+		state.freed_before_wait_end = false;
+		state.free_count = 0;
+		state.last_event = "queue_submit";
+	}
+}
+
+void RenderingDeviceDriverVulkan::_debug_submit9_note_command_pool_reset(const CommandPool *p_command_pool) {
+	if (!_debug_submit9_sync_payload_enabled() || p_command_pool == nullptr) {
+		return;
+	}
+	for (const CommandBufferInfo *command_buffer : p_command_pool->command_buffers_created) {
+		DebugSubmit9WatchedCommandBufferState *state = debug_submit9_watched_command_buffers.getptr((uint64_t)command_buffer->vk_command_buffer);
+		if (state == nullptr || state->submit_serial != 9) {
+			continue;
+		}
+		state->reset_before_wait_end = true;
+		state->reset_count++;
+		state->last_event = "command_pool_reset(pool=" + itos((uint64_t)p_command_pool->vk_command_pool) + ")";
+		print_line(vformat("[gdgs-vk] submit9_sync_trace residency_event event=command_pool_reset submit_serial=%d command_buffer=%d command_pool=%d reset_count=%d", (uint64_t)state->submit_serial, state->vk_command_buffer, state->command_pool, state->reset_count));
+	}
+}
+
+void RenderingDeviceDriverVulkan::_debug_submit9_note_command_pool_free(const CommandPool *p_command_pool) {
+	if (!_debug_submit9_sync_payload_enabled() || p_command_pool == nullptr) {
+		return;
+	}
+	for (const CommandBufferInfo *command_buffer : p_command_pool->command_buffers_created) {
+		DebugSubmit9WatchedCommandBufferState *state = debug_submit9_watched_command_buffers.getptr((uint64_t)command_buffer->vk_command_buffer);
+		if (state == nullptr || state->submit_serial != 9) {
+			continue;
+		}
+		state->freed_before_wait_end = true;
+		state->free_count++;
+		state->last_event = "command_pool_free(pool=" + itos((uint64_t)p_command_pool->vk_command_pool) + ")";
+		print_line(vformat("[gdgs-vk] submit9_sync_trace residency_event event=command_pool_free submit_serial=%d command_buffer=%d command_pool=%d free_count=%d", (uint64_t)state->submit_serial, state->vk_command_buffer, state->command_pool, state->free_count));
+	}
+}
+
+void RenderingDeviceDriverVulkan::_debug_submit9_note_command_buffer_begin(CommandBufferInfo *p_command_buffer) {
+	if (!_debug_submit9_sync_payload_enabled() || p_command_buffer == nullptr) {
+		return;
+	}
+	DebugSubmit9WatchedCommandBufferState *state = debug_submit9_watched_command_buffers.getptr((uint64_t)p_command_buffer->vk_command_buffer);
+	if (state == nullptr || state->submit_serial != 9) {
+		return;
+	}
+	state->recycled_before_wait_end = true;
+	state->recycle_count++;
+	state->last_event = "command_buffer_begin(begin_serial=" + itos(p_command_buffer->debug_record_begin_serial + 1) + ")";
+	print_line(vformat("[gdgs-vk] submit9_sync_trace residency_event event=command_buffer_begin submit_serial=%d command_buffer=%d command_pool=%d recycle_count=%d next_begin_serial=%d", (uint64_t)state->submit_serial, state->vk_command_buffer, state->command_pool, state->recycle_count, p_command_buffer->debug_record_begin_serial + 1));
+}
+
+void RenderingDeviceDriverVulkan::_debug_submit9_clear_command_buffer_watch(const Fence *p_fence) {
+	if (!_debug_submit9_sync_payload_enabled() || p_fence == nullptr) {
+		return;
+	}
+	for (uint64_t vk_command_buffer : p_fence->last_command_buffer_handles) {
+		debug_submit9_watched_command_buffers.erase(vk_command_buffer);
+	}
 }
 
 void RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_log_queue_submit(const Fence *p_fence, VkResult p_fence_status_before_submit) const {
-	if (p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
+	if ((!_debug_submit9_completion_trace_enabled() && !_debug_submit9_sync_payload_enabled()) || p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
 		return;
 	}
 	print_line(vformat("[gdgs-vk] submit9_completion_trace queue_submit fence=%d pre_submit_fence_status=%d command_buffer_identity_hash=%d promotion_observed=%s promotion_handoff_submit_serial=%d command_summary=%s", (uint64_t)p_fence->vk_fence, (int)p_fence_status_before_submit, p_fence->last_command_buffer_identity_hash, debug_submit9_completion_trace_promotion_observed ? "true" : "false", debug_submit9_completion_trace_handoff_submit_serial, p_fence->last_command_buffer_summary));
+	if (_debug_submit9_sync_payload_enabled()) {
+		print_line(vformat("[gdgs-vk] submit9_sync_trace queue_submit fence=%d queue_family=%d queue_index=%d wait_submit_infos=%s signal_submit_infos=%s command_buffer_submit_infos=%s residency=%s", (uint64_t)p_fence->vk_fence, p_fence->last_queue_family, p_fence->last_queue_index, p_fence->last_submit9_wait_payload_summary, p_fence->last_submit9_signal_payload_summary, p_fence->last_submit9_command_buffer_payload_summary, p_fence->last_submit9_command_buffer_residency_summary));
+	}
 }
 
 void RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_log_fence_wait_begin(const Fence *p_fence, VkResult p_pre_wait_status) const {
-	if (p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
+	if ((!_debug_submit9_completion_trace_enabled() && !_debug_submit9_sync_payload_enabled()) || p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
 		return;
 	}
 	print_line(vformat("[gdgs-vk] submit9_completion_trace fence_wait_begin fence=%d pre_wait_status=%d command_buffer_identity_hash=%d promotion_observed=%s promotion_handoff_submit_serial=%d command_summary=%s", (uint64_t)p_fence->vk_fence, (int)p_pre_wait_status, p_fence->last_command_buffer_identity_hash, debug_submit9_completion_trace_promotion_observed ? "true" : "false", debug_submit9_completion_trace_handoff_submit_serial, p_fence->last_command_buffer_summary));
+	if (_debug_submit9_sync_payload_enabled()) {
+		print_line(vformat("[gdgs-vk] submit9_sync_trace fence_wait_begin fence=%d residency=%s", (uint64_t)p_fence->vk_fence, _debug_submit9_command_buffer_residency_summary(p_fence)));
+	}
 }
 
 void RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_log_fence_wait_end(const Fence *p_fence, VkResult p_pre_wait_status, VkResult p_wait_result, VkResult p_post_wait_status) const {
-	if (p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
+	if ((!_debug_submit9_completion_trace_enabled() && !_debug_submit9_sync_payload_enabled()) || p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
 		return;
 	}
 	print_line(vformat("[gdgs-vk] submit9_completion_trace fence_wait_end fence=%d pre_wait_status=%d wait_result=%d post_wait_status=%d command_buffer_identity_hash=%d promotion_observed=%s promotion_handoff_submit_serial=%d command_summary=%s", (uint64_t)p_fence->vk_fence, (int)p_pre_wait_status, (int)p_wait_result, (int)p_post_wait_status, p_fence->last_command_buffer_identity_hash, debug_submit9_completion_trace_promotion_observed ? "true" : "false", debug_submit9_completion_trace_handoff_submit_serial, p_fence->last_command_buffer_summary));
+	if (_debug_submit9_sync_payload_enabled()) {
+		print_line(vformat("[gdgs-vk] submit9_sync_trace fence_wait_end fence=%d wait_result=%d post_wait_status=%d residency=%s", (uint64_t)p_fence->vk_fence, (int)p_wait_result, (int)p_post_wait_status, _debug_submit9_command_buffer_residency_summary(p_fence)));
+	}
 }
 
 String RenderingDeviceDriverVulkan::_debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const {

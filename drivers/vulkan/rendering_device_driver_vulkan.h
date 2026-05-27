@@ -241,9 +241,24 @@ private:
 		String last_wait_command_summary;
 	};
 	HashMap<uint64_t, DebugSemaphoreState> debug_semaphore_states;
+	struct DebugSubmit9WatchedCommandBufferState {
+		uint64_t vk_command_buffer = 0;
+		uint64_t command_pool = 0;
+		uint64_t submit_serial = 0;
+		uint64_t submitted_begin_serial = 0;
+		bool reset_before_wait_end = false;
+		uint32_t reset_count = 0;
+		bool recycled_before_wait_end = false;
+		uint32_t recycle_count = 0;
+		bool freed_before_wait_end = false;
+		uint32_t free_count = 0;
+		String last_event;
+	};
+	HashMap<uint64_t, DebugSubmit9WatchedCommandBufferState> debug_submit9_watched_command_buffers;
 	bool debug_submit9_completion_trace_promotion_observed = false;
 	bool debug_submit9_completion_trace_first_handoff_logged = false;
 	uint64_t debug_submit9_completion_trace_handoff_submit_serial = 0;
+	uint64_t debug_command_buffer_begin_serial = 0;
 
 public:
 	/*****************/
@@ -388,6 +403,11 @@ private:
 		String last_signal_provenance_summary;
 		String last_command_buffer_summary;
 		uint64_t last_command_buffer_identity_hash = 0;
+		LocalVector<uint64_t> last_command_buffer_handles;
+		String last_submit9_wait_payload_summary;
+		String last_submit9_signal_payload_summary;
+		String last_submit9_command_buffer_payload_summary;
+		String last_submit9_command_buffer_residency_summary;
 	};
 
 public:
@@ -870,6 +890,8 @@ private:
 
 	struct CommandBufferInfo {
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
+		CommandPool *debug_owner_pool = nullptr;
+		uint64_t debug_record_begin_serial = 0;
 		Framebuffer *active_framebuffer = nullptr;
 		RenderPassInfo *active_render_pass = nullptr;
 		uint32_t active_render_subpass = 0;
@@ -1362,6 +1384,16 @@ public:
 	String _debug_wait_semaphore_provenance_summary(VectorView<SemaphoreID> p_wait_semaphores, const Fence *p_fence = nullptr);
 	String _debug_signal_semaphore_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains) const;
 	bool _debug_submit9_completion_trace_enabled() const;
+	bool _debug_submit9_sync_payload_enabled() const;
+	String _debug_submit9_wait_payload_summary(const LocalVector<VkSemaphore> &p_wait_semaphores, const LocalVector<VkPipelineStageFlags> &p_wait_stage_masks) const;
+	String _debug_submit9_signal_payload_summary(const LocalVector<VkSemaphore> &p_signal_semaphores) const;
+	String _debug_submit9_command_buffer_payload_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
+	String _debug_submit9_command_buffer_residency_summary(const Fence *p_fence) const;
+	void _debug_submit9_watch_command_buffers(const Fence *p_fence, VectorView<CommandBufferID> p_cmd_buffers);
+	void _debug_submit9_note_command_pool_reset(const CommandPool *p_command_pool);
+	void _debug_submit9_note_command_pool_free(const CommandPool *p_command_pool);
+	void _debug_submit9_note_command_buffer_begin(CommandBufferInfo *p_command_buffer);
+	void _debug_submit9_clear_command_buffer_watch(const Fence *p_fence);
 	bool _debug_submit9_completion_trace_is_target_submit(uint64_t p_submit_serial) const;
 	void _debug_submit9_completion_trace_log_queue_submit(const Fence *p_fence, VkResult p_fence_status_before_submit) const;
 	void _debug_submit9_completion_trace_log_fence_wait_begin(const Fence *p_fence, VkResult p_pre_wait_status) const;
