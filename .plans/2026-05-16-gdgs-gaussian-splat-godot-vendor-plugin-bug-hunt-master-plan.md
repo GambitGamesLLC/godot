@@ -9060,8 +9060,53 @@ To materialize that seam concretely, I created follow-on bead `oc-0d08.1` as the
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
-- backend/barrier diagnostic files as needed
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_render_manager.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_rendering_device_context.gd`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-0d08.1` and landed the narrowest default-off backend/barrier instrumentation slice directly on the audited pivot without reopening shader ancestry or changing the locked `gsplat_projection` contract. The new control surface is exposed as `debug_backend_consume_trace_mode` / `ProjectionBackendConsumeTraceMode` with three states: `disabled` (default), `markers_only`, and `empty_compute_boundary`.
+
+The instrumentation stays strictly outside the shader/pipeline/descriptor/push-constant surface. Instead, it adds backend-visible labels/timestamps around the first post-barrier consume seam that still exists after the shader-side split is complete:
+- `projection_dispatch_begin` — marks the projection list before the dispatch is consumed.
+- `same_dispatch_post_barrier` — stamps the same compute list immediately after the `gsplat_projection` dispatch returns to GDScript.
+- `immediate_downstream_handoff` — stamps the first post-`compute_list_end()` handoff point.
+- `first_command_graph_boundary_before_empty_compute_list` / `empty_compute_list_opened` / `first_command_graph_boundary_after_empty_compute_list` — optional extra boundary markers emitted only in `empty_compute_boundary` mode via a fresh empty compute list, so QA can tell whether the crash is already reintroduced at the first follow-on command-graph-visible packet boundary versus only later in a deeper backend packet.
+
+Implementation details by file:
+- `gaussian_rendering_device_context.gd` now wraps `draw_command_begin_label`, `draw_command_insert_label`, `draw_command_end_label`, and `capture_timestamp` so the vendor plugin can emit backend-visible debug markers without changing resource bindings.
+- `gaussian_renderer.gd` now threads the disabled-by-default consume-trace mode through `render_for_compositor()` / `_rasterize_state()`, logs the selected mode in stage output, and emits the labeled/timestamped consume-boundary markers only around the projection dispatch seam.
+- `gaussian_render_manager.gd` forwards the new trace-mode parameter.
+- `gaussian_compositor_effect.gd` exposes the trace mode as a debug export so QA can toggle it in the same source-built repro lane without patching the shader contract.
+
+Repo-local validation completed on the touched files:
+- `git diff --check`
+- `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_rendering_device_context.gd addons/gdgs/runtime/render/gaussian_render_manager.gd addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit`
+- `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_render_manager.gd --check-only --quit`
+- `godot --headless --path . --script addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd --check-only --quit`
+
+Artifact roots for this coder slice: no new runtime repro artifact root was produced because this pass intentionally stopped at reversible instrumentation + syntax validation. The next QA slice should write its repro outputs under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/` (or the current dated sibling root if QA rolls to a fresh day) and capture separate logs for `markers_only` and `empty_compute_boundary` against the locked `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` ladder.
+
+### Task 233: QA the backend consume-boundary trace seam on the locked pre-/post-barrier projection ladder
+
+**Bead ID:** `oc-8wlo`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the already-approved backend/barrier seam and do not reopen shader ancestry. Using the same source-built repro lane and locked identity checks, rerun `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` with `debug_backend_consume_trace_mode=markers_only`, then repeat with `debug_backend_consume_trace_mode=empty_compute_boundary`. Capture the exact artifact root under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/` (or the current dated sibling root if needed), compare the first surviving backend-visible marker/timestamp/command-summary boundary between the last-good and first-bad rungs, and determine whether the failure identity is already reintroduced at `same_dispatch_post_barrier`, at `immediate_downstream_handoff`, at the first empty-boundary packet, or only later in the same backend packet path. Update this plan with the concrete comparison and materialize the next narrow seam based on the earliest boundary that differs.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- QA artifact/log files under the chosen repro root
 
 **Status:** ⏳ Pending
 
-**Results:** Pending. Highest-signal discriminator to answer in this slice: whether the first bad post-barrier rung diverges already at the earliest backend-visible consume/handoff boundary, or whether that boundary still looks equivalent and the stable `submit_serial=9` / `BLIT_PASS` crash identity first becomes visible only deeper in the same command-graph path.
+**Results:** Pending. Highest-signal discriminator for QA: whether the first failing post-barrier rung starts diverging from the last-good pre-barrier rung already at `same_dispatch_post_barrier`, at `immediate_downstream_handoff`, at the first optional empty compute-boundary packet, or only deeper in the same stable `submit_serial=9` / `BLIT_PASS` path.
