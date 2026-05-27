@@ -3154,7 +3154,29 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	_debug_submit9_prewait_window_log_fence_wait_begin(fence, fence_status);
 	VkResult wait_result = fence_status;
 	if (fence_status == VK_NOT_READY) {
-		wait_result = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+		if (_debug_submit9_error_surface_window_enabled() && _debug_submit9_completion_trace_is_target_submit(fence->last_submit_serial)) {
+			const uint64_t wait_start_usec = OS::get_singleton()->get_ticks_usec();
+			uint32_t poll_ordinal = 0;
+			VkResult last_polled_fence_status = fence_status;
+			while (true) {
+				wait_result = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, 0);
+				const VkResult polled_fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
+				const bool should_log_poll = poll_ordinal == 0 || wait_result != VK_TIMEOUT || polled_fence_status != last_polled_fence_status;
+				if (should_log_poll) {
+					const uint64_t elapsed_usec = OS::get_singleton()->get_ticks_usec() - wait_start_usec;
+					const String device_observation = _debug_submit9_device_observation_summary(wait_result == VK_TIMEOUT ? polled_fence_status : wait_result);
+					print_line(vformat("[gdgs-vk] submit9_error_surface_trace poll fence=%d poll_ordinal=%d elapsed_usec=%s wait_result=%d fence_status=%d device_observation=%s command_buffer_identity_hash=%s command_summary=%s", (uint64_t)fence->vk_fence, poll_ordinal, itos(elapsed_usec), (int)wait_result, (int)polled_fence_status, device_observation, itos(fence->last_command_buffer_identity_hash), fence->last_command_buffer_summary));
+				}
+				last_polled_fence_status = polled_fence_status;
+				poll_ordinal++;
+				if (wait_result != VK_TIMEOUT) {
+					break;
+				}
+				OS::get_singleton()->delay_usec(1000);
+			}
+		} else {
+			wait_result = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+		}
 		if (wait_result != VK_SUCCESS) {
 			print_line(vformat("[gdgs-vk] fence_wait_error submit_serial=%d queue_family=%d queue_index=%d wait_result=%d wait_summary=%s wait_provenance=%s signal_summary=%s signal_provenance=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)wait_result, fence->last_wait_semaphore_summary, fence->last_wait_provenance_summary, fence->last_signal_semaphore_summary, fence->last_signal_provenance_summary, fence->last_command_buffer_summary));
 			const VkResult wait_error_post_status = vkGetFenceStatus(vk_device, fence->vk_fence);
@@ -12943,6 +12965,14 @@ bool RenderingDeviceDriverVulkan::_debug_submit9_sync_payload_enabled() const {
 bool RenderingDeviceDriverVulkan::_debug_submit9_prewait_window_enabled() const {
 	static const bool enabled = []() {
 		const char *value = getenv("GODOT_GDGS_DEBUG_SUBMIT9_PREWAIT_WINDOW");
+		return value != nullptr && value[0] != '\0' && value[0] != '0';
+	}();
+	return enabled;
+}
+
+bool RenderingDeviceDriverVulkan::_debug_submit9_error_surface_window_enabled() const {
+	static const bool enabled = []() {
+		const char *value = getenv("GODOT_GDGS_DEBUG_SUBMIT9_ERROR_SURFACE_WINDOW");
 		return value != nullptr && value[0] != '\0' && value[0] != '0';
 	}();
 	return enabled;

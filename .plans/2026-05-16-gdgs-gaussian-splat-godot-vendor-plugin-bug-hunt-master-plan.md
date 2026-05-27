@@ -9274,7 +9274,7 @@ To add one submit-9-scoped device-level observation point without widening scope
 
 ### Task 240: QA the submit-9 pre-wait error surfacing window ladder
 
-**Bead ID:** `Pending`
+**Bead ID:** `oc-95dx`
 **SubAgent:** `primary` (for `qa`)
 **Role:** `qa`
 **References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
@@ -9287,8 +9287,35 @@ To add one submit-9-scoped device-level observation point without widening scope
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
-- QA artifact logs under the new repro root
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-submit9-prewait-window-qa-sourcebuild-20260527-151615/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-submit9-prewait-window-qa-sourcebuild-20260527-151615/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-submit9-prewait-window-qa-sourcebuild-20260527-151615/logs/*`
 
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-**Results:** Pending.
+**Results:** QA reran the locked three-rung source-built ladder at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-submit9-prewait-window-qa-sourcebuild-20260527-151615/` with all three submit-9 trace gates enabled. The good rung (`projection_non_footprint_immediate_return_only`) still exits `0` and both post-barrier bad rungs still abort with exit `134` / wait failure on `submit_serial=9`, preserving the already-locked crash envelope.
+
+The new pre-wait window fields sharpen the seam further without moving it earlier. Across the good rung and both bad rungs, `submit9_prewait_trace post_submit` still reports `post_submit_fence_status=1` and `post_submit_device_observation={device_fault_probe=skipped}`, and `submit9_prewait_trace fence_wait_begin` still reports `pre_wait_status=1` plus `pre_wait_device_observation={device_fault_probe=skipped}`. No bad rung reports `device_fault_probe=counts_only` before the blocking wait begins. The first new divergent fields therefore remain only the wait-completion outputs: the good rung reaches `wait_result=0 post_wait_status=0 post_wait_device_observation={device_fault_probe=skipped}` and later emits the good-only `submit9_completion_trace later_wait_handoff`, while both bad rungs first diverge at `wait_result=-4 post_wait_status=-4 post_wait_device_observation={device_fault_probe=unavailable}`.
+
+This keeps the prior packet-match conclusion intact: the good and bad rungs still seal the same submit-9 packet surface before the wait, and the earliest surviving backend/barrier divergence is still fence-resolution outcome rather than post-submit fence status, pre-wait status, submit payload shape, or pre-wait command-buffer residency. Best next seam: stay backend-local and instrument the earliest queue/device-level error surfacing point between accepted submit and failed completion, because the device-loss state is still not observable on the watched fence before the blocking wait itself returns it.
+
+### Task 241: Instrument the in-wait error surfacing window for the matched submit-9 packet
+
+**Bead ID:** `oc-yt3d`  
+**SubAgent:** `primary`  
+**Role:** `coder`  
+**References:** `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-yt3d` at start and continue the already-approved active plan from Task 240's stop point. Stay strictly inside the already-approved backend/barrier seam and do not reopen shader ancestry. Build directly on the current QA result: good and bad rungs still match at submit payload, post-submit fence status, pre-wait status, and pre-wait device observation, and the earliest surviving divergence is still fence-resolution outcome at `submit_serial=9`. Add the smallest default-off backend instrumentation needed to expose the earliest queue/device-level error surfacing point between accepted submit and failed completion for this matched submit-9 packet. Keep it reversible, update this master plan with exact touched files, validation, and the next QA slice, and close bead `oc-yt3d` with a clear reason if the coder package is ready. Commit/push if you land the instrumentation slice.
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added the smallest new default-off submit-9 wait-window probe on the active source-built Godot instrumentation branch without reopening shader ancestry or changing renderer behavior. The new gate is `GODOT_GDGS_DEBUG_SUBMIT9_ERROR_SURFACE_WINDOW=1`. Under that gate, `drivers/vulkan/rendering_device_driver_vulkan.cpp` replaces the blocking `vkWaitForFences(..., UINT64_MAX)` path only for the already-matched `submit_serial=9` fence with a narrow zero-time polling loop plus `delay_usec(1000)`, emitting `submit9_error_surface_trace poll ...` markers that capture `poll_ordinal`, `elapsed_usec`, `wait_result`, `fence_status`, and the same submit-9-scoped device observation summary on the exact fence/command packet already matched by Tasks 236-240. This stays seam-local and reversible: the trace is fully dormant unless the new env gate is set, it touches only the Vulkan driver wait path for the watched submit-9 packet, and it leaves the existing completion-ledger / sync-payload / pre-wait traces intact so QA can line the new in-wait surfacing markers up against the already-matched submit payload and pre-wait snapshots.
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`; full incremental rebuild `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`; and runtime string proof `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "submit9_error_surface_trace poll"`. No GDGS vendor-repo code changes were needed in this slice, and no new repro artifact root exists yet because this pass stopped at instrumentation + rebuild validation.
+
+**Exact next QA slice:** rerun only the same locked three-rung source-built ladder (`projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, `projection_post_barrier_immediate_return_only`) with the existing submit-9 gates plus `GODOT_GDGS_DEBUG_SUBMIT9_ERROR_SURFACE_WINDOW=1`, capture a fresh artifact root under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/` (or the current dated sibling root), and compare the first `submit9_error_surface_trace poll ...` series for the matched `submit_serial=9` fence. The QA question is narrow: do the bad rungs first surface divergence as an in-wait `wait_result=-4` while fence status stays `VK_NOT_READY` until that same poll, or does some earlier non-timeout / non-`VK_NOT_READY` poll observation appear before the final failure edge? That answer will pin the earliest queue/device-level error surfacing point *inside* the wait window itself without reopening shader ancestry.

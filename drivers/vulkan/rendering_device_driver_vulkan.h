@@ -1388,6 +1388,7 @@ public:
 	bool _debug_submit9_completion_trace_enabled() const;
 	bool _debug_submit9_sync_payload_enabled() const;
 	bool _debug_submit9_prewait_window_enabled() const;
+	bool _debug_submit9_error_surface_window_enabled() const;
 	String _debug_submit9_wait_payload_summary(const LocalVector<VkSemaphore> &p_wait_semaphores, const LocalVector<VkPipelineStageFlags> &p_wait_stage_masks) const;
 	String _debug_submit9_signal_payload_summary(const LocalVector<VkSemaphore> &p_signal_semaphores) const;
 	String _debug_submit9_command_buffer_payload_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
