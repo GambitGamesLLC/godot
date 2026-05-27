@@ -3161,6 +3161,11 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 			while (true) {
 				wait_result = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, 0);
 				const VkResult polled_fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
+				const bool wait_device_lost = wait_result == VK_ERROR_DEVICE_LOST;
+				const bool status_device_lost = polled_fence_status == VK_ERROR_DEVICE_LOST;
+				if (wait_device_lost || status_device_lost) {
+					print_line(vformat("[gdgs-vk] submit9_error_surface_trace device_lost_edge fence=%d poll_ordinal=%d wait_result=%d fence_status=%d wait_device_lost=%s status_device_lost=%s both_device_lost=%s command_buffer_identity_hash=%s command_summary=%s", (uint64_t)fence->vk_fence, poll_ordinal, (int)wait_result, (int)polled_fence_status, wait_device_lost ? "true" : "false", status_device_lost ? "true" : "false", (wait_device_lost && status_device_lost) ? "true" : "false", itos(fence->last_command_buffer_identity_hash), fence->last_command_buffer_summary));
+				}
 				const bool should_log_poll = poll_ordinal == 0 || wait_result != VK_TIMEOUT || polled_fence_status != last_polled_fence_status;
 				if (should_log_poll) {
 					const uint64_t elapsed_usec = OS::get_singleton()->get_ticks_usec() - wait_start_usec;
