@@ -8869,6 +8869,61 @@ Repo-local validation for the touched GDGS files completed: `git diff --check`; 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-non-footprint-qa-sourcebuild-20260527-075229/`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-ktpa`, updated the temp checkpoint harness to expose the new `projection_non_footprint_immediate_return_only` raster-stage enum value, then reran the exact same host-Wayland / Vulkan source-built repro lane against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Exact artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-non-footprint-qa-sourcebuild-20260527-075229/` with `context.txt`, `run_summary.tsv`, per-case stdout/stderr logs, command captures, and exit-status files under `logs/`.
+
+Concrete three-rung comparison on the shared `scratch_projection_mirror_only` checkpoint:
+- `projection_footprint_only`: **still good**. Exit `0`; same earlier safe profile with projection entry mirrored and the footprint-return bit set.
+- `projection_non_footprint_immediate_return_only`: **also good**. Exit `0`; this rung survives repeatedly, mirrors `projection_shader_mode=non_footprint_immediate_return_only`, `scratch_projection_stage_bits_hex=0x00000801`, `scratch_projection_entered=true`, `scratch_projection_non_footprint_immediate_return=true`, and keeps every later projection bit false (`scratch_projection_instance_data_block_entered=false`, `scratch_projection_instance_data_read=false`). It also produced the expected PNG and JSON outputs under the artifact root.
+- `projection_instance_data_block_only`: **first break returns here**. Exit `134`; this remains the failing rung, matching the old fence-loss / `BLIT_PASS` identity seen earlier once the shader advances beyond the immediate-return path into the later post-footprint body lane.
+
+Exact QA conclusion: merely leaving the `footprint_only` mode family is **not** sufficient to reproduce the crash. The first surviving non-footprint mode selection is clean as long as it returns before the post-footprint body. The failure boundary is therefore now sharpened to `projection_non_footprint_immediate_return_only` (good) → `projection_instance_data_block_only` (bad). The next narrow seam should isolate the first touch introduced after that immediate return — i.e. distinguish `"first post-footprint barrier/body entry"` from any later instance-data load/read-pack work.
+
+### Task 226: Add a post-non-footprint barrier-only rung to isolate barrier/body entry from instance-data read
+
+**Bead ID:** `oc-fhj0`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and add the narrowest reversible rung between `projection_non_footprint_immediate_return_only` and `projection_instance_data_block_only`. Reuse the same `gsplat_projection` pipeline/descriptors/push-constant contract, but introduce a new projection debug mode that leaves the successful non-footprint immediate-return path, crosses the existing post-footprint `barrier()`, and returns immediately before any subsequent instance-data-block marker/load work that currently defines `projection_instance_data_block_only`. Thread it through the existing raster-stage / shader-mode control surface and scratch/readback logs only as needed, update this plan with the exact implementation result plus the next QA seam, run relevant repo-local validation, commit/push if complete, and close the bead with a clear reason.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-fhj0` and landed the narrowest reversible rung between the safe `projection_non_footprint_immediate_return_only` path and the first failing `projection_instance_data_block_only` path. The new control is exposed as `projection_post_barrier_immediate_return_only` / **Projection Post-Barrier Immediate Return Only** and still uses the same `gsplat_projection` pipeline, descriptor-set surface, push-constant contract, and dispatch footprint as the rest of the projection ladder.
+
+Inside `gsplat_projection.glsl`, the new seam now lives exactly at the newly sharpened boundary: after the successful non-footprint immediate-return branch and **after crossing the shared post-footprint `barrier()`**, but still **before** the later `SCRATCH_PROJECTION_STAGE_INSTANCE_DATA_BLOCK_ENTERED` marker and before any `splat_instance_data[id]` read. In this new mode the shader stamps a dedicated scratch bit `SCRATCH_PROJECTION_STAGE_POST_BARRIER_IMMEDIATE_RETURN` and returns immediately. That isolates `"barrier crossed / first post-footprint body entry"` from `"later instance-data block marker and read-pack work"` on the same scratch-probe readback surface.
+
+On the GDScript side, the new rung was threaded only through the existing debug-control surface: `GaussianRenderer.RasterDebugStage`, raster-stage gate logs, stage-name helpers, shader-mode mapping, shader-mode naming, scratch-probe decode/log fields, and the compositor effect export enum now all understand `projection_post_barrier_immediate_return_only` plus `scratch_projection_post_barrier_immediate_return=true/false`. No Godot engine source files changed in this slice; the Godot repo change remains the living-plan handoff.
+
+### Task 227: QA the post-barrier immediate-return seam against the surviving pre-barrier rung and the failing instance-data-block rung
+
+**Bead ID:** `oc-iyyu`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and rerun the same staged repro lane on the `scratch_projection_mirror_only` checkpoint across `projection_non_footprint_immediate_return_only`, the new `projection_post_barrier_immediate_return_only`, and `projection_instance_data_block_only`. Update the temp checkpoint harness only as needed to expose the new rung. Verify whether the post-barrier immediate-return rung still survives and mirrors `scratch_projection_post_barrier_immediate_return=true`, or whether the old `submit_serial=9` / fence-loss / `BLIT_PASS` identity already returns there; then compare that directly against the later failing instance-data-block rung. Capture the exact artifact root, update this plan with a concrete three-rung comparison, and materialize the next narrow seam based on the first rung that breaks.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
 
 **Status:** ⏳ Pending
 
