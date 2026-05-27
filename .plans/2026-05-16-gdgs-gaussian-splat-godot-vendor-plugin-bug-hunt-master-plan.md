@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** In Progress
-**Last Updated:** 2026-05-26 22:06 EDT
+**Last Updated:** 2026-05-27 04:31 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -27,16 +27,17 @@ That moves the active hypothesis forward. The leading suspect is no longer “an
 - `scratch_only` is a real positive-control dispatch and survives cleanly.
 - `projection_only` remains the first meaningful failing stage.
 - The projection dispatch itself logs success and barrier completion before the later failure surfaces at `fence_wait` / `BLIT_PASS`.
-- So the most likely remaining owners are:
-  - projection-pass output writes / bounds / layout mistakes in GDGS,
-  - projection-triggered resource lifetime or synchronization fallout,
-  - or a narrower Godot/backend bug exposed specifically by this projection workload.
+- Later preserved-lane narrowing proved that the first traced `HudLabel` heading-`G` packet and its 1 px left-edge overhang are **not** the decisive cause; that packet can be made left-edge-contained while the same `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` / `BLIT_PASS` envelope survives.
+- So the sharpest surviving seam is now an **explicit projection-after-dispatch bridge**:
+  - do not keep drilling deeper into packet-local `L88` provenance for its own sake,
+  - instead classify why the same clipped preserve-rect family still survives downstream of `projection_only` after the first traced packet is neutralized,
+  - and use that to decide whether the surviving classifier is batch-level / later-instance / post-projection state rather than that first packet-local overlap fact.
 
 ### Session Handoff Status — 2026-05-26 22:06 EDT
 
 - This is the **only active plan** that heartbeat and `start the plane` should resume.
 - Current stopping point: the bug hunt is narrowed to the first failing `projection_only` stage after `scratch_only` was proven safe as a real positive-control dispatch.
-- Next slice: continue projection-focused diagnostics around post-dispatch readback truth, output writes/bounds/layout assumptions, and projection-triggered lifetime/synchronization fallout between barrier completion and the later `fence_wait` / `BLIT_PASS` collapse.
+- Next slice: keep the lane projection-only, but stop broadening into later packet ancestry. The sharpest next discriminator is whether the failing `gsplat_projection` workload poisons the device before any real splat/instance consumption, or only after the shader starts touching the projection data path. Use a projection-entry footprint control that reuses the real projection pipeline/descriptors/push-constant contract, atomically stamps the already-proven scratch/projection probes, and returns before reading splat or instance payloads.
 - Supporting predecessor slices now live only as archives under `REF-09` through `REF-11`.
 
 ---
@@ -60,6 +61,47 @@ That moves the active hypothesis forward. The leading suspect is no longer “an
 ---
 
 ## Tasks
+
+### Task 0: Resume the current GDGS projection-only diagnostic lane
+
+**Bead ID:** `oc-vk9f`
+**SubAgent:** `primary` (for `research` / `coder` / `qa` / `auditor` loop as needed)
+**Role:** `research`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** Resume the single active GDGS lane on the Godot source checkout and stay strictly inside the already-approved projection-focused scope. Start from the proven facts that the live repro is global/global, `scratch_only` survives as a real positive-control dispatch, and `projection_only` remains the first meaningful failing stage before the later `fence_wait` / `BLIT_PASS` collapse. Tighten the next discriminator around the projection pass and its immediate aftermath: post-dispatch readback truth, output writes/bounds/layout assumptions, and projection-triggered lifetime/synchronization fallout. Claim bead `oc-vk9f` on start, keep the work diagnostic/reversible, and materialize any narrower follow-on bead immediately if the next seam becomes concrete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- supporting Godot / GDGS diagnostic files and repo-owned docs as needed for the next projection-focused slice
+
+**Status:** ✅ Complete
+
+**Results:** Resumed the projection-only lane by re-reading the current plan/doc evidence and the live GDGS projection instrumentation rather than widening the bug hunt. The key discriminator is now concrete and narrower than the earlier generic “projection aftermath” wording: `scratch_only` already proves that CPU readback of the scratch SSBO can work in this compositor path, but the real `gsplat_projection` shader still returns all-zero `projection_probe` and all-zero projection-written `scratch_probe` fields even though it logs a successful dispatch/barrier and is instrumented to atomically touch both probes before any splat/instance-dependent math. That means the next highest-signal split is **not** another later `fence_wait` / `BLIT_PASS` ancestry pass; it is whether the projection pipeline/descriptor footprint itself is already toxic before real data-path consumption, or whether toxicity begins only once the shader starts reading `splat_instance_data`, `instance_model_matrices`, and the projection-owned buffers. Materialized follow-on bead `oc-5zsq` for that exact seam: add a projection-entry footprint control that reuses the real projection pipeline/descriptors/push constants, stamps the probes, and returns before consuming splat/instance payloads. No repo code changed in this research pass beyond this plan update.
+
+### Task 0a: Add a projection-entry footprint control to split descriptor/pipeline hazards from data-path hazards
+
+**Bead ID:** `oc-5zsq`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-5zsq` and keep the investigation strictly projection-only. Add a minimal reversible control that reuses the real `gsplat_projection` pipeline footprint (same descriptor set shape, same push-constant contract, same dispatch size) but returns before reading splat or instance payloads. The goal is to separate “the projection pipeline/descriptors/push-constant footprint is already toxic” from “toxicity begins only when the shader starts consuming projection data and writing real outputs.” Make the control stamp the existing projection/scratch probe buffers in a way QA can read back without inventing a new broad repro model. Update this plan with actual results, run relevant repo-local validation, commit/push if you land the instrumentation slice, and close bead `oc-5zsq` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- projection-path source files and docs as needed
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ⏳ Pending
+
+**Results:** Created on 2026-05-27 from the `oc-vk9f` research review after confirming the current live puzzle is upstream of later ancestry work: the projection shader already contains first-invocation atomic probe writes, yet the projection-only evidence path still comes back zero-valued while `scratch_only` remains a valid positive control. This task is the cleanest next split between pipeline-footprint toxicity and data-path toxicity.
 
 ### Task 1: Map instrumentation points and staged isolation order in Godot/GDGS boundary
 
