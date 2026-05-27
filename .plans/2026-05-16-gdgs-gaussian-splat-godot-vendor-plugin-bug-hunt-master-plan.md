@@ -9108,6 +9108,60 @@ Artifact roots for this coder slice: no new runtime repro artifact root was prod
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - QA artifact/log files under the chosen repro root
 
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked source-built lane at artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-backend-consume-boundary-qa-20260527-101258/` after adding a temp-only argument hook to `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` so the harness could set `debug_backend_consume_trace_mode` without touching repo code. Run matrix summary: `projection_non_footprint_immediate_return_only` passed in both `markers_only` and `empty_compute_boundary`; `projection_post_barrier_no_scratch_immediate_return_only` and `projection_post_barrier_immediate_return_only` reproduced the expected `submit_serial=9` / `fence_wait_error wait_result=-4` failure in both trace modes.
+
+Concrete comparison against the last-good rung:
+- `markers_only`: the first-bad post-barrier logs (`projection_only__projection_post_barrier_no_scratch_immediate_return_only__markers_only.stdout.log` and `projection_only__projection_post_barrier_immediate_return_only__markers_only.stdout.log`) still emit `backend_consume_boundary=same_dispatch_post_barrier` and `backend_consume_boundary=immediate_downstream_handoff` before the failure, matching the surviving marker progression seen in the last-good pre-barrier rung. The failing `submit_serial=9` packet already contains the same late tail shape as the good rung’s first consume packet (`labels=101`, `late_tail_split.tail_start_level=90`, tail `L90 compute -> L91 marker -> L92 copy`), so the failure is not reintroduced at either of those first two boundaries.
+- `empty_compute_boundary`: the first-bad post-barrier logs (`projection_only__projection_post_barrier_no_scratch_immediate_return_only__empty_compute_boundary.stdout.log` and `projection_only__projection_post_barrier_immediate_return_only__empty_compute_boundary.stdout.log`) also survive through `same_dispatch_post_barrier`, `immediate_downstream_handoff`, `first_command_graph_boundary_before_empty_compute_list`, and `first_command_graph_boundary_after_empty_compute_list` before failing at the same `submit_serial=9` fence wait. The first consume packet is command-summary-identical to the last-good rung: `labels=105`, `late_tail_split.tail_start_level=94`, and tail `L94 compute -> L95 marker -> L96 copy` in both the good log (`projection_only__projection_non_footprint_immediate_return_only__empty_compute_boundary.stdout.log`) and the two first-bad logs.
+- Because the last-good and first-bad rungs share the same first surviving backend-visible boundary sequence and the same first backend consume packet shape, the earliest divergence is **only later in the same backend packet path**. The first empty-boundary packet is already surviving in the bad rung; the divergence appears at packet completion / fence resolution rather than at `same_dispatch_post_barrier`, `immediate_downstream_handoff`, or the first empty-boundary insertion itself.
+
+Next narrow seam materialized below: stay inside backend consume completion and compare why the identical first consume packet survives into the next frame for the good rung but returns `VK_ERROR_DEVICE_LOST`/`wait_result=-4` on the post-barrier rungs during the same packet’s completion path.
+
+### Task 234: Audit the post-packet completion seam after the identical first backend consume packet
+
+**Bead ID:** `oc-l74f`
+**SubAgent:** `primary` (for `research` or `qa`)
+**Role:** `research`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the backend/barrier seam already approved in this plan. Starting from QA artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-backend-consume-boundary-qa-20260527-101258/`, compare the first identical backend consume packet (`submit_serial=9`) between the good `projection_non_footprint_immediate_return_only` rung and the first-bad post-barrier rungs, then isolate the earliest completion-path difference after that packet is sealed: fence bookkeeping, submit/wait provenance, or backend command completion state. Do not reopen shader ancestry; materialize the smallest next barrier/backend instrumentation seam that can explain why the same first packet completes on the good rung but device-loses on the post-barrier rungs.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- Additional completion-path comparison notes or narrow trace artifacts under the same repro root
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-l74f` and compared the first command-summary-identical backend consume packet under `REF-08` (`/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-backend-consume-boundary-qa-20260527-101258/`). The strongest match is the `empty_compute_boundary` packet at `submit_serial=9`: the last-good `projection_only__projection_non_footprint_immediate_return_only__empty_compute_boundary.stdout.log` and both first-bad post-barrier logs (`projection_only__projection_post_barrier_no_scratch_immediate_return_only__empty_compute_boundary.stdout.log`, `projection_only__projection_post_barrier_immediate_return_only__empty_compute_boundary.stdout.log`) share the same sealed submit shape — identical wait source (`wait_semaphores=1` on the transfer-worker semaphore last signaled by `submit_serial=8`), identical `wait_provenance` lineage back to that transfer submit, and the same first backend consume packet shape (`labels=105`, `late_tail_split.tail_start_level=94`, tail `L94 compute -> L95 marker -> L96 copy`).
+
+That rules out fence bookkeeping drift at submit construction time and rules out a submit/wait provenance fork before the packet is handed to Vulkan. The earliest divergence appears only after the identical packet is already sealed and submitted: on the good rung, `fence_wait_begin submit_serial=9 fence_status=1` becomes `fence_wait_end ... fence_status=1`, and the later `submit_serial=11` wait provenance explicitly records `last_wait_submit_serial=9`, proving the packet completed and entered the next dependency chain. On both first-bad post-barrier rungs, the same `submit_serial=9` packet instead ends at `fence_wait_error submit_serial=9 wait_result=-4 fence_status=0`; the next observed wait (`submit_serial=8`) also returns `wait_result=-4`, showing the device is already lost rather than merely mis-bookkept. Concrete conclusion: the earliest surviving difference is **backend command completion state at fence resolution**, not queue-submit construction or wait-provenance bookkeeping.
+
+Next executable seam: instrument the non-present completion ledger around this exact packet — the `queue_submit submit_serial=9` / `fence_wait submit_serial=9` path plus the first dependent frame-chain handoff that would normally record `last_wait_submit_serial=9` on the good rung. The smallest honest discriminator is a default-off backend trace that logs (a) per-submit fence handle / pre-wait status / wait result, (b) whether the completion path advances the packet into the later dependency bookkeeping, and (c) the exact command-buffer identity/hash carried through that promotion. That seam can distinguish “the GPU packet never completes” from “completion bookkeeping after wait is what diverges,” without reopening shader ancestry.
+
+### Task 235: Instrument the submit-9 completion ledger through fence resolution and first dependent handoff
+
+**Bead ID:** `oc-l74f.1`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim the linked bead at start and stay strictly inside the already-approved backend/barrier seam from Task 234. Add the narrowest default-off Vulkan/RenderingDevice instrumentation around the identical first consume packet’s completion ledger: `queue_submit submit_serial=9`, `fence_wait submit_serial=9`, and the first later dependency handoff that would normally record `last_wait_submit_serial=9` on the good rung. The trace should log the fence handle and pre/post wait status, the command-buffer identity/hash associated with that packet, and whether completion promotion into later wait provenance actually occurs before the device-loss path. Do not reopen shader ancestry or widen into unrelated packet theory. Update this plan with exact touched files, validation, artifact roots, and the next QA slice; close the bead with a clear reason if the coder package is ready.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- Narrow backend completion-ledger instrumentation under the Godot Vulkan / RenderingDevice path
+- Follow-up QA artifacts under a new repro root
+
 **Status:** ⏳ Pending
 
-**Results:** Pending. Highest-signal discriminator for QA: whether the first failing post-barrier rung starts diverging from the last-good pre-barrier rung already at `same_dispatch_post_barrier`, at `immediate_downstream_handoff`, at the first optional empty compute-boundary packet, or only deeper in the same stable `submit_serial=9` / `BLIT_PASS` path.
+**Results:** Pending. Task 234 narrowed the divergence to packet completion state at `fence_wait submit_serial=9`; this next seam should prove whether the packet dies on-GPU before promotion or whether the promotion/bookkeeping path itself is the first diverging backend state.
