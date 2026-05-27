@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** In Progress
-**Last Updated:** 2026-05-27 04:31 EDT
+**Last Updated:** 2026-05-27 06:27 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -102,6 +102,81 @@ That moves the active hypothesis forward. The leading suspect is no longer “an
 **Status:** ✅ Complete
 
 **Results:** Added the requested projection-entry footprint control on the active GDGS instrumentation branch without changing the projection pipeline footprint that QA is trying to isolate. The new control is exposed as `Projection Footprint Only` in the existing raster-stage gate and still launches the real `gsplat_projection` pipeline with the same descriptor-set shape, same `128`-byte / `32`-float push-constant contract, and same point-count-derived dispatch size. The only behavioral change is an explicit shader-mode flag carried through the already-existing uniforms buffer: after the usual entry probe stamps (`projection_probe[invocations]`, `scratch_probe[projection_invocations]`, and the entry stage bit), the shader now records a dedicated scratch stage-bit marker (`SCRATCH_PROJECTION_STAGE_FOOTPRINT_RETURN`) and returns before reading `splat_instance_data`, `instance_model_matrices`, or any projection-owned payloads. That keeps the slice minimal/reversible while giving QA a direct discriminator between “the projection pipeline/descriptors/push-constant footprint is already toxic” and “toxicity begins only once the shader starts consuming projection data and writing real outputs.” The readback surface stays on the existing probe buffers—no new broad repro model was introduced—and the renderer/compositor logs now surface `projection_shader_mode=footprint_only` plus `scratch_projection_footprint_returned=true` so QA can confirm the control actually ran. Repo-local validation completed on the touched GDGS files: `git diff --check`; `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit`; `godot --headless --path . --script addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd --check-only --quit`; `godot --headless --path . --import`; and `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path . --import`. No Godot engine source files changed in this slice; the Godot repo update here is the plan handoff only.
+
+### Task 0b: QA the new projection-footprint-only control against the real projection path
+
+**Bead ID:** `oc-n9yk`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-n9yk` and stay strictly inside the already-approved projection-only scope. Re-run the active projection-only staged lane and compare at least the real projection path vs the new `projection_footprint_only` control. Verify whether the footprint-only control actually runs with the same projection pipeline footprint (descriptor set shape, `128`-byte / `32`-float push constants, and point-count-derived dispatch size), whether the probe readbacks/logs show `projection_shader_mode=footprint_only` and `scratch_projection_footprint_returned=true`, and whether the later failure identity changes or survives relative to the real projection path. Capture exact artifact roots and update this plan with a concrete QA result block plus the next materialized seam.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` (temporary harness-only stage-name extension for this QA slice)
+- repro artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-footprint-qa-sourcebuild-20260527-054348/`
+
+**Status:** ✅ Complete
+
+**Results:** Re-ran the active source-built host-Vulkan staged lane with the same checkpoint on both paths: `scratch_projection_mirror_only`. Artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-footprint-qa-sourcebuild-20260527-054348/` with per-case logs under `logs/`, plus the surviving `projection_footprint_only__scratch_projection_mirror_only.png`. The temporary runner extension stayed outside both repos and only exposed the new raster stage name to the existing QA harness.
+
+For the **real** `projection_only` path, the active repro stayed sharp and failed the old way: the run exited `134`, the projection dispatch still logged the same projection pipeline footprint (`projection_set` present in the resource snapshot, `projection_push_constant_bytes=128`, `push_constant_floats=32`, `projection_group_count=1060` for `point_count=271123`), but the `scratch_projection_mirror_only` readback remained all-zero (`scratch_projection_invocations=0`, `scratch_projection_stage_bits=0`, `scratch_projection_footprint_returned=false`) and the later failure identity survived unchanged at `submit_serial=9` / `fence_wait_error submit_serial=9 wait_result=-4` with `last_breadcrumb="BLIT_PASS"`. That reproduces the existing device-loss classifier while using the same checkpoint surface as the new control.
+
+For the new **`projection_footprint_only`** path, QA confirmed that the control really does exercise the same projection pipeline footprint before returning: the renderer logged `projection_shader_mode=footprint_only`, the same `projection_set` snapshot, the same `128`-byte / `32`-float push-constant contract, and the same `projection_group_count=1060` derived from the same `point_count=271123`. The scratch readback then flipped from the real path’s zero packet to a stable nonzero packet: `scratch_projection_invocations=271123`, `scratch_projection_stage_bits=33` (`0x00000021` = entered + footprint-return marker), `scratch_projection_entered=true`, and `scratch_projection_footprint_returned=true`, while still leaving the later real-data-path flags false (`scratch_projection_visible_path=false`, `scratch_projection_sort_reserved=false`, `scratch_projection_sort_written=false`). Most importantly, the later failure identity **did not survive** this control: the footprint-only run exited `0`, saved `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-footprint-qa-sourcebuild-20260527-054348/projection_footprint_only__scratch_projection_mirror_only.png`, and continued presenting through later `BLIT_PASS` submissions without a device-loss fence failure.
+
+That makes the discriminator materially better than before. The projection pipeline/descriptor/push-constant/dispatch footprint by itself is no longer the leading suspect; the toxicity begins only after the shader leaves the new footprint-only early return and starts touching real projection data-path state. **Next materialized seam:** keep the lane projection-only and add one or more additional projection shader modes that advance just past the footprint return—e.g. first real read of `splat_instance_data`, first use of `instance_model_matrices`, or first real projection-output write—so the failing sub-step can be split without widening back into downstream `BLIT_PASS` ancestry work.
+
+### Task 0c: Add post-footprint projection split modes to isolate the first toxic data-path touch
+
+**Bead ID:** `oc-uh6u`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-uh6u` and stay strictly inside the already-approved projection-only scope. Build directly on the proven `projection_footprint_only` seam and add the narrowest reversible post-footprint split modes needed to isolate the first toxic touch after that return—such as first real read of `splat_instance_data`, first use of `instance_model_matrices`, first read of the real splat payload, and/or first real projection-output write—without widening back into downstream `BLIT_PASS` ancestry work. Reuse the existing probe/readback surfaces so QA can tell exactly which sub-step ran. Update this plan with the concrete ladder you landed, run relevant repo-local validation, commit/push if complete, and close bead `oc-uh6u` with a clear reason.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a four-rung post-footprint projection split ladder on the active GDGS instrumentation branch without changing the projection dispatch footprint QA already validated. The existing raster-stage gate now exposes `Projection Instance Data Only`, `Projection Model Matrix Only`, `Projection Splat Payload Only`, and `Projection Dummy Output Write Only`, all still launching the same `gsplat_projection` pipeline with the same descriptor-set shape, same `128`-byte / `32`-float push-constant contract, and same point-count-derived dispatch size as the real projection path.
+
+Inside `gsplat_projection.glsl`, the new shader modes step forward in actual consumption order after the safe footprint-only return: (1) read `splat_instance_data[id]` and stamp `SCRATCH_PROJECTION_STAGE_INSTANCE_DATA_READ`; (2) read `instance_model_matrices[instance_id]` and stamp `SCRATCH_PROJECTION_STAGE_MODEL_MATRIX_READ`; (3) read `splat_buffer[unique_splat_index]` and stamp `SCRATCH_PROJECTION_STAGE_SPLAT_PAYLOAD_READ`; and (4) perform a minimal deterministic write to `culled_buffer[id]` and stamp `SCRATCH_PROJECTION_STAGE_DUMMY_OUTPUT_WRITE` plus the existing culled-write bit before returning. That keeps the slice narrow, reversible, and projection-local while giving QA a concrete binary ladder for the first toxic touch rather than another broad “real projection vs footprint” comparison.
+
+The existing scratch readback surface was extended—not replaced—so QA can now see `scratch_projection_instance_data_read`, `scratch_projection_model_matrix_read`, `scratch_projection_splat_payload_read`, and `scratch_projection_dummy_output_write` alongside the earlier entry/visible/write/sort flags. Repo-local validation passed on the touched vendor files: `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`; `git diff --check`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit`; `godot --headless --path . --script addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd --check-only --quit`; and `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path . --import`.
+
+### Task 0d: QA the post-footprint split ladder to find the first failing sub-step
+
+**Bead ID:** `Pending`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and run the same staged repro lane across `projection_footprint_only`, `projection_instance_data_only`, `projection_model_matrix_only`, `projection_splat_payload_only`, `projection_dummy_output_write_only`, and the real `projection_only` path. Use the existing scratch/projection readback checkpoints to confirm which rung actually executed on each run, then identify the first rung where the earlier success profile breaks or the later `BLIT_PASS` / fence-loss identity returns. Capture the exact artifact root and update this plan with a concrete rung-by-rung comparison plus the next narrow seam.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- repro artifacts under a new `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-.../` root
+
+**Status:** ⏳ Pending
+
+**Results:** Pending QA execution.
 
 ### Task 1: Map instrumentation points and staged isolation order in Godot/GDGS boundary
 
