@@ -241,6 +241,9 @@ private:
 		String last_wait_command_summary;
 	};
 	HashMap<uint64_t, DebugSemaphoreState> debug_semaphore_states;
+	bool debug_submit9_completion_trace_promotion_observed = false;
+	bool debug_submit9_completion_trace_first_handoff_logged = false;
+	uint64_t debug_submit9_completion_trace_handoff_submit_serial = 0;
 
 public:
 	/*****************/
@@ -384,6 +387,7 @@ private:
 		String last_signal_semaphore_summary;
 		String last_signal_provenance_summary;
 		String last_command_buffer_summary;
+		uint64_t last_command_buffer_identity_hash = 0;
 	};
 
 public:
@@ -1353,9 +1357,15 @@ public:
 	void _debug_record_active_render_pass_scope_command(CommandBufferInfo *p_command_buffer, const char *p_command_name);
 	void _debug_record_label_backend_command(CommandBufferInfo *p_command_buffer, const char *p_command_name);
 	String _debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const;
+	uint64_t _debug_command_buffer_identity_hash(VectorView<CommandBufferID> p_cmd_buffers) const;
 	String _debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const;
-	String _debug_wait_semaphore_provenance_summary(VectorView<SemaphoreID> p_wait_semaphores) const;
+	String _debug_wait_semaphore_provenance_summary(VectorView<SemaphoreID> p_wait_semaphores, const Fence *p_fence = nullptr);
 	String _debug_signal_semaphore_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains) const;
+	bool _debug_submit9_completion_trace_enabled() const;
+	bool _debug_submit9_completion_trace_is_target_submit(uint64_t p_submit_serial) const;
+	void _debug_submit9_completion_trace_log_queue_submit(const Fence *p_fence, VkResult p_fence_status_before_submit) const;
+	void _debug_submit9_completion_trace_log_fence_wait_begin(const Fence *p_fence, VkResult p_pre_wait_status) const;
+	void _debug_submit9_completion_trace_log_fence_wait_end(const Fence *p_fence, VkResult p_pre_wait_status, VkResult p_wait_result, VkResult p_post_wait_status) const;
 	String _debug_signal_semaphore_provenance_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains, const Fence *p_fence) const;
 	void _debug_register_signal_semaphore_states(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains, const Fence *p_fence);
 	void _debug_register_wait_semaphore_states(VectorView<SemaphoreID> p_wait_semaphores, const Fence *p_fence);
