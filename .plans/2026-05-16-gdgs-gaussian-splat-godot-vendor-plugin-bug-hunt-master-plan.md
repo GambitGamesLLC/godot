@@ -9368,3 +9368,52 @@ Best next seam: stay backend-local and instrument the **final failing wait poll 
 Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.cpp`.
 
 **Exact next QA slice:** rerun the same locked three-rung source-built ladder (`projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, `projection_post_barrier_immediate_return_only`) with `GODOT_GDGS_DEBUG_SUBMIT9_ERROR_SURFACE_WINDOW=1` still enabled, capture a fresh artifact root under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/` (or the current dated sibling root), and compare the new `submit9_error_surface_trace device_lost_edge ...` lines. The QA question is now pinpointed: on the final failing poll, do both `wait_device_lost` and `status_device_lost` flip true on the same `poll_ordinal`, or does only one flip first with the other lagging to the adjacent same-iteration observation?
+
+### Task 244: QA the submit-9 device-lost edge flags on the final wait poll
+
+**Bead ID:** `oc-9r01`  
+**SubAgent:** `primary`  
+**Role:** `qa`  
+**References:** `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-9r01` at start and stay strictly inside the already-approved backend/barrier seam from Task 243. Using the refreshed source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`, rerun the same locked three-rung ladder (`projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`) with `GODOT_GDGS_DEBUG_SUBMIT9_ERROR_SURFACE_WINDOW=1` still enabled, capture a fresh artifact root under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/` (or the current dated sibling root), and compare the new `submit9_error_surface_trace device_lost_edge ...` lines. Determine whether both `wait_device_lost` and `status_device_lost` flip true on the same final failing `poll_ordinal`, or whether only one flips first with the other lagging to the adjacent same-iteration observation. Update this master plan with the concrete comparison, close bead `oc-9r01` with a clear reason if the QA package is complete, and leave the next seam explicit.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- fresh artifact root under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked three-rung source-built ladder with the refreshed editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` and captured a fresh artifact root at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-submit9-device-lost-edge-qa-sourcebuild-20260527-171601/` using the same four submit-9 trace gates (`GODOT_GDGS_DEBUG_SUBMIT9_COMPLETION_LEDGER=1`, `GODOT_GDGS_DEBUG_SUBMIT9_SYNC_PAYLOAD=1`, `GODOT_GDGS_DEBUG_SUBMIT9_PREWAIT_WINDOW=1`, and `GODOT_GDGS_DEBUG_SUBMIT9_ERROR_SURFACE_WINDOW=1`). The rung outcomes held exactly again: `projection_non_footprint_immediate_return_only` exited `0`, while `projection_post_barrier_no_scratch_immediate_return_only` and `projection_post_barrier_immediate_return_only` both aborted with exit `134`.
+
+The fresh wait-poll traces answer the narrow QA question: on both failing rungs, the first surfaced device-loss observation is the same final failing `poll_ordinal`, with `wait_result` and `fence_status` already flipped together to `VK_ERROR_DEVICE_LOST (-4)`. Specifically, `projection_post_barrier_no_scratch_immediate_return_only` reached `poll_ordinal=12249 elapsed_usec=13281928 wait_result=-4 fence_status=-4`, and `projection_post_barrier_immediate_return_only` reached `poll_ordinal=12160 elapsed_usec=13142206 wait_result=-4 fence_status=-4`. There is still no earlier surfaced intermediate poll where only one side flips first; the first non-timeout observation on each bad rung is the shared `-4 / -4` edge itself, while the good rung still resolves cleanly from `poll_ordinal=0 wait_result=2 fence_status=1` to `poll_ordinal=25 wait_result=0 fence_status=0`.
+
+One concrete wrinkle from this rerun: the refreshed binary did **not** emit any dedicated `submit9_error_surface_trace device_lost_edge ...` lines in the captured logs, even though the current source tree contains that print in `drivers/vulkan/rendering_device_driver_vulkan.cpp`. For this QA bead, the poll traces themselves are still sufficient to answer the targeted simultaneity question: both observable device-lost flags surface on the same final failing poll, not staggered across adjacent observations.
+
+Best next seam: stay inside the same backend-local diagnostic seam only if we need to explain the missing dedicated `device_lost_edge` print from the refreshed editor build; otherwise the QA package for the wait-vs-status simultaneity question is complete and ready for audit/closure based on the fresh poll evidence.
+
+### Task 245: Audit the submit-9 wait-vs-status simultaneity seam and decide closure
+
+**Bead ID:** `oc-kpc2`  
+**SubAgent:** `primary`  
+**Role:** `auditor`  
+**References:** `REF-08`  
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-kpc2` at start and stay strictly inside the already-approved backend/barrier seam from Task 244. Independently truth-check the latest wait-vs-status simultaneity evidence from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-submit9-device-lost-edge-qa-sourcebuild-20260527-171601/` against the current plan/results. Verify whether the evidence is strong enough to close this seam with the conclusion that `wait_result` and `fence_status` surface `VK_ERROR_DEVICE_LOST` together on the same final poll, and decide whether the missing dedicated `submit9_error_surface_trace device_lost_edge` print warrants a follow-on backend-only diagnostic slice or can be left as a minor instrumentation wrinkle. Update this master plan with a concrete audit result block, and close bead `oc-kpc2` directly if the seam is audited complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Auditor independently re-read the fresh artifact root at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-submit9-device-lost-edge-qa-sourcebuild-20260527-171601/`, the Task 243 instrumentation claim, and the Task 244 QA summary. The raw bad-rung logs themselves are sufficient to close the narrow seam. Each failing case emits exactly two `submit9_error_surface_trace poll ...` lines for the watched submit-9 fence: an initial timeout/not-ready snapshot (`poll_ordinal=0 wait_result=2 fence_status=1`) and a final failing snapshot where both observables flip together to `VK_ERROR_DEVICE_LOST` on the same poll (`projection_post_barrier_no_scratch_immediate_return_only`: `poll_ordinal=12249 elapsed_usec=13281928 wait_result=-4 fence_status=-4`; `projection_post_barrier_immediate_return_only`: `poll_ordinal=12160 elapsed_usec=13142206 wait_result=-4 fence_status=-4`). No intermediate poll shows a staggered edge where only one side has flipped. The good rung remains the control: it resolves from the same initial timeout/not-ready state to success (`poll_ordinal=25 wait_result=0 fence_status=0`). That makes the simultaneity conclusion strong enough to audit complete: for this matched submit-9 fence, the first surfaced device-loss observation is the shared final poll where both `wait_result` and `fence_status` are already `VK_ERROR_DEVICE_LOST`.
+
+The missing dedicated `submit9_error_surface_trace device_lost_edge ...` line does **not** block closure of this seam. Audit found that the current source tree still contains the print in `drivers/vulkan/rendering_device_driver_vulkan.cpp`, but the refreshed binary used for Task 244 does not carry that format string (`strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "submit9_error_surface_trace device_lost_edge"` returned no match), which explains why the artifact logs never showed the extra marker. That is an instrumentation-integrity wrinkle, not contradictory evidence against the seam result. It can be left alone unless we explicitly want a separate backend-only diagnostic slice to verify why that specific print did not make it into the built editor. For the audited question here, no further backend slice is required.
