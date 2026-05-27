@@ -1,24 +1,43 @@
-# Godot
+# GDGS Gaussian Splat Godot Vendor Plugin Bug Hunt — Master Plan
 
 **Date:** 2026-05-16
 **Status:** In Progress
+**Last Updated:** 2026-05-26 22:06 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
 
 ## Goal
 
-Instrument and progressively isolate the surviving GDGS repro around the local-RenderingDevice-in-compositor boundary, so we can determine whether the remaining fault comes from GDGS compute/resource misuse, unsupported boundary usage, or Godot/backend synchronization behavior.
+Drive the single active GDGS Gaussian-splat bug-hunt lane to a truthful root-cause answer by isolating the surviving Godot vendor-plugin repro on Derrick’s terminal, with current focus on the first failing **projection-stage** compute work inside the compositor path.
 
 ---
 
 ## Overview
 
-The cleaned repro is now much sharper than where we started. We removed one confirmed GDGS misuse: the radix push-constant contract mismatch. Godot 4.7-dev5 validation errors disappeared completely after that fix, but the later `BLIT_PASS` / Vulkan device-loss crash remained unchanged. That means the remaining bug is not the already-fixed push-constant issue.
+This file is the canonical parent plan for the whole remaining bug hunt: **fix the GDGS Godot vendor plugin so Gaussian splats work on Derrick’s terminal, or narrow the failure enough to land the right plugin/engine fix with confidence**. Earlier support slices are now archived and linked below; this is the one active plan heartbeat and `start the plane` should point at.
 
-The latest audit ranked the most likely surviving surface as the local-RD-in-compositor boundary: GDGS creates and uses a local `RenderingDevice` from inside the compositor callback, then the frame still later dies around `BLIT_PASS`, even in `No Present`. At the same time, we still cannot rule out remaining GDGS compute/resource misuse, such as OOB SSBO/image access, bad buffer bounds, or unsupported boundary behavior that only detonates after callback return.
+The investigation is much sharper than it was initially. One real GDGS bug was already removed: the radix push-constant contract mismatch. After that fix, Godot 4.7-dev5 validation errors for the radix passes disappeared, but the later `BLIT_PASS` / Vulkan device-loss crash still remained. Follow-up instrumentation and staged QA then corrected an older framing assumption: the live repro is **not** currently failing because of a local-RD-vs-global-RD seam in the hot path. In the current active repro, both the compositor and raster paths are using the global `RenderingDevice`, and a valid `scratch_only` positive-control compute dispatch now survives.
 
-So the next lane should be controlled instrumentation and staged simplification, not blind patching. We want to keep the compositor callback active while progressively trivializing the local RD workload, adding breadcrumbs around the callback, submit/wait points, and `BLIT_PASS`, and re-enabling passes in a deliberate order. The goal is to learn the first point where the crash becomes inevitable, and whether that point looks more like plugin misuse, unsupported API usage, or backend/engine fault.
+That moves the active hypothesis forward. The leading suspect is no longer “any compute work in this compositor path is hazardous,” but rather **projection-specific dispatch or projection-triggered synchronization/lifetime fallout** that only becomes visible later when the frame collapses near `BLIT_PASS`. So the next lane should continue controlled instrumentation and staged simplification around the projection pass and its immediate aftermath: output sizing, written counts, bounds/layout assumptions, resource lifetime, and synchronization behavior between successful dispatch completion and the later lost-device boundary.
+
+### Current Active Hypothesis
+
+- The current repro path is **global/global**, not local/global.
+- `scratch_only` is a real positive-control dispatch and survives cleanly.
+- `projection_only` remains the first meaningful failing stage.
+- The projection dispatch itself logs success and barrier completion before the later failure surfaces at `fence_wait` / `BLIT_PASS`.
+- So the most likely remaining owners are:
+  - projection-pass output writes / bounds / layout mistakes in GDGS,
+  - projection-triggered resource lifetime or synchronization fallout,
+  - or a narrower Godot/backend bug exposed specifically by this projection workload.
+
+### Session Handoff Status — 2026-05-26 22:06 EDT
+
+- This is the **only active plan** that heartbeat and `start the plane` should resume.
+- Current stopping point: the bug hunt is narrowed to the first failing `projection_only` stage after `scratch_only` was proven safe as a real positive-control dispatch.
+- Next slice: continue projection-focused diagnostics around post-dispatch readback truth, output writes/bounds/layout assumptions, and projection-triggered lifetime/synchronization fallout between barrier completion and the later `fence_wait` / `BLIT_PASS` collapse.
+- Supporting predecessor slices now live only as archives under `REF-09` through `REF-11`.
 
 ---
 
@@ -34,6 +53,9 @@ So the next lane should be controlled instrumentation and staged simplification,
 | `REF-06` | Instrumentation map note produced from source walk | `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-local-rd-compositor-instrumentation-map-2026-05-16.md` |
 | `REF-07` | Staged QA results and artifact references for the compositor isolation run | `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md` |
 | `REF-08` | Independent audit of the staged instrumentation package and QA evidence | `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-audit-2026-05-17.md` |
+| `REF-09` | Archived upstream-history research plan | `/home/derrick/.openclaw/workspace/projects/openclaw-godot/.plans/archive/2026-05-16-godot-gdgs-blit-pass-upstream-research.md` |
+| `REF-10` | Archived nightly repro + source-debug pivot plan | `/home/derrick/.openclaw/workspace/projects/openclaw-godot/.plans/archive/2026-05-16-godot-47-nightly-repro-and-source-debug.md` |
+| `REF-11` | Archived product-truth support slice moved under Godot plan ownership | `/home/derrick/.openclaw/workspace/projects/godot/.plans/archive/2026-05-15-splat-renderer-path-debug.md` |
 
 ---
 
@@ -51,7 +73,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-local-rd-compositor-instrumentation-map-2026-05-16.md`
 
 **Status:** ✅ Complete
@@ -74,7 +96,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_render_manager.gd`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
@@ -101,7 +123,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -121,7 +143,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-audit-2026-05-17.md`
 
 **Status:** ✅ Complete
@@ -147,7 +169,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_scratch_probe.glsl`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -169,7 +191,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -191,7 +213,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - scratch-control source files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -213,7 +235,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -235,7 +257,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - projection-path source files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -257,7 +279,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -279,7 +301,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - projection-path source files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -301,7 +323,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -323,7 +345,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - projection shader/runtime files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -345,7 +367,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -370,7 +392,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_gpu_state_cache.gd`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -392,7 +414,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -417,7 +439,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_render_manager.gd`
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_scene_registry.gd`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -439,7 +461,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -461,7 +483,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - projection runtime files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -483,7 +505,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -505,7 +527,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - sync/backend diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -527,7 +549,7 @@ So the next lane should be controlled instrumentation and staged simplification,
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -551,7 +573,7 @@ The returned `render_for_compositor_sync_snapshot` stayed stable: `gpu_generatio
 
 **Files Created/Deleted/Modified:**
 - sync/backend diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -577,7 +599,7 @@ Validation completed on the touched code paths with `python3 misc/scripts/file_f
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -604,7 +626,7 @@ Important caveat: the source-built editor binary used for the valid repro still 
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -630,7 +652,7 @@ Validation completed with `python3 misc/scripts/file_format.py drivers/vulkan/re
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -658,7 +680,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -680,7 +702,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -702,7 +724,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -724,7 +746,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -745,7 +767,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -767,7 +789,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -788,7 +810,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -810,7 +832,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -831,7 +853,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -853,7 +875,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -874,7 +896,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -896,7 +918,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -917,7 +939,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -939,7 +961,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -960,7 +982,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -982,7 +1004,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1003,7 +1025,7 @@ The failure signature is unchanged: the first explicit error still surfaces at `
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1028,7 +1050,7 @@ Actual runtime result on the failing `submit_serial=9` seam: the wrapper remaine
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1050,7 +1072,7 @@ Actual runtime result on the failing `submit_serial=9` seam: the wrapper remaine
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1071,7 +1093,7 @@ Actual runtime result on the failing `submit_serial=9` seam: the wrapper remaine
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1093,7 +1115,7 @@ Actual runtime result on the failing `submit_serial=9` seam: the wrapper remaine
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1115,7 +1137,7 @@ Actual runtime result on the failing `submit_serial=9` seam: the wrapper remaine
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1141,7 +1163,7 @@ Actual runtime result on the failing `submit_serial=9` seam: Tonemap now classif
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1166,7 +1188,7 @@ Tonemap also remained a small but real local workload-bearing pass scope (`direc
 
 **Files Created/Deleted/Modified:**
 - durable HTML doc under repo docs
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1187,7 +1209,7 @@ Tonemap also remained a small but real local workload-bearing pass scope (`direc
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1215,7 +1237,7 @@ The contrast block also sharpened the Tonemap-vs-`L88` distinction without movin
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1236,7 +1258,7 @@ The contrast block also sharpened the Tonemap-vs-`L88` distinction without movin
 
 **Files Created/Deleted/Modified:**
 - backend seam diagnostic files and docs as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1259,7 +1281,7 @@ Validated with an incremental source build (`scons -j8 platform=linuxbsd target=
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1281,7 +1303,7 @@ Validated with an incremental source build (`scons -j8 platform=linuxbsd target=
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1303,7 +1325,7 @@ Validated with an incremental source build (`scons -j8 platform=linuxbsd target=
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1330,7 +1352,7 @@ The outer failure envelope stayed unchanged in the same run (`submit_serial=8` t
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1352,7 +1374,7 @@ The outer failure envelope stayed unchanged in the same run (`submit_serial=8` t
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1376,7 +1398,7 @@ Validation/build stayed on the refreshed source-built Godot branch and kept the 
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1397,7 +1419,7 @@ Validation/build stayed on the refreshed source-built Godot branch and kept the 
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1425,7 +1447,7 @@ Recommended next tight backend-owned seam: split the surviving **Tonemap bind/se
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1447,7 +1469,7 @@ Recommended next tight backend-owned seam: split the surviving **Tonemap bind/se
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1468,7 +1490,7 @@ Recommended next tight backend-owned seam: split the surviving **Tonemap bind/se
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1496,7 +1518,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sea
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1518,7 +1540,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sea
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1539,7 +1561,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sea
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1569,7 +1591,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sta
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1591,7 +1613,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sta
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1612,7 +1634,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sta
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1634,7 +1656,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sta
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1656,7 +1678,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sta
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1677,7 +1699,7 @@ Recommended next tight backend-owned seam: inspect the **pipeline-bind-owned sta
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1703,7 +1725,7 @@ Recommended next tight backend-owned seam: stay inside Tonemap serial `8`, but i
 **Files Created/Deleted/Modified:**
 - `drivers/vulkan/rendering_device_driver_vulkan.h`
 - `drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1725,7 +1747,7 @@ Recommended next tight backend-owned seam: stay inside Tonemap serial `8`, but i
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1746,7 +1768,7 @@ Recommended next tight backend-owned seam: stay inside Tonemap serial `8`, but i
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1768,7 +1790,7 @@ Recommended next tight backend-owned seam: stay inside Tonemap serial `8`, but i
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1792,7 +1814,7 @@ Validation/build stayed on the refreshed source-built Godot branch and preserved
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1817,7 +1839,7 @@ This moves the seam one notch beyond the earlier “contiguous setup pair” unc
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1843,7 +1865,7 @@ Audit verdict: the QA conclusion is supported as stated. Tonemap still remains t
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1867,7 +1889,7 @@ Validation/build stayed on the refreshed source-built branch and kept the staged
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1890,7 +1912,7 @@ On the failing `submit_serial=9` command summary, Tonemap serial `8` still resol
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1920,7 +1942,7 @@ Concern discovered: the current classification is only as strong as the chosen n
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1955,7 +1977,7 @@ That means the seam **did not collapse to a narrower vertex-input-only poisoned 
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -1982,7 +2004,7 @@ However, QA classified the surviving Tonemap-owned seam as still **broad multi-c
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2016,7 +2038,7 @@ Concern discovered: the current `vertex_input_delta.relation` string is too coar
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2040,7 +2062,7 @@ Validation stayed on the refreshed source-built projection-only lane: `python3 m
 
 **Files Created/Deleted/Modified:**
 - QA notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2065,7 +2087,7 @@ Important classification boundary: the seam still does **not** collapse to a ble
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2089,7 +2111,7 @@ The audit also agrees with QA that this does **not** collapse the poisoned bound
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2113,7 +2135,7 @@ Validation/build stayed source-built and projection-only on branch `gambit/instr
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2134,7 +2156,7 @@ Validation/build stayed source-built and projection-only on branch `gambit/instr
 
 **Files Created/Deleted/Modified:**
 - audit notes/docs/log references as needed
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2160,7 +2182,7 @@ Recommended next tight backend-owned seam: inspect the **Tonemap -> `Command Gra
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2186,7 +2208,7 @@ That means the remaining Tonemap -> `L88` seam stays broad even after the layout
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2211,7 +2233,7 @@ Important classification boundary: the seam still remains broad. The same packet
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2250,7 +2272,7 @@ Recommended bead shape: stay on the same minimum valid source-built host-Vulkan 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2276,7 +2298,7 @@ The new classifier answered the Task 94 planning question directly on the failin
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2311,7 +2333,7 @@ Recommended bead shape: stay on the same minimum valid source-built host-Vulkan 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2337,7 +2359,7 @@ That makes the current honest read: this hazard is **not** Tonemap-only and **no
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2374,7 +2396,7 @@ Recommended bead shape: stay on the same minimum valid source-built host-Vulkan 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2398,7 +2420,7 @@ The new evidence says the minimum still-distinguishing boundary hazard is a **ca
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2433,7 +2455,7 @@ Recommended bead shape: stay on the same minimum valid source-built host-Vulkan 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2466,7 +2488,7 @@ That is the smallest honest remaining pre-rebind cut. The minimum still-distingu
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2500,7 +2522,7 @@ Recommended bead shape: stay on the same minimum valid source-built host-Vulkan 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2528,7 +2550,7 @@ That means the remaining pre-rebind carried-packet hazard is now classified one 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2551,7 +2573,7 @@ That means the remaining pre-rebind carried-packet hazard is now classified one 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2577,7 +2599,7 @@ Validation stayed on the same source-built host-Vulkan `projection_only__disable
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/exact_command.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-20/official-tonemap-load-op-contract-vulkan-sourcebuild-20260520-202130/stderr.log`
@@ -2614,7 +2636,7 @@ What actually happened vs. the original question:
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2643,7 +2665,7 @@ What actually happened vs. the task question:
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2676,7 +2698,7 @@ What actually happened vs. the task question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2701,7 +2723,7 @@ What actually happened vs. the task question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/exact_command.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-21/official-tonemap-nondiscardable-vs-default-load-vulkan-sourcebuild-20260521-082001/stderr.log`
@@ -2744,7 +2766,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2770,7 +2792,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2796,7 +2818,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2822,7 +2844,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2845,7 +2867,7 @@ What actually happened vs. the Task 109 question:
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2873,7 +2895,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2901,7 +2923,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2925,7 +2947,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2949,7 +2971,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -2973,7 +2995,7 @@ What actually happened vs. the Task 109 question:
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3015,7 +3037,7 @@ Exact failure result: the contract changed, but the failure envelope did not. Bo
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3061,7 +3083,7 @@ QA conclusion: this reversible experiment did apply and only flipped the first c
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3099,7 +3121,7 @@ Exact conclusion: shared-view demotion changed the lane-policy surface but **did
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device_graph.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3138,7 +3160,7 @@ Exact conclusion: the unchanged RDG-side input still feeding `non_discardable_de
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3168,7 +3190,7 @@ Exact conclusion: the root texture `is_discardable=false` contract still reads a
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3197,7 +3219,7 @@ So the answer to bead `oc-l98` is: **the surviving seam is not that Tonemap acci
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3250,7 +3272,7 @@ Exact next recommended slice: keep `blend_recipe` as the already-separated prese
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3272,7 +3294,7 @@ Exact next recommended slice: keep `blend_recipe` as the already-separated prese
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/effects/tone_mapper.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/exact_command.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-overwrite-contract-vulkan-sourcebuild-20260522-090000/stderr.log`
@@ -3307,7 +3329,7 @@ No commit was made.
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3337,7 +3359,7 @@ Durable notes were appended to `REF-07`, this plan was updated with the actual a
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/exact_command.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-pass-origin-attribution-vulkan-sourcebuild-20260522-093400/stderr.log`
@@ -3370,7 +3392,7 @@ Exact conclusion: the later `label="none"` active-scope rebuild before `L88` is 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3390,7 +3412,7 @@ Exact conclusion: the later `label="none"` active-scope rebuild before `L88` is 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3411,7 +3433,7 @@ Exact conclusion: the later `label="none"` active-scope rebuild before `L88` is 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3439,7 +3461,7 @@ Exact conclusion: the minimum attachment subfield difference between Tonemap’s
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3467,7 +3489,7 @@ Exact conclusion: the slot-0 `LOAD` before `L88` is chosen by the RDG **non-disc
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3491,7 +3513,7 @@ Exact conclusion: on this locked UI lane, active-scope reconstruction is suppose
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3516,7 +3538,7 @@ Exact conclusion: the repro lane is not unusual because the UI/root default-load
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3546,7 +3568,7 @@ Exact conclusion: comparable normal Tonemap-to-UI handoffs do **not** show the s
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3577,7 +3599,7 @@ Conclusion: the failing lane’s Tonemap packet still reaches the UI handoff as 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3619,7 +3641,7 @@ Exact conclusion: once the overwrite experiment is honestly disabled, the **shar
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3654,7 +3676,7 @@ Exact conclusion: the exact internal pre-rebind reconstruction step is **`L88`'s
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3690,7 +3712,7 @@ Exact conclusion: the exact upstream Tonemap-side divergence is **the lazy share
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-no-lazy-gate-vulkan-sourcebuild-20260522-160300/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-ui-compare-overwrite-off-failing-no-lazy-gate-vulkan-sourcebuild-20260522-160300/exit_status.txt`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3710,7 +3732,7 @@ Exact conclusion: the exact upstream Tonemap-side divergence is **the lazy share
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-submit-serial-9-lane-classification.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3737,7 +3759,7 @@ Best next seam: stay off the already-demoted attachment-load-op lane and inspect
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-submit-serial-9-lane-classification.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3763,7 +3785,7 @@ So the divergence is not an internal repartition happening *inside* submit 9. Th
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3789,7 +3811,7 @@ So the best next crash seam is the failing-only pre-rebind Tonemap -> `L88` carr
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -3814,7 +3836,7 @@ So the exact codepath/lineage decision that makes the two pre-rebind views diver
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-tonemap-placeholder-clear-runtime-role-vulkan-sourcebuild-20260522-174808/`
 
 **Status:** ✅ Complete
@@ -3838,7 +3860,7 @@ The runtime result is decisive on the failing lane itself: `load_op_runtime_role
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-runtime-load-reuse-classification.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-runtime-load-reuse-control-vulkan-sourcebuild-20260522-1809/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-runtime-load-reuse-failing-vulkan-sourcebuild-20260522-1822/`
 
@@ -3867,7 +3889,7 @@ That makes the best next crash seam the failing-only submit-assembly / graph-bui
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-runtime-load-reuse-classification.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-control-vulkan-sourcebuild-20260522-1839/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-ui-batch-shape-failing-vulkan-sourcebuild-20260522-1840/`
 
@@ -3961,7 +3983,7 @@ Start the next session from this plan plus `REF-07`, then execute in this order:
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/openclaw-chip/handoffs/handoff-2026-05-22T18-56-22-04-00.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-submit-serial-9-lane-classification.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/.notes/2026-05-22-frame1-nonpresent-submit-seam.md`
@@ -3995,7 +4017,7 @@ That makes the next question executable and falsifiable: **is the toxic subfamil
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4039,7 +4061,7 @@ QA instructions for the next pass:
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-clipped-preserve-rect-cap-sweep-vulkan-sourcebuild-rerun-20260522-193020/`
 
 **Status:** ✅ Complete
@@ -4068,7 +4090,7 @@ Exact conclusion: the new ordinal gate is working and the `L88` tail tracks the 
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4092,7 +4114,7 @@ Exact conclusion: the new ordinal gate is working and the `L88` tail tracks the 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4137,7 +4159,7 @@ QA recipe for the next pass:
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-20260522-1954/exact_command.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-20260522-1954/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-20260522-1954/stderr.log`
@@ -4171,7 +4193,7 @@ QA recipe for the next pass:
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/exact_command.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-trace-qa-vulkan-sourcebuild-rerun-20260522-1959/exit_status.txt`
@@ -4209,7 +4231,7 @@ QA recipe for the next pass:
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4245,7 +4267,7 @@ Precise QA recipe for the next pass:
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-20260522-2007/run_summary.tsv`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-20260522-2007/{scissor_only,uniform_pipeline_only,draw_binding_only,combined_control}/`
 
@@ -4270,7 +4292,7 @@ Exact QA conclusion: this pass did **not** reach a new tighter surviving prereq 
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-rerun-verified-20260522-201744/runtime_binary_proof.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-rerun-verified-20260522-201744/run_summary.tsv`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-22/official-first-clipped-preserve-rect-prereq-buckets-qa-vulkan-sourcebuild-rerun-verified-20260522-201744/{scissor_only,uniform_pipeline_only,draw_binding_only}/`
@@ -4306,7 +4328,7 @@ The one-batch failure signature held unchanged in every corrected split run: eac
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4347,7 +4369,7 @@ Precise QA recipe for the next pass:
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/runtime_binary_proof.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/run_summary.tsv`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-clipped-preserve-rect-fine-substeps-qa-vulkan-sourcebuild-20260522-203500/{uniform_bind_only,pipeline_bind_only,blend_constants_only,vertex_bind_only,index_bind_only}/`
@@ -4381,7 +4403,7 @@ Exact QA conclusion: none of the five fine substep traces broke the seam any fur
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4419,7 +4441,7 @@ Precise QA recipe for the next pass:
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/runtime_binary_proof.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/run_summary.tsv`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-split-qa-vulkan-sourcebuild-20260522-2050/{binding_layout_only,attribute_layout_only,provenance_only,combined_recipe_control}/`
@@ -4453,7 +4475,7 @@ Exact QA conclusion: the split `vertex_input_recipe` traces improved observabili
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4497,7 +4519,7 @@ Precise QA recipe for the next pass:
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/attachment_only/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/dynamic_state_only/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-recipe-split-qa-vulkan-sourcebuild-20260522-210908/combined_recipe_control/`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4520,7 +4542,7 @@ The unchanged failure signature held in all four runs: each exited `134`, each p
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4564,7 +4586,7 @@ Precise QA recipe for the next pass:
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/packing_only/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/provenance_only/`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-constants-split-qa-vulkan-sourcebuild-20260522-212342/combined_specialization_control/`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4588,7 +4610,7 @@ The unchanged failure signature held in all four runs: each exited `134`, each p
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4628,7 +4650,7 @@ Precise QA recipe for the next pass:
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-split-qa-vulkan-sourcebuild-20260522-2140/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-split-qa-vulkan-sourcebuild-20260522-2140/runtime_binary_proof.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-split-qa-vulkan-sourcebuild-20260522-2140/run_summary.tsv`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-split-qa-vulkan-sourcebuild-20260522-2140/descriptor_shape/`
@@ -4659,7 +4681,7 @@ The unchanged failure signature held in all four runs: each exited `134`, each p
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4682,7 +4704,7 @@ Exact QA recipe for the next pass: use `/home/derrick/.openclaw/workspace/projec
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/runtime_binary_proof.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/run_summary.tsv`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/provenance_only/`
@@ -4709,7 +4731,7 @@ The unchanged failure signature also held in both runs: each exited `134`, each 
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4733,7 +4755,7 @@ The crash signature also remains unchanged and internally consistent across both
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4762,7 +4784,7 @@ Exact recommended next slice: stay on this same refreshed source-built host-Vulk
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-pipeline-layout-provenance-status-qa-vulkan-sourcebuild-20260522-215908/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4788,7 +4810,7 @@ Exact recommended next slice: stay on the refreshed source-built host-Vulkan `pr
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4808,7 +4830,7 @@ Exact recommended next slice: stay on the refreshed source-built host-Vulkan `pr
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4829,7 +4851,7 @@ Exact recommended next slice: stay on the refreshed source-built host-Vulkan `pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4860,7 +4882,7 @@ Exact next recommended slice: run the already-planned narrow three-bucket intera
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4881,7 +4903,7 @@ Exact next recommended slice: run the already-planned narrow three-bucket intera
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4908,7 +4930,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4935,7 +4957,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4965,7 +4987,7 @@ Exact next recommended slice: keep `blend_recipe` as the already-separated prese
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -4990,7 +5012,7 @@ No new durable in-repo artifact files were generated in this pass beyond this pl
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5015,7 +5037,7 @@ Honest `vertex_input_recipe` constructor-path classification: the surviving `ver
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5040,7 +5062,7 @@ That leaves the current first-`L88` packet classification in its honest reduced 
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5067,7 +5089,7 @@ Exact next recommended slice: stop spending passes on whole-lane demotion of the
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5094,7 +5116,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5121,7 +5143,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5147,7 +5169,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5174,7 +5196,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5199,7 +5221,7 @@ No new durable in-repo artifact files were generated in this pass beyond this pl
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5224,7 +5246,7 @@ Said plainly: this retest does **not** restore a one-factor answer. The cleaner 
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5245,7 +5267,7 @@ Said plainly: this retest does **not** restore a one-factor answer. The cleaner 
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5266,7 +5288,7 @@ Said plainly: this retest does **not** restore a one-factor answer. The cleaner 
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5293,7 +5315,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5318,7 +5340,7 @@ Said plainly: **one further upstream cut is still required**, but only on the pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5339,7 +5361,7 @@ Said plainly: **one further upstream cut is still required**, but only on the pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ❌ Failed
 
@@ -5359,7 +5381,7 @@ Said plainly: **one further upstream cut is still required**, but only on the pr
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
 
@@ -5382,7 +5404,7 @@ Said plainly: **one further upstream cut is still required**, but only on the pr
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5407,7 +5429,7 @@ Concrete baseline-vs-experiment result: the locked failure identity survived unc
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5431,7 +5453,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
 
@@ -5456,7 +5478,7 @@ Validation performed: repo-local `git diff --check` passed, and an incremental e
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5489,7 +5511,7 @@ The failing identity itself survived unchanged across both runs. Both baseline a
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 
 **Status:** ✅ Complete
@@ -5513,7 +5535,7 @@ Validation performed: repo-local build validation via `scons bin/obj/servers/ren
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5534,7 +5556,7 @@ Validation performed: repo-local build validation via `scons bin/obj/servers/ren
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 
 **Status:** ✅ Complete
@@ -5558,7 +5580,7 @@ Validation performed: `git diff --check` passed, and a full repo-local editor re
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5588,7 +5610,7 @@ Concrete baseline-vs-experiment result: the experiment changes only the targeted
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5612,7 +5634,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
 
@@ -5637,7 +5659,7 @@ Validation performed: `python3 misc/scripts/file_format.py servers/rendering/ren
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/run_summary.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/runtime_binary_proof.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-src-alpha-only-blend-experiment-qa-vulkan-sourcebuild-20260523-141055/baseline/context.txt`
@@ -5676,7 +5698,7 @@ The experiment also applied cleanly and only on the intended first clipped prese
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5700,7 +5722,7 @@ Exact next recommended slice: stay on the same refreshed source-built Vulkan `pr
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
 
@@ -5724,7 +5746,7 @@ Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `py
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
 
@@ -5747,7 +5769,7 @@ Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `py
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5772,7 +5794,7 @@ The failure lane itself stayed exact across both runs: both aborted with `exit_s
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 
 **Status:** ✅ Complete
@@ -5798,7 +5820,7 @@ Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `py
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5824,7 +5846,7 @@ The locked failure identity itself survived unchanged across both runs even afte
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5847,7 +5869,7 @@ Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`: `py
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-blend-ops-non-add-experiment-qa-vulkan-sourcebuild-20260523-1619/`
 
 **Status:** ✅ Complete
@@ -5873,7 +5895,7 @@ The locked failure identity still survived unchanged across both runs after that
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5899,7 +5921,7 @@ Narrowest honest next isolation slice: do **not** spend another pass on blend or
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5950,7 +5972,7 @@ Exact next QA slice on the same locked lane:
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/experiment/exact_command.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/experiment/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-specialization-force-msdf-experiment-qa-vulkan-sourcebuild-20260523-1825/experiment/stderr.log`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -5980,7 +6002,7 @@ Exact next QA slice from this result: move to the one-at-a-time `vertex_input_re
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.h`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6032,7 +6054,7 @@ Exact next QA slice on the same locked lane:
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/experiment/exact_command.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/experiment/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-duplicate-format-experiment-qa-vulkan-sourcebuild-20260523-191807/experiment/stderr.log`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6063,7 +6085,7 @@ Exact honest next slice: keep the same locked `submit_serial=9` seam and replace
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6103,7 +6125,7 @@ Exact next QA slice: rerun the same locked source-built host-Vulkan `projection_
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/exit_status.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-experiment-qa-vulkan-sourcebuild-20260523-1939/experiment/stderr.log`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6132,7 +6154,7 @@ Exact honest next slice: stay on this same locked `submit_serial=9` seam, keep b
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.h`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6182,7 +6204,7 @@ Exact next QA slice: rerun the same refreshed source-built host-Vulkan `projecti
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/experiment/exit_status.txt`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/experiment/stdout.log`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-vertex-input-binding1-alias-cachefix-traced-qa-vulkan-sourcebuild-20260523-200356/experiment/stderr.log`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6210,7 +6232,7 @@ Exact honest next slice: hand the artifact set to an independent auditor on the 
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6238,7 +6260,7 @@ Honest classification: on this locked lane, `vertex_input_recipe` is now demoted
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6265,7 +6287,7 @@ Exact recommended next QA slice: rerun only the already-proved specialization-on
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6296,7 +6318,7 @@ Both passed. The incremental source build recompiled `renderer_canvas_render_rd.
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-pipeline-realization-qa-vulkan-sourcebuild-20260523-203643/`
 
 **Status:** ✅ Complete
@@ -6325,7 +6347,7 @@ Honest QA conclusion: the already-demoted specialization-only and vertex-input-o
 - `/home/derrick/.openclaw/workspace/projects/godot/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6357,7 +6379,7 @@ This closes bead `oc-41p3` because the plan now records the honest reinterpretat
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6390,7 +6412,7 @@ All four passed. The formatter completed cleanly, the incremental source build r
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-qa-vulkan-sourcebuild-20260523-210423/`
 
 **Status:** ✅ Complete
@@ -6418,7 +6440,7 @@ The outer crash identity remained locked in all three reruns despite the missing
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6442,7 +6464,7 @@ All four passed. The formatter completed cleanly, `git diff --check` stayed clea
 **SubAgent:** `primary`
 **Role:** `qa`
 **References:** `REF-05`, `REF-07`, `REF-08`
-**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-lsk1` at start with `bd update oc-lsk1 --status in_progress --json`. Continue the already-approved active plan at `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md` from Task 154's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Rerun the exact same three approved fresh-launch cases under the existing first-L88 realization gate after the RD marker fix: (1) baseline, (2) specialization-only, and (3) vertex-input-only. Capture both the canvas-side realization markers and the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0`, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number is repeating across runs. Also confirm the outer crash identity remains locked. Save durable artifacts under the existing 2026-05-23 repro area, update the plan with a new task entry and concrete results, and close bead `oc-lsk1` with a clear reason if QA is complete.
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-lsk1` at start with `bd update oc-lsk1 --status in_progress --json`. Continue the already-approved active plan at `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md` from Task 154's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. Rerun the exact same three approved fresh-launch cases under the existing first-L88 realization gate after the RD marker fix: (1) baseline, (2) specialization-only, and (3) vertex-input-only. Capture both the canvas-side realization markers and the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0`, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number is repeating across runs. Also confirm the outer crash identity remains locked. Save durable artifacts under the existing 2026-05-23 repro area, update the plan with a new task entry and concrete results, and close bead `oc-lsk1` with a clear reason if QA is complete.
 
 **Folders Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
@@ -6450,7 +6472,7 @@ All four passed. The formatter completed cleanly, `git diff --check` stayed clea
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-markerfix-qa-vulkan-sourcebuild-20260523-211849/`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6508,7 +6530,7 @@ The refreshed full-marker QA in Task 159 finally answered the previously blocked
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6537,7 +6559,7 @@ The refreshed full-marker QA in Task 159 finally answered the previously blocked
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-fullmarker-qa-vulkan-sourcebuild-20260523-2134/`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6565,7 +6587,7 @@ However, the fully repaired RD create marker never became observable in the exer
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/bin/obj/servers/rendering/rendering_device.linuxbsd.editor.dev.x86_64.o`
 - `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6577,7 +6599,7 @@ However, the fully repaired RD create marker never became observable in the exer
 **SubAgent:** `primary` (for `qa`)
 **Role:** `qa`
 **References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
-**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-4nc2` at start with `bd update oc-4nc2 --status in_progress --json`. Continue the already-approved active plan at `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md` from Task 158's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The exercised `bin/godot.linuxbsd.editor.dev.x86_64` has now been refreshed and proven to contain the repaired `%s`-based first-L88 RD create marker. Rerun the exact same three approved fresh-launch cases: (1) baseline, (2) specialization-only, and (3) vertex-input-only. Capture both the canvas-side realization markers and the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0`, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number was repeating across fresh launches. Also confirm the outer crash identity remains locked. Save durable artifacts under the existing 2026-05-23 repro area, update the plan with a new task entry and concrete results, and close bead `oc-4nc2` with a clear reason if QA is complete.
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-4nc2` at start with `bd update oc-4nc2 --status in_progress --json`. Continue the already-approved active plan at `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md` from Task 158's stop point. Stay strictly on the same locked crash seam and do not widen into a fix. The exercised `bin/godot.linuxbsd.editor.dev.x86_64` has now been refreshed and proven to contain the repaired `%s`-based first-L88 RD create marker. Rerun the exact same three approved fresh-launch cases: (1) baseline, (2) specialization-only, and (3) vertex-input-only. Capture both the canvas-side realization markers and the repaired `[gdgs-rd] temp_diag_first_clipped_preserve_rect_render_pipeline_create=...` marker. Determine whether divergence survives through `RenderingDevice::render_pipeline_create(...)` (create ordinal, renderer `vertex_format_id`, translated `driver_vertex_format`, specialization constant `0`, framebuffer/render-pass IDs, shader RID/driver ID, allocated render-pipeline RID) or whether only the process-local RID number was repeating across fresh launches. Also confirm the outer crash identity remains locked. Save durable artifacts under the existing 2026-05-23 repro area, update the plan with a new task entry and concrete results, and close bead `oc-4nc2` with a clear reason if QA is complete.
 
 **Folders Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/`
@@ -6586,7 +6608,7 @@ However, the fully repaired RD create marker never became observable in the exer
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/run_repaired_fullmarker_qa.py`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6612,7 +6634,7 @@ This closes bead `oc-4nc2` as a successful QA package: the locked crash seam is 
 
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6641,7 +6663,7 @@ The repaired RD marker finally answers the previously blocked driver-facing ques
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-23/official-first-l88-rd-create-fingerprint-repairedmarker-qa-vulkan-sourcebuild-20260523-214455/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6671,7 +6693,7 @@ Audit verdict: Task 159's refreshed QA package is complete and truthful. Special
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_post_create_provenance_qa.py`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/`
 
@@ -6698,7 +6720,7 @@ This closes bead `oc-fw0s`: the requested post-create / driver-pipeline provenan
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-post-create-provenance-qa-vulkan-sourcebuild-20260524-171825/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 
 **Status:** ✅ Complete
@@ -6728,7 +6750,7 @@ Audit verdict: this package is complete and truthful, and it demotes the remaini
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/rendering_device.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_execution_packet_qa.py`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/`
 
@@ -6755,7 +6777,7 @@ This closes bead `oc-vt8r`: the requested first executed L88 draw/consume packet
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-execution-packet-qa-vulkan-sourcebuild-20260524-221841/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 
 **Status:** ✅ Complete
@@ -6786,7 +6808,7 @@ Audit verdict: the package is complete and truthful, and it demotes any remainin
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_command_emission_boundary_qa.py`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/postprocess_command_emission_boundary.py`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/`
@@ -6812,7 +6834,7 @@ Concrete finding: convergence still does **not** first appear at backend command
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-command-emission-boundary-vulkan-sourcebuild-20260524-234738/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 
 **Status:** ✅ Complete
@@ -6843,7 +6865,7 @@ The next honest seam therefore stays inside this same divergent backend resource
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_resource_realization_boundary_qa.py`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_boundary.py`
 
@@ -6869,7 +6891,7 @@ The next honest seam therefore stays inside this same divergent backend resource
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/analyze_resource_realization_binding_details.py`
 
 **Status:** ✅ Complete
@@ -6893,7 +6915,7 @@ The next honest seam therefore stays inside this same divergent backend resource
 **Files Created/Deleted/Modified:**
 - backend provenance instrumentation / analysis files as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6920,7 +6942,7 @@ The stable backing provenance immediately behind those bindings still converges 
 **Files Created/Deleted/Modified:**
 - semantic descriptor payload instrumentation / analysis files as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6949,7 +6971,7 @@ Outer crash identity stayed locked in all three reruns (`fence_wait_begin submit
 **Files Created/Deleted/Modified:**
 - backend execution / synchronization instrumentation / analysis files as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -6976,7 +6998,7 @@ Conclusion for this slice: the first stable cross-case split beyond semantically
 **Files Created/Deleted/Modified:**
 - driver-consumptive execution recipe instrumentation / analysis files as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7005,7 +7027,7 @@ Conclusion for this slice: once the pre-draw sync/lifetime state is proven conve
 **Files Created/Deleted/Modified:**
 - post-bind / pre-draw-consumer instrumentation / analysis files as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7036,7 +7058,7 @@ Conclusion for this slice: inside the post-bind / pre-draw-consumer window, the 
 **Files Created/Deleted/Modified:**
 - bind-isolation instrumentation / analysis files as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7063,7 +7085,7 @@ Classification: `bind_render_pipeline` alone is sufficient to preserve the locke
 **Files Created/Deleted/Modified:**
 - pipeline-recipe component isolation instrumentation / analysis files as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7090,7 +7112,7 @@ The same three-case evidence also lets this slice rule out overclaims: `blend_re
 **Files Created/Deleted/Modified:**
 - specialization-constant isolation instrumentation / analysis files as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7117,7 +7139,7 @@ The only surviving specialization-side delta is that singleton entry's value pay
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-specialization-value-only-2026-05-25.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/run_specialization_value_only_qa.py`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/`
 
@@ -7142,7 +7164,7 @@ The only surviving specialization-side delta is that singleton entry's value pay
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-specialization-meaning-2026-05-25.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7165,7 +7187,7 @@ The only surviving specialization-side delta is that singleton entry's value pay
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-fragment-path-2026-05-25.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7188,7 +7210,7 @@ The only surviving specialization-side delta is that singleton entry's value pay
 **Files Created/Deleted/Modified:**
 - MSDF derivative/coverage analysis / notes as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7218,7 +7240,7 @@ Validation for this documentation slice:
 **Files Created/Deleted/Modified:**
 - derivative-vs-median isolation notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7248,7 +7270,7 @@ Validation for this documentation/analysis slice:
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-vs-alpha-rewrite-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7278,7 +7300,7 @@ Validation for this documentation/analysis slice:
 **Files Created/Deleted/Modified:**
 - median-collapse isolation notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7308,7 +7330,7 @@ Validation for this documentation/analysis slice:
 **Files Created/Deleted/Modified:**
 - median-internal isolation notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7338,7 +7360,7 @@ Validation for this documentation/analysis slice:
 **Files Created/Deleted/Modified:**
 - median-scalar identity isolation notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7368,7 +7390,7 @@ Validation for this documentation/analysis slice:
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-msdf-d-irreducible-carrier-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7391,7 +7413,7 @@ Validation for this documentation/analysis slice:
 **Files Created/Deleted/Modified:**
 - downstream-consequence tracing notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7422,7 +7444,7 @@ Validation for this documentation/analysis slice:
 **Files Created/Deleted/Modified:**
 - blend-boundary consequence notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7450,7 +7472,7 @@ Validation for this documentation/analysis slice:
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-load-consequence-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7458,7 +7480,7 @@ Validation for this documentation/analysis slice:
 
 Concrete finding: the returned preserve/load co-condition is required **purely as destination-retention prerequisite** at the exact preserved `Command Graph (L88)` merge. There is no narrower honest source-backed attachment-level `LOAD` consequence remaining on the current approved evidence. The exact role of `LOAD` here is only that the destination side consumed as `dst.rgb` / `dst.a` remains prior retained root contents rather than a discarded/cleared/undefined destination participant. It does not introduce a smaller active coefficient, selector bit, alpha-only micro-carrier, or other tighter merge-local witness. So after Task 190 the hierarchy is: source-alpha weighting remains the tighter active carrier *inside* the merge, preserve/load remains the independently live preserved-path co-condition, and that returned preserve/load role can now be stated more narrowly as destination retention only.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-load-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the same approved merge framing is now exhausted on the `LOAD` side, so any further honest continuation would need to step back onto the still-live source-alpha-driven color-weighting side of the exact preserved merge or introduce a tiny reversible contrast beyond documentation; there is no smaller attachment-level `LOAD` semantic left to classify here without widening scope.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-load-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: the same approved merge framing is now exhausted on the `LOAD` side, so any further honest continuation would need to step back onto the still-live source-alpha-driven color-weighting side of the exact preserved merge or introduce a tiny reversible contrast beyond documentation; there is no smaller attachment-level `LOAD` semantic left to classify here without widening scope.
 
 ---
 
@@ -7477,7 +7499,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-vs-destination-retention-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7485,7 +7507,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: under the exact preserved `Command Graph (L88)` `BLEND_MODE_MIX` merge, the surviving source-alpha-driven color-weighting seam is tighter at **incoming packet-color admission** than at preserved destination-retention. The same coefficient still modulates both halves of the color equation (`src.rgb * src.a` and `dst.rgb * (1 - src.a)`), but the packet-local carrier from the no-outline MSDF lane (`d -> a -> color.a -> frag_color.a`) first becomes active as the admission weight for new packet color. After Task 190, the preserved destination side remains real only as the already-restored retained participant/context under `attachment_load_ops=[0:LOAD]`; it is no longer the tighter surviving side of this source-alpha seam. Best current wording after this slice: the preserved `L88` crash path still hinges on source-alpha-driven `BLEND_MODE_MIX` color weighting over loaded preserved destination/root contents, and within that weighting seam the tightest surviving side is incoming packet-color admission rather than the already-restored retained destination side.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-vs-destination-retention-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the source-alpha side is now reduced to incoming packet-color admission under the preserved `L88` merge framing, so any further honest continuation would need either to split that admission side one rung deeper from exact source-backed packet/export facts or to introduce a tiny reversible contrast; the destination-retention side should stay demoted unless new evidence contradicts Task 190.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-vs-destination-retention-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: the source-alpha side is now reduced to incoming packet-color admission under the preserved `L88` merge framing, so any further honest continuation would need either to split that admission side one rung deeper from exact source-backed packet/export facts or to introduce a tiny reversible contrast; the destination-retention side should stay demoted unless new evidence contradicts Task 190.
 
 ---
 
@@ -7504,7 +7526,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-export-vs-color-term-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7512,7 +7534,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: one rung deeper than Task 191, the surviving source-alpha admission seam is tighter at the **exported source-alpha carrier itself** (`frag_color.a` / `src.a`) rather than at the later full incoming color term `src.rgb * src.a`. The full admitted color term is still the first incoming color contribution, but it is broader because it already bundles the packet RGB payload with the already-live exported alpha coefficient. So the tightest surviving source-backed carrier on the admission side is the exported packet alpha, while `src.rgb * src.a` is the first broader composite consequence of that carrier.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-export-vs-color-term-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the admission side is now reduced to the exported source-alpha carrier itself, so any further honest continuation would need to split that carrier one rung deeper from exact packet/export facts or introduce a tiny reversible contrast; the later composite color term should stay demoted unless new evidence contradicts this slice.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-admission-export-vs-color-term-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: the admission side is now reduced to the exported source-alpha carrier itself, so any further honest continuation would need to split that carrier one rung deeper from exact packet/export facts or introduce a tiny reversible contrast; the later composite color term should stay demoted unless new evidence contradicts this slice.
 
 ---
 
@@ -7531,7 +7553,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-export-vs-blend-consumer-alias-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7539,7 +7561,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: one rung deeper than Task 192, the tightest surviving source-backed carrier naming lands at **`frag_color.a`** rather than at the later fixed-function alias `src.a`. There is no smaller new value hiding between those names on the current approved evidence: `src.a` is simply the immediate merge-side consumer alias of the same exported carrier. So the surviving seam is tightest at the last exact programmable/source-backed identity before the merge boundary, while `src.a` remains the first consumer-side name for that same carrier.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-export-vs-blend-consumer-alias-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the surviving source-alpha side is now reduced to the exported shader alpha identity itself, so any further honest continuation would need either to split that export-side carrier one rung deeper from exact packet-local/writeback facts or to introduce a tiny reversible contrast; the later consumer alias and composite color term should stay demoted unless new evidence contradicts this slice.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-export-vs-blend-consumer-alias-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: the surviving source-alpha side is now reduced to the exported shader alpha identity itself, so any further honest continuation would need either to split that export-side carrier one rung deeper from exact packet-local/writeback facts or to introduce a tiny reversible contrast; the later consumer alias and composite color term should stay demoted unless new evidence contradicts this slice.
 
 ---
 
@@ -7558,7 +7580,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - exported-alpha deeper-split notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7586,7 +7608,7 @@ Validation for this documentation slice:
 **Files Created/Deleted/Modified:**
 - packet-alpha versus multiplier notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7616,7 +7638,7 @@ Exact next seam that becomes clear from this stop point: if the plan wants one m
 **Files Created/Deleted/Modified:**
 - `a-equals-d bridge note / tiny reversible instrumentation as needed`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7646,11 +7668,11 @@ Exact next seam that becomes clear from this stop point: the packet-local `a` ve
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-first-downstream-non-packet-local-consequence-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
-**Results:** Completed as a documentation-only downstream classification pass that stayed on the same preserved crash path and did not widen into a speculative fix or require a reversible runtime contrast. Re-read the exact no-outline packet/export path in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl` and the live `BLEND_MODE_MIX` attachment contract in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, while keeping the locked `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable note written to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-first-downstream-non-packet-local-consequence-2026-05-26.md` and linked from `REF-07`. Concrete finding: after the exact first-L88 packet-local ladder is rejoined as `a = d`, the immediate `color.a` / `frag_color.a` steps are still packet-owned carry/export aliases rather than the first non-packet-local consequence. The first downstream consequence that is no longer packet-local appears at the preserved `Command Graph (L88)` `BLEND_MODE_MIX` merge over loaded root contents, where the exported source alpha descended from `d` becomes the **source-alpha admission coefficient for incoming packet color**. Broader preserve/load framing, destination retention, and later alpha writeback remain real context/consequences, but they are not tighter than that first active non-packet-local admission role. Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-first-downstream-non-packet-local-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that now becomes clear: continue outward only inside that same preserved `L88` merge framing if more narrowing is desired; do not reopen the rejoined packet-local `a` / `d` ladder.
+**Results:** Completed as a documentation-only downstream classification pass that stayed on the same preserved crash path and did not widen into a speculative fix or require a reversible runtime contrast. Re-read the exact no-outline packet/export path in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/shaders/canvas.glsl` and the live `BLEND_MODE_MIX` attachment contract in `/home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/storage_rd/material_storage.cpp`, while keeping the locked `REF-07` lane evidence fixed (`owner_label="Command Graph (L88) (Draw)"`, `attachment_load_ops=[0:LOAD]`, `first_blend_mode="mix"`, `blend_enabled_attachment_mask="0x1"`). Durable note written to `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-first-downstream-non-packet-local-consequence-2026-05-26.md` and linked from `REF-07`. Concrete finding: after the exact first-L88 packet-local ladder is rejoined as `a = d`, the immediate `color.a` / `frag_color.a` steps are still packet-owned carry/export aliases rather than the first non-packet-local consequence. The first downstream consequence that is no longer packet-local appears at the preserved `Command Graph (L88)` `BLEND_MODE_MIX` merge over loaded root contents, where the exported source alpha descended from `d` becomes the **source-alpha admission coefficient for incoming packet color**. Broader preserve/load framing, destination retention, and later alpha writeback remain real context/consequences, but they are not tighter than that first active non-packet-local admission role. Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-a-equals-d-first-downstream-non-packet-local-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that now becomes clear: continue outward only inside that same preserved `L88` merge framing if more narrowing is desired; do not reopen the rejoined packet-local `a` / `d` ladder.
 
 ---
 
@@ -7669,7 +7691,7 @@ Exact next seam that becomes clear from this stop point: the packet-local `a` ve
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-non-packet-local-source-alpha-admission-seam-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7677,7 +7699,7 @@ Exact next seam that becomes clear from this stop point: the packet-local `a` ve
 
 Concrete finding: after the packet-local ladder is explicitly closed as `a = d`, the tightest surviving **non-packet-local** source-alpha admission seam inside the preserved `Command Graph (L88)` merge is the immediate blend-side admission coefficient **`src.a`**, not the later admitted incoming color term `src.rgb * src.a`. This is the honest merge-local narrowing because `src.a` is the first value identity that exists only inside the fixed-function merge contract rather than inside packet/export naming, while `src.rgb * src.a` is already broader: it bundles the packet RGB payload with that already-live coefficient. The earlier packet/export-side names (`color.a`, `frag_color.a`) remain true provenance, but they are no longer the right seam once the question is constrained to the non-packet-local admission side of the preserved merge.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-non-packet-local-source-alpha-admission-seam-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to classify a narrower source-backed consequence of the merge-side `src.a` admission coefficient itself, not reopen the packet-local/export ladder or broaden back out to the already-demoted destination-retention side.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-non-packet-local-source-alpha-admission-seam-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to classify a narrower source-backed consequence of the merge-side `src.a` admission coefficient itself, not reopen the packet-local/export ladder or broaden back out to the already-demoted destination-retention side.
 
 ---
 
@@ -7696,7 +7718,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-src-a-source-backed-consequence-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7704,7 +7726,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: once the preserved `L88` merge-side non-packet-local source-alpha admission seam is already fixed at the immediate coefficient **`src.a`**, the next honest source-backed continuation stays on that same source-admission lane and narrows to the first admitted incoming source-color contribution **`src.rgb * src.a`**. The competing source-side alpha term **`src.a * 1`** is still real under the same `BLEND_MODE_MIX` contract, but it is the broader sibling post-merge alpha consequence rather than the tightest continuation of the already-selected source-admission seam. This keeps the destination-retention side closed and avoids stepping backward into `color.a` / `frag_color.a` provenance after Task 198 already fixed `src.a` as the tightest non-packet-local carrier.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-src-a-source-backed-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to stay on the admitted source-color side and classify whether `src.rgb * src.a` should remain whole or be split one rung deeper without reopening packet-local RGB composition or broadening back toward destination-retention.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-src-a-source-backed-consequence-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to stay on the admitted source-color side and classify whether `src.rgb * src.a` should remain whole or be split one rung deeper without reopening packet-local RGB composition or broadening back toward destination-retention.
 
 ---
 
@@ -7723,7 +7745,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-color-carrier-vs-admitted-color-term-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7731,7 +7753,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: once the preserved `L88` source-admission lane is already reduced to the admitted source-color term **`src.rgb * src.a`**, the next honest one-rung-deeper split on that same lane lands at the merge-visible incoming source-color carrier **`src.rgb`** itself. The broader admitted term **`src.rgb * src.a`** remains real, but at this rung it is already composite because it bundles that carrier with the already-fixed admission coefficient `src.a`. This keeps the source-admission classification moving inward without stepping backward into packet-local RGB composition or outward toward destination-retention.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-color-carrier-vs-admitted-color-term-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to stay on the already merge-visible source-color carrier side and classify a narrower source-backed consequence of `src.rgb` without reopening packet-local RGB composition or broadening back toward destination-retention.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-color-carrier-vs-admitted-color-term-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: if continuation is still wanted inside the same preserved merge framing, the next honest split would have to stay on the already merge-visible source-color carrier side and classify a narrower source-backed consequence of `src.rgb` without reopening packet-local RGB composition or broadening back toward destination-retention.
 
 ---
 
@@ -7750,7 +7772,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-merge-visible-src-rgb-terminal-stop-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7758,7 +7780,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: once the preserved `L88` source-admission lane is already reduced to the merge-visible source-color carrier **`src.rgb`**, there is **no still-narrower source-backed consequence** of that carrier available under the current approved constraints. Any next inward split would reopen forbidden packet-local RGB composition, while any next outward continuation immediately returns to the already-broader admitted composite term **`src.rgb * src.a`**. So on the current evidence, `src.rgb` is the terminal merge-visible source-color carrier for this lane rather than a springboard to another narrower same-scope consequence.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-merge-visible-src-rgb-terminal-stop-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: none inside the current approved source-color lane without breaking scope; any further progress on this branch now requires either explicit approval to reopen packet-local RGB composition or a separate approved seam outside this terminal stop point.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-merge-visible-src-rgb-terminal-stop-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: none inside the current approved source-color lane without breaking scope; any further progress on this branch now requires either explicit approval to reopen packet-local RGB composition or a separate approved seam outside this terminal stop point.
 
 ---
 
@@ -7777,7 +7799,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-local-rgb-upstream-of-src-rgb-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7791,7 +7813,7 @@ color_interp.rgb -> color.rgb -> frag_color.rgb -> src.rgb
 
 Source-backed reason: the fragment begins with `vec4 color = color_interp;`, the exact no-outline `sc_use_msdf()` branch mutates only `color.a` via `d -> a -> color.a`, and the fragment ends with `frag_color = color;`. So on this preserved first-`L88` lane, the tightest packet-local/shared-fragment RGB carrier immediately upstream of merge-visible `src.rgb` is **`color.rgb`**, whose exact packet-local composition is the unchanged inherited packet RGB **`color_interp.rgb`**. `frag_color.rgb` is only the immediate export/writeback alias of that same carrier, while `msdf_sample.r/g/b` remains upstream only of the already-classified alpha-distance ladder rather than the live RGB carrier on this slice.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-local-rgb-upstream-of-src-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now made explicit: if continuation is still wanted on the same preserved lane, the next honest inward split is `color.rgb -> color_interp.rgb`, i.e. classify the exact rect-path source that populates `color_interp` for this packet rather than jumping back to sampled MSDF RGB or outward to the merge composite.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-local-rgb-upstream-of-src-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now made explicit: if continuation is still wanted on the same preserved lane, the next honest inward split is `color.rgb -> color_interp.rgb`, i.e. classify the exact rect-path source that populates `color_interp` for this packet rather than jumping back to sampled MSDF RGB or outward to the merge composite.
 
 ---
 
@@ -7810,7 +7832,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-path-source-of-color-interp-rgb-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7818,7 +7840,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, packet-local `color_interp.rgb` is **not** populated from sampled MSDF texture RGB. On the non-attribute rect path, `canvas.glsl` sets `vec4 color = read_draw_data_modulation;` and then `color_interp = color;`, with `read_draw_data_modulation` defined as shader input `attrib_C`. The exact owning rect-path source of that payload is the CPU-side rect instance modulation written in `renderer_canvas_render_rd.cpp`: `Color base_color = p_item->final_modulate;` then `Color modulated = rect->modulate * base_color;`, followed by `instance_data->modulation[0..3] = modulated.r/g/b/a`. Because `renderer_canvas_render_rd.h` stores that rect payload as `InstanceData.modulation[4]`, the exact source-backed chain for this slice is `rect->modulate.rgb * p_item->final_modulate.rgb -> instance_data->modulation.rgb -> attrib_C.rgb -> read_draw_data_modulation.rgb -> color_interp.rgb`. The cull stage sets `p_item->final_modulate` as `ci->final_modulate = p_modulate * ci->self_modulate`, but this slice stops there rather than reopening farther ancestor modulation provenance.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-path-source-of-color-interp-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward split is the CPU-side modulation product itself — classify whether `rect->modulate.rgb * p_item->final_modulate.rgb` should remain whole or split one rung deeper between the rect command contribution and the already-cull-composed item contribution.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-path-source-of-color-interp-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward split is the CPU-side modulation product itself — classify whether `rect->modulate.rgb * p_item->final_modulate.rgb` should remain whole or split one rung deeper between the rect command contribution and the already-cull-composed item contribution.
 
 ---
 
@@ -7837,7 +7859,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulation-product-split-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7845,7 +7867,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: the CPU-side source product feeding first-`L88` packet-local `color_interp.rgb` should **not** remain whole once we move one rung inward from Task 203. In `renderer_canvas_render_rd.cpp`, the immediate producer is explicitly composite: `Color modulated = rect->modulate * base_color;` with `base_color = p_item->final_modulate`. So the honest inward split for this slice is `rect->modulate.rgb × p_item->final_modulate.rgb`. Within that split, `rect->modulate.rgb` is the tighter exact packet-owned contribution on this rung because `renderer_canvas_cull.cpp` writes it directly into the exact rect/MSDF command (`rect->modulate = p_modulate`), while `p_item->final_modulate.rgb` is already the broader inherited item-side sibling because the cull stage composes it earlier as `ci->final_modulate = p_modulate * ci->self_modulate` before the render path consumes it as `base_color`. So the product remains the immediate renderer-side producer of `InstanceData.modulation.rgb`, but the tighter surviving exact packet-owned RGB factor after this one-rung split is `rect->modulate.rgb`, not the whole product.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulation-product-split-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the tightest next inward continuation is to stay on the exact rect-command-owned side and classify whether `rect->modulate.rgb` is terminal for this lane or has a still-earlier source identity worth tracing, rather than jumping outward to the broader inherited `p_item->final_modulate.rgb` side.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulation-product-split-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the tightest next inward continuation is to stay on the exact rect-command-owned side and classify whether `rect->modulate.rgb` is terminal for this lane or has a still-earlier source identity worth tracing, rather than jumping outward to the broader inherited `p_item->final_modulate.rgb` side.
 
 ---
 
@@ -7864,7 +7886,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-command-modulate-source-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7872,7 +7894,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, `rect->modulate.rgb` is **not terminal**. The exact owning write on the relevant rect/MSDF command path in `renderer_canvas_cull.cpp` is simply `rect->modulate = p_modulate`, so the next honest inward provenance step is the direct alias `p_modulate.rgb -> rect->modulate.rgb`. There is no additional renderer-internal RGB composition between those two identities on this path. Live source also preserves that same provenance at the higher API layers: `CanvasItem::draw_msdf_texture_rect_region(..., p_modulate, ...)` forwards the modulation argument directly to `RenderingServer::canvas_item_add_msdf_texture_rect_region(...)`, and `ImageTexture::draw_msdf_rect_region(..., p_modulate, ...)` likewise forwards it unchanged. So the still-earlier source identity worth tracing after Task 204 is the caller-side MSDF draw modulation argument `p_modulate.rgb`, not another renderer-internal rect-path factor.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-command-modulate-source-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact caller-side source of `p_modulate.rgb` feeding `canvas_item_add_msdf_texture_rect_region(..., p_modulate, ...)`, while keeping the broader inherited `p_item->final_modulate.rgb` sibling lane closed.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-command-modulate-source-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact caller-side source of `p_modulate.rgb` feeding `canvas_item_add_msdf_texture_rect_region(..., p_modulate, ...)`, while keeping the broader inherited `p_item->final_modulate.rgb` sibling lane closed.
 
 ---
 
@@ -7891,7 +7913,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-side-source-of-p-modulate-rgb-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7899,7 +7921,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the exact caller-side source of the packet’s MSDF draw `p_modulate.rgb` is **`p_color.rgb`**, not another renderer-side factor. On the live no-outline MSDF glyph path in `text_server_adv.cpp`, the code first does `Color modulate = p_color;` and then calls `draw_msdf_rect_region(..., modulate, 0, ...)`. `ImageTexture::draw_msdf_rect_region(..., const Color &p_modulate, ...)` forwards that modulation unchanged to `RenderingServer::canvas_item_add_msdf_texture_rect_region(...)`, so the exact source-backed chain for this slice is `p_color.rgb -> modulate.rgb -> p_modulate.rgb -> rect->modulate.rgb`. Broader public text/font APIs preserve the same identity rather than recomposing it: `TextServer::font_draw_glyph(..., p_color, ...)`, `Font::draw_char(..., p_modulate, ...)` forwarding to `font_draw_glyph`, and `TextServer::shaped_text_draw(..., p_color, ...)` forwarding `p_color` into `font_draw_glyph`. So the next honest inward provenance step after Task 205 lands at the glyph draw color input `p_color.rgb`.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-side-source-of-p-modulate-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact higher caller-side source of `p_color.rgb` for the preserved packet, while keeping the broader inherited `p_item->final_modulate.rgb` sibling lane closed.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-side-source-of-p-modulate-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact higher caller-side source of `p_color.rgb` for the preserved packet, while keeping the broader inherited `p_item->final_modulate.rgb` sibling lane closed.
 
 ---
 
@@ -7918,7 +7940,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-higher-caller-side-source-of-p-color-rgb-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7926,7 +7948,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the next honest higher caller-side source of glyph-draw `p_color.rgb` is the shared text-layout draw parameter on `TextServer::shaped_text_draw(..., p_color, ...)`, not another renderer-side factor. In `servers/text/text_server.cpp`, that function forwards its own `p_color` unchanged into repeated `font_draw_glyph(..., p_color, ...)` submissions while drawing shaped glyphs. `TextServerAdvanced::_font_draw_glyph(...)` then receives the same `p_color` and, on the already-classified no-outline MSDF path, does `Color modulate = p_color;` before forwarding it into the MSDF rect draw. So the exact higher shared provenance chain for this slice is `TextServer::shaped_text_draw(..., p_color, ...) -> TextServer::font_draw_glyph(..., p_color, ...) -> TextServerAdvanced::_font_draw_glyph(..., p_color, ...) -> modulate.rgb -> p_modulate.rgb -> rect->modulate.rgb`. Important limit: static source does **not** yet justify collapsing that farther to one unique widget/control caller for the preserved packet, because above this rung the engine fans out into multiple callers such as direct widget `font_draw_glyph(..., font_color)` paths and `Font::draw_char(..., p_modulate, ...)`.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-higher-caller-side-source-of-p-color-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact higher caller-side source of `TextServer::shaped_text_draw(..., p_color, ...)` for the preserved packet, or explicitly prove that the packet instead comes from one of the direct widget/control `font_draw_glyph(..., font_color)` call sites.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-higher-caller-side-source-of-p-color-rgb-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward seam is to classify the exact higher caller-side source of `TextServer::shaped_text_draw(..., p_color, ...)` for the preserved packet, or explicitly prove that the packet instead comes from one of the direct widget/control `font_draw_glyph(..., font_color)` call sites.
 
 ---
 
@@ -7945,7 +7967,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-above-shaped-text-draw-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7953,7 +7975,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, static source does **not** justify collapsing the provenance one rung farther to one exact higher caller above `TextServer::shaped_text_draw(..., p_color, ...)`, and it also does **not** prove that the packet instead came from a direct widget/control `font_draw_glyph(..., font_color)` path. Live `shaped_text_draw(..., p_color, ...)` callers include multiple distinct families such as `TextLine::draw(...)`, `TextParagraph::draw(...)`, and `CodeEdit::_draw_line_numbers()`. Live direct widget/control glyph callers also exist in parallel, including `Label`, `RichTextLabel`, `LineEdit`, and `TextEdit`. So the honest result for this rung is a precise ambiguity: the preserved packet's provenance remains valid up to the shared `TextServer::shaped_text_draw(..., p_color, ...)` rung, but above that point the code fans into multiple live caller families and no unique winner is proven by static source alone.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-above-shaped-text-draw-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest seam is not another static-source-only collapse; it is a narrow evidence step to distinguish the higher caller family for the preserved packet, such as source-backed breadcrumbing or the smallest reversible contrast that can separate the shared `shaped_text_draw(..., p_color, ...)` family from the direct widget/control `font_draw_glyph(..., font_color)` family.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-above-shaped-text-draw-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest seam is not another static-source-only collapse; it is a narrow evidence step to distinguish the higher caller family for the preserved packet, such as source-backed breadcrumbing or the smallest reversible contrast that can separate the shared `shaped_text_draw(..., p_color, ...)` family from the direct widget/control `font_draw_glyph(..., font_color)` family.
 
 ---
 
@@ -7972,7 +7994,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-family-shaped-vs-direct-font-draw-glyph-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -7980,7 +8002,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the higher caller family is now best classified as the **direct widget/control `font_draw_glyph(..., font_color)` family**, not the shared `TextServer::shaped_text_draw(..., p_color, ...)` family. Task 208 remained an honest static-source stop point, but once the packet was later pinned to the direct `HudLabel` RichTextLabel owner path and then to the direct `DRAW_STEP_TEXT` glyph loop on that same path, the ambiguity between the shared `shaped_text_draw(...)` family and the direct widget/control glyph family was resolved without needing a broader experiment.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-family-shaped-vs-direct-font-draw-glyph-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on the fixed direct `HudLabel` route and split one rung deeper into the exact first line-0 heading glyph emission itself and/or the immediate `font_color` / `frid` selection received by that `DRAW_STEP_TEXT` call.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-caller-family-shaped-vs-direct-font-draw-glyph-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on the fixed direct `HudLabel` route and split one rung deeper into the exact first line-0 heading glyph emission itself and/or the immediate `font_color` / `frid` selection received by that `DRAW_STEP_TEXT` call.
 
 ---
 
@@ -7999,7 +8021,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulate-identity-vs-item-final-modulate-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -8007,7 +8029,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the exact preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the CPU-side modulation product should **not** remain whole. The already-approved packet artifact logs the exact rect command with `modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}`, while `renderer_canvas_render_rd.cpp` composes `Color modulated = rect->modulate * base_color` with `base_color = p_item->final_modulate`. Substituting the exact packet-local rect-command identity collapses the broader product to `rect->modulate.rgb * p_item->final_modulate.rgb = (1,1,1) * p_item->final_modulate.rgb = p_item->final_modulate.rgb`. Because `renderer_canvas_cull.cpp` sets `ci->final_modulate = p_modulate * ci->self_modulate`, the surviving non-identity RGB carrier after this one-rung split is the already-cull-composed item contribution `p_item->final_modulate.rgb`, not the broader two-factor CPU product.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulate-identity-vs-item-final-modulate-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward split is the cull-composed item modulation itself — classify whether `p_item->final_modulate.rgb = p_modulate.rgb * ci->self_modulate.rgb` should remain whole or split one rung deeper between the inherited cull input `p_modulate.rgb` and the item-local contribution `ci->self_modulate.rgb`.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-rect-modulate-identity-vs-item-final-modulate-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the next honest inward split is the cull-composed item modulation itself — classify whether `p_item->final_modulate.rgb = p_modulate.rgb * ci->self_modulate.rgb` should remain whole or split one rung deeper between the inherited cull input `p_modulate.rgb` and the item-local contribution `ci->self_modulate.rgb`.
 
 ---
 
@@ -8024,7 +8046,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/`
 
 **Status:** ✅ Complete
@@ -8033,7 +8055,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the exact preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the cull-side item modulation should **not** remain whole as `p_item->final_modulate.rgb`. Source shows it already splits one rung deeper as `p_modulate.rgb * ci->self_modulate.rgb`, where `p_modulate.rgb` is the broader inherited cull input arriving from the parent/ancestor modulation chain, while `ci->self_modulate.rgb` is the tighter exact item-local self-only contribution for the packet's owning canvas item. So on this rung the tighter exact item-owned RGB factor is `ci->self_modulate.rgb`, not the broader inherited carrier and not the unsplit product.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-item-final-modulate-inherited-vs-self-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on the exact item-local side and classify whether `ci->self_modulate.rgb` is terminal for this lane or has a still-earlier exact source identity worth tracing for the preserved packet, rather than jumping back out to the broader inherited `p_modulate.rgb` side.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-item-final-modulate-inherited-vs-self-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on the exact item-local side and classify whether `ci->self_modulate.rgb` is terminal for this lane or has a still-earlier exact source identity worth tracing for the preserved packet, rather than jumping back out to the broader inherited `p_modulate.rgb` side.
 
 ---
 
@@ -8050,7 +8072,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/`
 
 **Status:** ✅ Complete
@@ -8059,7 +8081,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for this lane, `ci->self_modulate.rgb` is **not terminal for the full provenance path**. It is terminal only as the last renderer-cull storage slot before composition into `ci->final_modulate`, because the exact cull setter is merely `canvas_item->self_modulate = p_color`. The still-earlier exact source identity worth tracing is the scene/API-side CanvasItem property lane: `CanvasItem::self_modulate` / `CanvasItem::set_self_modulate(const Color &p_self_modulate)`, which stores `self_modulate = p_self_modulate` and forwards that same value through `RenderingServer::canvas_item_set_self_modulate(canvas_item, self_modulate)` before the renderer-cull copy is made. So the honest one-rung-earlier identity is `CanvasItem.self_modulate.rgb`, not the copied `ci->self_modulate.rgb` field alone.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-self-modulate-terminal-vs-caller-source-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on this item-local side and classify the still-earlier owner/caller of the preserved packet's `CanvasItem.self_modulate.rgb` value — i.e. whether the owning CanvasItem simply retains the default white property or receives a specific non-default `set_self_modulate(...)` / RenderingServer write from an identifiable scene-side caller.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-self-modulate-terminal-vs-caller-source-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on this item-local side and classify the still-earlier owner/caller of the preserved packet's `CanvasItem.self_modulate.rgb` value — i.e. whether the owning CanvasItem simply retains the default white property or receives a specific non-default `set_self_modulate(...)` / RenderingServer write from an identifiable scene-side caller.
 
 ---
 
@@ -8076,7 +8098,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/`
 
 **Status:** ✅ Complete
@@ -8085,7 +8107,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the exact preserved first-`Command Graph (L88)` no-outline MSDF rect packet, the earlier scene/API-side lane `CanvasItem.self_modulate.rgb` is best classified as **default white**, not as an identifiable non-default scene-side write. The evidence is narrow and source-backed: `CanvasItem.self_modulate` defaults to `Color(1, 1, 1, 1)` in engine source; the reproducer project contains no serialized `self_modulate` override, no script-side `set_self_modulate(...)`, and no direct RenderingServer self-modulate write anywhere in `*.tscn`, `*.gd`, or `*.cs`; and the preserved packet artifact still logs a white modulation payload (`modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}`), which is consistent with that default-property reading. The only remaining narrow ambiguity is packet-owner strictness — whether the exact first clipped packet belongs to the `HudLabel` CanvasItem directly or a RichTextLabel-internal item on the same label path — but that does not change the classification because the project still contains no non-default self-modulate authoring path on either route.
 
-Validation for this documentation slice: `grep -RIn "self_modulate\|set_self_modulate\|canvas_item_set_self_modulate" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.tscn' --include='*.gd' --include='*.cs' || true`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '56,78p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '68,88p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.h | sed -n '84,94p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.cpp | sed -n '580,592p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp | sed -n '696,706p'`; `grep -RIn "temp_diag_first_clipped_preserve_rect_batch=\|modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 5`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-self-modulate-default-vs-scene-write-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if stricter packet-owner proof is still wanted on this same item-local side, the next honest seam is to attribute the exact first clipped preserve-rect packet to its owning CanvasItem/RID/path and decide whether it comes from the `HudLabel` CanvasItem directly or a RichTextLabel-internal item on the same label path; that seam would strengthen owner identity only and is not required for the current default-white classification.
+Validation for this documentation slice: `grep -RIn "self_modulate\|set_self_modulate\|canvas_item_set_self_modulate" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.tscn' --include='*.gd' --include='*.cs' || true`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '56,78p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '68,88p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.h | sed -n '84,94p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_item.cpp | sed -n '580,592p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp | sed -n '696,706p'`; `grep -RIn "temp_diag_first_clipped_preserve_rect_batch=\|modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 5`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-self-modulate-default-vs-scene-write-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if stricter packet-owner proof is still wanted on this same item-local side, the next honest seam is to attribute the exact first clipped preserve-rect packet to its owning CanvasItem/RID/path and decide whether it comes from the `HudLabel` CanvasItem directly or a RichTextLabel-internal item on the same label path; that seam would strengthen owner identity only and is not required for the current default-white classification.
 
 ---
 
@@ -8102,7 +8124,7 @@ Validation for this documentation slice: `grep -RIn "self_modulate\|set_self_mod
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/`
 
 **Status:** ✅ Complete
@@ -8111,7 +8133,7 @@ Validation for this documentation slice: `grep -RIn "self_modulate\|set_self_mod
 
 Concrete finding: the exact first clipped preserve-rect packet is best classified as belonging directly to the `HudLabel` RichTextLabel canvas item, not to a separate RichTextLabel-internal canvas item owner. The source-backed chain is: `RichTextLabel::NOTIFICATION_DRAW` and `RichTextLabel::_draw_line(...)` both begin from `RID ci = get_canvas_item()`, pass that same `ci` through `TS->font_draw_glyph(...)` / `TS->font_draw_glyph_outline(...)`, and the text-server implementations keep that owner RID through the eventual `texture->draw_rect_region(p_canvas, ...)` call. To pin the exact live RID/path instead of stopping at source-only classification, I used the smallest reversible trace in `scripts/gdgs_tweak_matrix_harness.gd`, ran `~/.local/bin/godot --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit-after 3`, recorded the printed owner, and reverted the script immediately afterward. That validation run resolved the packet owner to runtime path `/root/GdgsHappyPathControl/CanvasLayer/HudMargin/HudLabel` with `HudLabel.get_canvas_item().get_id() == 128849018881`. The only internal child `CanvasItem` exposed by `HudLabel.get_children(true)` was the internal `VScrollBar`, and it had a different RID (`146028888066`), so it does not displace the direct glyph-owner route.
 
-Validation for this documentation slice: `grep -nE "RID ci = get_canvas_item\(|font_draw_glyph\(|font_draw_glyph_outline\(|canvas_item_add_rect\(" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1,40p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1064,1080p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1624,1640p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '2712,2810p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4316,4362p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2958,3004p'`; temporary validation trace, then reverted: `~/.local/bin/godot --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit-after 3`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '56,72p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '58,84p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-owner-hudlabel-vs-richtext-internal-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: `grep -nE "RID ci = get_canvas_item\(|font_draw_glyph\(|font_draw_glyph_outline\(|canvas_item_add_rect\(" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1,40p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1064,1080p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1624,1640p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '2712,2810p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4316,4362p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2958,3004p'`; temporary validation trace, then reverted: `~/.local/bin/godot --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --quit-after 3`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '56,72p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '58,84p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-packet-owner-hudlabel-vs-richtext-internal-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on the now-fixed direct `HudLabel` owner route and classify which exact RichTextLabel text/glyph emission step produces the first clipped white no-outline MSDF rect packet inside that direct owner path, rather than reopening owner identity or broader theories.
 
@@ -8130,7 +8152,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-richtextlabel-emission-step-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 
@@ -8140,7 +8162,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: inside the now-fixed direct `HudLabel` owner path, the first clipped white no-outline rect packet is best classified as the RichTextLabel main text-pass glyph emission step, not a hidden internal owner and not a later/wider text helper. More exactly, the surviving emission surface is `RichTextLabel::NOTIFICATION_DRAW -> RichTextLabel::_draw_line(...) -> DRAW_STEP_TEXT -> TS->font_draw_glyph(frid, ci, glyphs[i].font_size, fx_offset + char_off, gl, font_color)`. The preserved packet facts line up with that branch: background/foreground steps emit rects instead of glyph packets, outline/shadow branches call `font_draw_glyph_outline(...)` or shadow-offset glyph draws, and the direct-owner route inside `_draw_line(...)` does not go through `TextServer::shaped_text_draw(...)` for this packet. The authored `HudLabel` text starts with the bold heading `[b]GDGS render-path tweak harness[/b]`, so the first matching direct-owner body on this route is the line-0 heading body rather than a later list-prefix/helper line.
 
-Validation for this documentation slice: `grep -n "DRAW_STEP_" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '2712,2795p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1198,1248p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1330,1645p'`; `grep -RIn "\[color\|\[fgcolor\|\[bgcolor\|\[outline" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts || true`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '62,72p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '72,88p'`; `grep -RIn "temp_diag_first_clipped_preserve_rect_batch=\|modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 5`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-richtextlabel-emission-step-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: `grep -n "DRAW_STEP_" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '2712,2795p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1198,1248p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1330,1645p'`; `grep -RIn "\[color\|\[fgcolor\|\[bgcolor\|\[outline" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts || true`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '62,72p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '72,88p'`; `grep -RIn "temp_diag_first_clipped_preserve_rect_batch=\|modulate={r=1.000000,g=1.000000,b=1.000000,a=1.000000}" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 5`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-richtextlabel-emission-step-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, split the newly fixed `line-0 heading -> DRAW_STEP_TEXT -> font_draw_glyph(...)` packet one rung deeper into the exact first heading glyph emission itself and/or its immediate `font_color` / `frid` selection, without reopening owner identity or broader theories.
 
@@ -8159,7 +8181,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-vs-font-selection-2026-05-26.md`
 
@@ -8169,7 +8191,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: for the fixed direct `line-0 heading -> DRAW_STEP_TEXT -> font_draw_glyph(...)` packet, the tighter next rung is the immediate draw-call input provenance, not stopping at the broader prose label of the first heading glyph alone. `font_color` collapses directly to default white because `_find_color(it, p_base_color)` falls back to `theme_cache.default_color`, the default runtime RichTextLabel theme sets `default_color = Color(1, 1, 1)`, and the heading route has no `[color]` / `[fgcolor]` override. The heading begins with `[b]GDGS render-path tweak harness[/b]`, and RichTextLabel parses `[b]` with `_push_def_font(RTL_BOLD_FONT)`, while later font resolution maps that lane to `theme_cache.bold_font` and its effective size; so the `frid` side remains the shaped glyph RID outcome of the heading's bold-font selection lane. The first visible heading glyph is still source-backed as the leading `G`, but that is a slightly broader semantic label than the immediate draw-call input provenance itself. Best narrow wording after this slice: the packet should now be described as `DRAW_STEP_TEXT -> font_draw_glyph(...)` with `font_color = white` and `frid` coming from the heading's `[b] -> RTL_BOLD_FONT -> theme_cache.bold_font` lane.
 
-Validation for this documentation slice: `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1350,1368p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1482,1492p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3767,3779p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '5614,5624p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3440,3466p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1221,1238p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '67,72p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-vs-font-selection-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on this immediate input split and classify the still-unfinished bold-font `frid` lane itself — for example, resolving the exact theme font/size path behind the heading's `[b]` selection — while keeping the already-collapsed white `font_color` side closed.
+Validation for this documentation slice: `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1350,1368p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1482,1492p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3767,3779p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '5614,5624p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3440,3466p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1221,1238p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '67,72p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-vs-font-selection-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam now materialized: if continuation is still wanted on the same preserved lane, stay on this immediate input split and classify the still-unfinished bold-font `frid` lane itself — for example, resolving the exact theme font/size path behind the heading's `[b]` selection — while keeping the already-collapsed white `font_color` side closed.
 
 ---
 
@@ -8186,7 +8208,7 @@ Validation for this documentation slice: `nl -ba /home/derrick/.openclaw/workspa
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-frid-lane-2026-05-26.md`
 
@@ -8196,7 +8218,7 @@ Validation for this documentation slice: `nl -ba /home/derrick/.openclaw/workspa
 
 Concrete finding: the still-open `frid` side behind the preserved first-`Command Graph (L88)` direct `HudLabel` heading packet now collapses to a specific theme-backed lane. The heading `[b]` tag selects `_push_def_font(RTL_BOLD_FONT)`, which creates an `ItemFont` with `def_font = RTL_BOLD_FONT` and `def_size = true`. `_find_font(...)` later resolves that exact lane to `theme_cache.bold_font`, and because `def_size` is true it also resolves the size side to `theme_cache.bold_font_size`. RichTextLabel binds both as normal theme items (`bold_font`, `bold_font_size`), the default theme sets the `bold_font` slot explicitly and stores `bold_font_size = -1`, and source-backed theme lookup shows that a non-positive named font-size slot falls through to the theme default font size. Since the repro scene/scripts still do not override `HudLabel` theme/font/font-size, `_shape_line(...).add_string(tx, font, font_size, ...)` feeds the stock resolved RichTextLabel bold-font object plus theme-default size path into shaping before draw later consumes `glyphs[i].font_rid`. Best narrow wording after this slice: the packet's `frid` lane is `heading [b] -> RTL_BOLD_FONT -> theme_cache.bold_font + theme_cache.bold_font_size (default-theme -1 slot -> theme default font size) -> _shape_line(...).add_string(...) -> glyphs[i].font_rid`.
 
-Validation for this documentation slice: `grep -n "tag == \"b\"\|_push_def_font(RTL_BOLD_FONT)\|_push_def_font(RTL_BOLD_ITALICS_FONT)" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3440,3466p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '4754,4782p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '717,753p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '8038,8062p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '92,97p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1210,1216p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '542,548p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '660,666p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '3720,3744p'`; `grep -RInE "theme_override|add_theme_font_override|add_theme_font_size_override|theme =|bold_font|bold_font_size" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.tscn' --include='*.gd' --include='*.cs' | head -n 50`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-frid-lane-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: `grep -n "tag == \"b\"\|_push_def_font(RTL_BOLD_FONT)\|_push_def_font(RTL_BOLD_ITALICS_FONT)" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '3440,3466p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '4754,4782p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '717,753p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '8038,8062p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '92,97p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1210,1216p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '542,548p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '660,666p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '3720,3744p'`; `grep -RInE "theme_override|add_theme_font_override|add_theme_font_size_override|theme =|bold_font|bold_font_size" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.tscn' --include='*.gd' --include='*.cs' | head -n 50`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-frid-lane-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, split one rung deeper inside this now-fixed theme-backed lane by resolving the exact concrete font resource that populates `theme_cache.bold_font` and/or the exact numeric theme-default font size that the `-1` `bold_font_size` slot falls through to on the preserved runtime path.
 
@@ -8215,7 +8237,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-resource-and-size-2026-05-26.md`
 
@@ -8225,7 +8247,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: the now-concrete heading bold-font lane tightens further on both the font-object and size sides. Because the repro project still shows no custom GUI font/theme override path, the `HudLabel` packet stays on the engine default-theme route. On that route, `theme_cache.bold_font` is constructed in `default_theme.cpp` as a `FontVariation` whose base font is `default_font` and whose embolden setting is `1.2`; when no custom project font is supplied, that `default_font` is a `FontFile` instantiated from the embedded `_font_OpenSans_SemiBold` payload. On the size side, RichTextLabel stores `bold_font_size = -1`, and source-backed theme lookup means that non-positive slot falls through to the theme default font size, which the default theme sets to `Math::round(16 * scale)`. So on the ordinary default-scale runtime path, the exact numeric fallback is `16 px`. Best narrow wording after this slice: the packet's `frid` lane is `heading [b] -> RTL_BOLD_FONT -> theme_cache.bold_font = FontVariation(base_font = embedded OpenSans SemiBold default font, embolden = 1.2) + theme_cache.bold_font_size = -1 -> theme default font size Math::round(16 * scale) -> 16 px at scale 1.0 -> _shape_line(...).add_string(...) -> glyphs[i].font_rid`.
 
-Validation for this documentation slice: `grep -RInE "custom_font|default_font|gui/theme|gui/common/default_font|font_subpixel|font_hinting|font_antialiasing|font_msdf" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/project.godot /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.godot' --include='*.cfg' --include='*.tscn' --include='*.gd' | head -n 120`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '50,50p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '92,97p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1210,1216p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1387,1411p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '542,548p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '660,666p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/theme_owner.cpp | sed -n '360,381p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-resource-and-size-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: `grep -RInE "custom_font|default_font|gui/theme|gui/common/default_font|font_subpixel|font_hinting|font_antialiasing|font_msdf" /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/project.godot /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --include='*.godot' --include='*.cfg' --include='*.tscn' --include='*.gd' | head -n 120`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '50,50p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '92,97p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1210,1216p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1387,1411p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '542,548p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/resources/theme.cpp | sed -n '660,666p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/theme_owner.cpp | sed -n '360,381p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-bold-font-resource-and-size-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, split one rung deeper from this now-concrete theme resource/size lane into the shaped-glyph side itself by resolving where the resolved `FontVariation` + `16 px` inputs become the eventual `glyphs[i].font_rid` / glyph index pair for the first visible heading `G`.
 
@@ -8244,7 +8266,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-shaping-font-rid-and-index-2026-05-26.md`
 
@@ -8254,7 +8276,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: on the preserved repro runtime (`/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`, `4.7.dev5.official.a8643700c`), the first visible heading glyph `G` shapes to the exact first-glyph pair `font_rid = RID(687194767361)`, `font_size = 16`, `glyph index = 42`, with the first shaped glyph covering `start=0`, `end=1`. The managed `4.6.2.stable` runtime produced the same first-glyph index `42` at size `16` but, as expected, a different runtime-instance RID value (`RID(450971566081)`). The direct `TextServer.font_get_glyph_index(first["font_rid"], first["font_size"], 'G', 0)` check returned `42` on both runtimes, so the shaped first-glyph mapping is now closed for the preserved lane without reopening broader theories.
 
-Validation for this documentation slice: temporary probe script `/home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd`; `~/.local/bin/godot --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd --quit`; `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd --quit`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-shaping-font-rid-and-index-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: temporary probe script `/home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd`; `~/.local/bin/godot --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd --quit`; `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-heading-glyph-probe.gd --quit`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-glyph-shaping-font-rid-and-index-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, decide whether the first preserved clipped MSDF rect packet can now be pinned directly to this exact shaped heading `G` emission, or whether one last minimal packet-bridge trace is still needed to bridge from the shaped first-glyph pair to the first clipped packet selection itself.
 
@@ -8273,7 +8295,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-vs-first-clipped-packet-2026-05-26.md`
 
@@ -8283,7 +8305,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: the first preserved clipped white no-outline MSDF rect packet can now be pinned directly to the exact first shaped heading `G` emission on the preserved runtime; one last packet-bridge trace is **not** honestly needed. The now-closed chain is contiguous and source-backed: `HudLabel -> RichTextLabel::_draw_line(...) -> DRAW_STEP_TEXT -> first visible heading glyph G -> preserved-runtime shaped pair (font_rid RID(687194767361), font_size 16, glyph index 42) -> TS->font_draw_glyph(...)`. On the MSDF path, `TextServerAdvanced::_font_draw_glyph(...)` and `TextServerFallback::_font_draw_glyph(...)` each emit a single `draw_msdf_rect_region(...)` packet for the glyph, so there is no remaining multi-packet ambiguity to bridge once the first visible heading glyph has already been fixed. Because the earlier competing forks were already closed — no alternate owner, no prefix lane, no shadow/outline branch, no `shaped_text_draw(...)` helper on this direct-owner route — the first preserved clipped packet is best classified as directly the first shaped heading `G` packet on this route.
 
-Validation for this documentation slice: `grep -n "DRAW_STEP_" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1198,1248p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1596,1641p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4330,4348p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2972,2990p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-vs-first-clipped-packet-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: `grep -n "DRAW_STEP_" /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.h`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1198,1248p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '1596,1641p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4330,4348p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2972,2990p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-vs-first-clipped-packet-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, move to a genuinely new adjacent packet-local fact on the now-fixed first `G` packet — for example, the deeper geometric/clip relation of that first packet itself — rather than reopening provenance links already closed.
 
@@ -8304,7 +8326,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-packet-clip-geometry-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -8312,7 +8334,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: for the fixed first heading `G` packet on the preserved first-`L88` lane, the deeper packet-local geometric/clip relation is a **single-edge left clip by exactly 1 pixel**. The preserved packet artifact already records `clip_rect={x=16,y=16,w=504,h=460}` and `command.rect={x=-1,y=3,w=14,h=16}`. The reversible anchor probe showed that the direct `HudLabel` sits at global `(16,16)` with local position `(0,0)` under `HudMargin`. Combining those facts yields the tight packet/clip relation: local packet rect `(-1,3,14,16)` translates to global packet rect `(15,19,14,16)` against global clip rect `(16,16,504,460)`, so only the leftmost 1-pixel column overhangs the clip boundary while the packet's top, bottom, and right edges remain inside the clip. Best narrow wording after this slice: the first preserved clipped white no-outline MSDF packet is the first heading `G` packet, and its clipping is specifically a 1-pixel left-edge overhang case rather than a broader multi-edge clip.
 
-Validation for this documentation slice: `grep -n "temp_diag_first_clipped_preserve_rect_batch=" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 1`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4337,4344p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2979,2986p'`; temporary reversible anchor probe `/home/derrick/.openclaw/workspace/.temp/gdgs-label-rect-probe.gd` run against both `~/.local/bin/godot` and `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-packet-clip-geometry-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: `grep -n "temp_diag_first_clipped_preserve_rect_batch=" /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-24/official-first-l88-specialization-value-only-vulkan-sourcebuild-20260525-183916/baseline/stdout.log | head -n 1`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4337,4344p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_fb/text_server_fb.cpp | sed -n '2979,2986p'`; temporary reversible anchor probe `/home/derrick/.openclaw/workspace/.temp/gdgs-label-rect-probe.gd` run against both `~/.local/bin/godot` and `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-packet-clip-geometry-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, split one rung deeper inside this now-fixed geometry result — for example, whether the 1-pixel left overhang comes directly from the glyph's own MSDF rect/bearing (`fgl.rect.position.x = -1` after scale) versus some upstream line/layout offset, and/or the exact source of the packet's `y=3` inset on the same first-`G` route.
 
@@ -8331,7 +8353,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-left-overhang-origin-2026-05-26.md`
 
@@ -8341,7 +8363,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: the first heading `G` packet's 1-pixel left overhang comes directly from the glyph's own MSDF rect/bearing, not from an upstream line/layout offset. On the preserved runtime, the first shaped glyph itself reports `offset=(0,0)`, so there is no extra shaped-glyph layout shift before the glyph-local rectangle is applied. The same probe reports `font_get_glyph_offset(...) = (-1,-15)` and `font_get_glyph_size(...) = (14,16)` for the fixed `G` pair, which matches the preserved packet-local rect's horizontal side exactly: packet local `x=-1`, `w=14`. That makes the left overhang glyph-local. On the same route, the packet local `y=3` is also consistent with the glyph-local vertical bearing `-15` applied to a baseline-side draw anchor at `y=18`, so the remaining unresolved adjacent seam is the source-backed origin of that baseline-side anchor, not the left overhang itself.
 
-Validation for this documentation slice: temporary preserved-runtime probe `/home/derrick/.openclaw/workspace/.temp/gdgs-glyph-overhang-origin-probe.gd` run with `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-glyph-overhang-origin-probe.gd --quit`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4329,4344p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-left-overhang-origin-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: temporary preserved-runtime probe `/home/derrick/.openclaw/workspace/.temp/gdgs-glyph-overhang-origin-probe.gd` run with `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-glyph-overhang-origin-probe.gd --quit`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/modules/text_server_adv/text_server_adv.cpp | sed -n '4329,4344p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-left-overhang-origin-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, move to the remaining adjacent geometry rung — the exact source-backed origin of the baseline-side draw anchor behind packet local `y=3` on the same first-`G` route, and/or a stricter source-only tie between `font_get_glyph_offset(...)` and internal `fgl.rect.position` for this MSDF glyph.
 
@@ -8360,7 +8382,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-y-inset-origin-2026-05-26.md`
 
@@ -8383,13 +8405,13 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-clip-overlap-fact-2026-05-26.md`
 
 **Status:** ✅ Complete
 
-**Results:** Claimed bead `oc-rw5f`, stayed on the same preserved first-`L88` heading-`G` route, and resolved the exact packet/clip overlap fact without widening into broader provenance or speculative fix lanes. Added durable note `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-clip-overlap-fact-2026-05-26.md`, plus the matching staged-QA summary update. Source-backed chain: `RichTextLabel` enables clipping on this route via `set_clip_contents(true)`; canvas cull computes the clip owner's `final_clip_rect` as the intersection of the inherited clip and the item's global rect, dropping only near-zero intersections; the renderer-side preserve-rect gate classifies the batch as `rect-like && current_batch->clip != nullptr && gdgs_canvas_blend_mode_uses_prior_color(...)`. A smallest reversible preserved-runtime probe then fixed the direct `HudLabel` clip owner to `clip_contents=true`, `global_rect=(16,16,504,460)`, matching the preserved packet artifact's `clip_rect={x=16,y=16,w=504,h=460}`. With Task 217's fixed packet-local rect `(-1,3,14,16)`, that gives packet global `(15,19,14,16)` against clip rect `(16,16,504,460)`, so containment fails only on the left edge (`15 < 16`) while right/top/bottom stay contained (`29 <= 520`, `19 >= 16`, `35 <= 476`). The exact surviving overlap is `intersection=(16,19,13,16)`: not full containment, not zero-overlap drop, but a positive `13x16` partial overlap that keeps the packet drawable under the owner clip and makes it the preserved clipped packet on this route. Validation for this documentation slice: temporary preserved-runtime probe `/home/derrick/.openclaw/workspace/.temp/gdgs-heading-g-clip-overlap-probe.gd` run with `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-heading-g-clip-overlap-probe.gd --quit`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '8450,8460p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp | sed -n '410,426p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp | sed -n '3024,3034p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-clip-overlap-fact-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+**Results:** Claimed bead `oc-rw5f`, stayed on the same preserved first-`L88` heading-`G` route, and resolved the exact packet/clip overlap fact without widening into broader provenance or speculative fix lanes. Added durable note `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-clip-overlap-fact-2026-05-26.md`, plus the matching staged-QA summary update. Source-backed chain: `RichTextLabel` enables clipping on this route via `set_clip_contents(true)`; canvas cull computes the clip owner's `final_clip_rect` as the intersection of the inherited clip and the item's global rect, dropping only near-zero intersections; the renderer-side preserve-rect gate classifies the batch as `rect-like && current_batch->clip != nullptr && gdgs_canvas_blend_mode_uses_prior_color(...)`. A smallest reversible preserved-runtime probe then fixed the direct `HudLabel` clip owner to `clip_contents=true`, `global_rect=(16,16,504,460)`, matching the preserved packet artifact's `clip_rect={x=16,y=16,w=504,h=460}`. With Task 217's fixed packet-local rect `(-1,3,14,16)`, that gives packet global `(15,19,14,16)` against clip rect `(16,16,504,460)`, so containment fails only on the left edge (`15 < 16`) while right/top/bottom stay contained (`29 <= 520`, `19 >= 16`, `35 <= 476`). The exact surviving overlap is `intersection=(16,19,13,16)`: not full containment, not zero-overlap drop, but a positive `13x16` partial overlap that keeps the packet drawable under the owner clip and makes it the preserved clipped packet on this route. Validation for this documentation slice: temporary preserved-runtime probe `/home/derrick/.openclaw/workspace/.temp/gdgs-heading-g-clip-overlap-probe.gd` run with `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-heading-g-clip-overlap-probe.gd --quit`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '8450,8460p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp | sed -n '410,426p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_rd/renderer_canvas_render_rd.cpp | sed -n '3024,3034p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-clip-overlap-fact-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 ---
 
@@ -8406,7 +8428,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-clip-origin-16-16-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 
@@ -8416,7 +8438,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: the direct `HudLabel` clip rect left/top edge `(16,16)` comes from ordinary control layout placement of the clip owner itself, not from glyph-local geometry and not from a hidden later draw-path offset. The concrete path is: the repro scene and builder script both author `HudMargin` at viewport offsets `offset_left = 16`, `offset_top = 16`; `HudMargin` sits directly under a `CanvasLayer` with no authored transform shift on this route, so its control layout resolves against the viewport visible rect; the default theme gives `MarginContainer` zero margins on all four sides; `MarginContainer::_notification(NOTIFICATION_SORT_CHILDREN)` therefore calls `fit_child_in_rect(...)` with an inner rect that starts at `(0,0)`; and `HudLabel` is placed at local `(0,0)` within that zero-margin rect. From there `Control::_update_canvas_item_transform()` adds the control position into the transform origin and `Control::get_global_rect()` reports that global origin, yielding the already-fixed direct owner clip left/top edge `(16,16)`. Best narrow wording after this slice: `CanvasLayer identity transform + HudMargin authored viewport offsets (16,16) + HudLabel local container position (0,0) -> HudLabel global rect origin / direct clip edge (16,16)`.
 
-Validation for this documentation slice: `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '59,70p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '68,85p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '708,726p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '755,769p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '1573,1594p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/margin_container.cpp | sed -n '117,132p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/container.cpp | sed -n '109,150p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1268,1271p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_layer.cpp | sed -n '90,103p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '8453,8458p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp | sed -n '413,424p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-clip-origin-16-16-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '59,70p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '68,85p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '708,726p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '755,769p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '1573,1594p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/margin_container.cpp | sed -n '117,132p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/container.cpp | sed -n '109,150p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1268,1271p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_layer.cpp | sed -n '90,103p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '8453,8458p'`; `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp | sed -n '413,424p'`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-clip-origin-16-16-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 ---
 
@@ -8433,7 +8455,7 @@ Validation for this documentation slice: `nl -ba /home/derrick/.openclaw/workspa
 - `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
 
 **Files Created/Deleted/Modified:**
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-left-edge-only-contrast-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/run_stage_case_checkpoint_left_margin_1px.gd`
@@ -8448,7 +8470,7 @@ Concrete finding: the contrast removed exactly the targeted non-containment and 
 
 Despite that precise geometry change, the preserved lane identity did **not** move: both fresh runs still emitted `temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}`, still hit `fence_wait_error submit_serial=9`, still ended the command-summary tail on `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, still later reached `breadcrumb=BLIT_PASS`, and still exited by signal `6` / code `134` (`subprocess` return `-6`). Best honest read after this slice: the first heading `G` packet's 1 px left-edge-only partial overlap is a coexisting packet-local fact, but it is **not required** for either the preserved clipped preserve-rect family classification or the surviving crash identity on this lane.
 
-Validation for this documentation slice: `python3 /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/run_first_l88_left_edge_contrast.py`; `cat /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/official-first-l88-left-edge-contrast-vulkan-sourcebuild-20260526-201400/comparison.txt`; `cat /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/official-first-l88-left-edge-contrast-vulkan-sourcebuild-20260526-201400/results.json`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-left-edge-only-contrast-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`.
+Validation for this documentation slice: `python3 /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/run_first_l88_left_edge_contrast.py`; `cat /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/official-first-l88-left-edge-contrast-vulkan-sourcebuild-20260526-201400/comparison.txt`; `cat /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/official-first-l88-left-edge-contrast-vulkan-sourcebuild-20260526-201400/results.json`; `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-left-edge-only-contrast-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`.
 
 Exact next seam now materialized: if continuation is still wanted on the same preserved lane, the sharpest adjacent question is no longer whether this specific first `G` packet overhangs by 1 px. Instead, classify why the lane still reports the same clipped preserve-rect family after that packet becomes left-edge-contained — i.e. decide whether the surviving classifier is batch-level for the same `instance_count=27` family and, if so, what other instance / packet / batch-level condition inside that family keeps the lane clipped.
 
@@ -8469,7 +8491,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-packet-carrier-vs-export-writeback-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -8477,7 +8499,7 @@ Exact next seam now materialized: if continuation is still wanted on the same pr
 
 Concrete finding: one rung deeper than Task 193, the surviving exported shader-alpha carrier splits into the last packet-local/shared-fragment carrier **`color.a`** versus the later export/writeback slot **`frag_color.a`**. The tighter surviving carrier is **`color.a`**. `frag_color.a` is still the exact same live value at the merge boundary, but as a name it is already one step later: the immediate fragment-output/writeback alias created by the final whole-vector copy. So the deeper split does not reveal a new transform between them; it only shows that the last packet-local/shared-fragment identity is the tighter carrier, while the export slot name remains the first outward-facing alias of that same value.
 
-Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-packet-carrier-vs-export-writeback-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: the surviving source-alpha side is now reduced to the last packet-local/shared-fragment alpha carrier itself, so any further honest continuation would need to split **inside `color.a`'s packet-local composition** (for example, the inherited pre-MSDF packet alpha versus the packet-local multiplier `a`) rather than reopening the later export slot alias, consumer alias, or broader admitted color term.
+Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-source-alpha-packet-carrier-vs-export-writeback-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: the surviving source-alpha side is now reduced to the last packet-local/shared-fragment alpha carrier itself, so any further honest continuation would need to split **inside `color.a`'s packet-local composition** (for example, the inherited pre-MSDF packet alpha versus the packet-local multiplier `a`) rather than reopening the later export slot alias, consumer alias, or broader admitted color term.
 
 ---
 
@@ -8496,7 +8518,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-merge-co-condition-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -8504,7 +8526,7 @@ Validation for this documentation slice: `git diff --check -- /home/derrick/.ope
 
 Concrete finding: for the exact preserved `Command Graph (L88)` crash path, **source-alpha-driven color weighting is not sufficient by itself** as the full preserved-path seam. It remains the tightest **active** carrier inside the merge, because the live color equation still uses `src_color_blend_factor = SRC_ALPHA` and `dst_color_blend_factor = ONE_MINUS_SRC_ALPHA`, so exported packet alpha descended from `d` is still the first active coefficient at the attachment boundary. But the preserve/load dependency must now return as an **independently live co-condition** at that same merge, because the destination-retention half of that exact preserved-content path only exists if prior root contents are still live under `attachment_load_ops=[0:LOAD]`. Without that `LOAD`-preserved destination participant, the path would still have a source-alpha coefficient, but it would no longer be the same preserved-content merge against already-loaded root contents that Tasks 187-188 identified. Alpha writeback stays demoted: it is still a real downstream effect of the same merge, but it is not the returned co-condition that makes this specifically a preserve-content path.
 
-Best current wording after this slice: the preserved `L88` crash path requires the source-alpha-driven `BLEND_MODE_MIX` color merge **over loaded preserved destination/root contents**. Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-merge-co-condition-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`. Exact next seam that becomes clear from this stop point: stay at the same exact `L88` preserve-content merge and, only if another slice is wanted, split whether the returned independently live preserve/load co-condition is required purely as a destination-retention prerequisite or whether there is a narrower source-backed attachment-level consequence of that `LOAD` state before any wider fix theory is introduced.
+Best current wording after this slice: the preserved `L88` crash path requires the source-alpha-driven `BLEND_MODE_MIX` color merge **over loaded preserved destination/root contents**. Validation for this documentation slice: `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-merge-co-condition-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`. Exact next seam that becomes clear from this stop point: stay at the same exact `L88` preserve-content merge and, only if another slice is wanted, split whether the returned independently live preserve/load co-condition is required purely as a destination-retention prerequisite or whether there is a narrower source-backed attachment-level consequence of that `LOAD` state before any wider fix theory is introduced.
 
 ---
 
@@ -8523,7 +8545,7 @@ Best current wording after this slice: the preserved `L88` crash path requires t
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-preserve-blend-boundary-consequence-2026-05-26.md`
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -8550,7 +8572,7 @@ Said plainly: after Task 187 identified the preserve-content `L88` blend boundar
 **Files Created/Deleted/Modified:**
 - downstream-consequence tracing notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
@@ -8582,7 +8604,7 @@ Exact next seam now becomes clear only if the investigation continues outward fr
 **Files Created/Deleted/Modified:**
 - median-scalar identity isolation notes / tiny reversible instrumentation as needed
 - `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md`
-- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
 **Status:** ✅ Complete
 
