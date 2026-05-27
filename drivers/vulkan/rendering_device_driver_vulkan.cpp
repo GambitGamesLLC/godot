@@ -3151,12 +3151,15 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
 	print_line(vformat("[gdgs-vk] fence_wait_begin submit_serial=%d queue_family=%d queue_index=%d fence_status=%d wait_semaphores=%d command_buffers=%d signal_semaphores=%d swap_chains=%d pending_fence_image_semaphores=%d present_submission=%s wait_summary=%s wait_provenance=%s signal_summary=%s signal_provenance=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)fence_status, fence->last_wait_semaphore_count, fence->last_command_buffer_count, fence->last_signal_semaphore_count, fence->last_swap_chain_count, fence->last_pending_fence_semaphore_count, fence->last_present_submission ? "true" : "false", fence->last_wait_semaphore_summary, fence->last_wait_provenance_summary, fence->last_signal_semaphore_summary, fence->last_signal_provenance_summary, fence->last_command_buffer_summary));
 	_debug_submit9_completion_trace_log_fence_wait_begin(fence, fence_status);
+	_debug_submit9_prewait_window_log_fence_wait_begin(fence, fence_status);
 	VkResult wait_result = fence_status;
 	if (fence_status == VK_NOT_READY) {
 		wait_result = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
 		if (wait_result != VK_SUCCESS) {
 			print_line(vformat("[gdgs-vk] fence_wait_error submit_serial=%d queue_family=%d queue_index=%d wait_result=%d wait_summary=%s wait_provenance=%s signal_summary=%s signal_provenance=%s command_summary=%s", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)wait_result, fence->last_wait_semaphore_summary, fence->last_wait_provenance_summary, fence->last_signal_semaphore_summary, fence->last_signal_provenance_summary, fence->last_command_buffer_summary));
-			_debug_submit9_completion_trace_log_fence_wait_end(fence, fence_status, wait_result, vkGetFenceStatus(vk_device, fence->vk_fence));
+			const VkResult wait_error_post_status = vkGetFenceStatus(vk_device, fence->vk_fence);
+			_debug_submit9_completion_trace_log_fence_wait_end(fence, fence_status, wait_result, wait_error_post_status);
+			_debug_submit9_prewait_window_log_fence_wait_end(fence, fence_status, wait_result, wait_error_post_status);
 			_debug_submit9_clear_command_buffer_watch(fence);
 		}
 		ERR_FAIL_COND_V_MSG(wait_result != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", wait_result));
@@ -3165,6 +3168,7 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	VkResult post_wait_status = vkGetFenceStatus(vk_device, fence->vk_fence);
 	print_line(vformat("[gdgs-vk] fence_wait_end submit_serial=%d queue_family=%d queue_index=%d fence_status=%d", (uint64_t)fence->last_submit_serial, fence->last_queue_family, fence->last_queue_index, (int)post_wait_status));
 	_debug_submit9_completion_trace_log_fence_wait_end(fence, fence_status, wait_result, post_wait_status);
+	_debug_submit9_prewait_window_log_fence_wait_end(fence, fence_status, wait_result, post_wait_status);
 	_debug_submit9_clear_command_buffer_watch(fence);
 	VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence);
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't reset Vulkan fence (VkResult error %d).", err));
@@ -3396,6 +3400,8 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 			fence->last_submit9_signal_payload_summary = String();
 			fence->last_submit9_command_buffer_payload_summary = String();
 			fence->last_submit9_command_buffer_residency_summary = String();
+			fence->last_post_submit_fence_status = VK_NOT_READY;
+			fence->last_post_submit_device_observation_summary = String();
 			if (_debug_submit9_sync_payload_enabled() && _debug_submit9_completion_trace_is_target_submit(fence->last_submit_serial)) {
 				fence->last_submit9_wait_payload_summary = _debug_submit9_wait_payload_summary(wait_semaphores, wait_semaphores_stages);
 				fence->last_submit9_signal_payload_summary = _debug_submit9_signal_payload_summary(signal_semaphores);
@@ -3412,6 +3418,11 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		device_queue.submit_mutex.unlock();
 
 		if (err == VK_SUCCESS && fence != nullptr) {
+			fence->last_post_submit_fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
+			if (_debug_submit9_prewait_window_enabled() && _debug_submit9_completion_trace_is_target_submit(fence->last_submit_serial)) {
+				fence->last_post_submit_device_observation_summary = _debug_submit9_device_observation_summary(fence->last_post_submit_fence_status);
+				_debug_submit9_prewait_window_log_post_submit(fence);
+			}
 			_debug_register_signal_semaphore_states(p_cmd_semaphores, p_swap_chains, fence);
 			_debug_register_wait_semaphore_states(p_wait_semaphores, fence);
 		}
@@ -12929,6 +12940,14 @@ bool RenderingDeviceDriverVulkan::_debug_submit9_sync_payload_enabled() const {
 	return enabled;
 }
 
+bool RenderingDeviceDriverVulkan::_debug_submit9_prewait_window_enabled() const {
+	static const bool enabled = []() {
+		const char *value = getenv("GODOT_GDGS_DEBUG_SUBMIT9_PREWAIT_WINDOW");
+		return value != nullptr && value[0] != '\0' && value[0] != '0';
+	}();
+	return enabled;
+}
+
 bool RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_is_target_submit(uint64_t p_submit_serial) const {
 	return p_submit_serial == 9;
 }
@@ -13105,6 +13124,20 @@ void RenderingDeviceDriverVulkan::_debug_submit9_clear_command_buffer_watch(cons
 	}
 }
 
+String RenderingDeviceDriverVulkan::_debug_submit9_device_observation_summary(VkResult p_fence_status) const {
+	if (p_fence_status != VK_ERROR_DEVICE_LOST) {
+		return "{device_fault_probe=skipped}";
+	}
+	if (device_functions.GetDeviceFaultInfoEXT == nullptr) {
+		return "{device_fault_probe=unavailable}";
+	}
+
+	VkDeviceFaultCountsEXT fault_counts = {};
+	fault_counts.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT;
+	VkResult fault_result = device_functions.GetDeviceFaultInfoEXT(vk_device, &fault_counts, nullptr);
+	return vformat("{device_fault_probe=counts_only,device_fault_result=%d,vendor_info_count=%d,address_info_count=%d,vendor_binary_size=%d}", (int)fault_result, fault_counts.vendorInfoCount, fault_counts.addressInfoCount, fault_counts.vendorBinarySize);
+}
+
 void RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_log_queue_submit(const Fence *p_fence, VkResult p_fence_status_before_submit) const {
 	if ((!_debug_submit9_completion_trace_enabled() && !_debug_submit9_sync_payload_enabled()) || p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
 		return;
@@ -13133,6 +13166,30 @@ void RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_log_fence_wait
 	if (_debug_submit9_sync_payload_enabled()) {
 		print_line(vformat("[gdgs-vk] submit9_sync_trace fence_wait_end fence=%d wait_result=%d post_wait_status=%d residency=%s", (uint64_t)p_fence->vk_fence, (int)p_wait_result, (int)p_post_wait_status, _debug_submit9_command_buffer_residency_summary(p_fence)));
 	}
+}
+
+void RenderingDeviceDriverVulkan::_debug_submit9_prewait_window_log_post_submit(const Fence *p_fence) const {
+	if (!_debug_submit9_prewait_window_enabled() || p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
+		return;
+	}
+	print_line(vformat("[gdgs-vk] submit9_prewait_trace post_submit fence=%d post_submit_fence_status=%d post_submit_device_observation=%s command_buffer_identity_hash=%d command_summary=%s", (uint64_t)p_fence->vk_fence, (int)p_fence->last_post_submit_fence_status, p_fence->last_post_submit_device_observation_summary, p_fence->last_command_buffer_identity_hash, p_fence->last_command_buffer_summary));
+}
+
+void RenderingDeviceDriverVulkan::_debug_submit9_prewait_window_log_fence_wait_begin(const Fence *p_fence, VkResult p_pre_wait_status) const {
+	if (!_debug_submit9_prewait_window_enabled() || p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
+		return;
+	}
+	const String pre_wait_device_observation = _debug_submit9_device_observation_summary(p_pre_wait_status);
+	print_line(vformat("[gdgs-vk] submit9_prewait_trace fence_wait_begin fence=%d post_submit_fence_status=%d pre_wait_status=%d post_submit_device_observation=%s pre_wait_device_observation=%s command_buffer_identity_hash=%d command_summary=%s", (uint64_t)p_fence->vk_fence, (int)p_fence->last_post_submit_fence_status, (int)p_pre_wait_status, p_fence->last_post_submit_device_observation_summary, pre_wait_device_observation, p_fence->last_command_buffer_identity_hash, p_fence->last_command_buffer_summary));
+}
+
+void RenderingDeviceDriverVulkan::_debug_submit9_prewait_window_log_fence_wait_end(const Fence *p_fence, VkResult p_pre_wait_status, VkResult p_wait_result, VkResult p_post_wait_status) const {
+	if (!_debug_submit9_prewait_window_enabled() || p_fence == nullptr || !_debug_submit9_completion_trace_is_target_submit(p_fence->last_submit_serial)) {
+		return;
+	}
+	const String pre_wait_device_observation = _debug_submit9_device_observation_summary(p_pre_wait_status);
+	const String post_wait_device_observation = _debug_submit9_device_observation_summary(p_post_wait_status);
+	print_line(vformat("[gdgs-vk] submit9_prewait_trace fence_wait_end fence=%d post_submit_fence_status=%d pre_wait_status=%d wait_result=%d post_wait_status=%d post_submit_device_observation=%s pre_wait_device_observation=%s post_wait_device_observation=%s command_buffer_identity_hash=%d command_summary=%s", (uint64_t)p_fence->vk_fence, (int)p_fence->last_post_submit_fence_status, (int)p_pre_wait_status, (int)p_wait_result, (int)p_post_wait_status, p_fence->last_post_submit_device_observation_summary, pre_wait_device_observation, post_wait_device_observation, p_fence->last_command_buffer_identity_hash, p_fence->last_command_buffer_summary));
 }
 
 String RenderingDeviceDriverVulkan::_debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const {
