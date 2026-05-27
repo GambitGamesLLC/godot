@@ -296,6 +296,49 @@ Next seam materialized by this stop point:
 
 - if continuation is still wanted on the same preserved lane, split inside this now-fixed clip geometry itself — for example, whether the `1 px` left overhang comes directly from the glyph's own MSDF rect/bearing versus an upstream line/layout offset, and/or the exact source of the packet's `y=3` inset
 
+## 2026-05-26 documentation follow-up — Task 218 (`oc-rw5f`)
+
+Stayed on the same preserved first-`L88` lane after Task 217 fixed the packet-local x/y inputs, and resolved the next honest clip-intersection rung instead of widening back out into broader provenance or fix theories.
+
+Durable note:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-clip-overlap-fact-2026-05-26.md`
+
+Concrete finding:
+
+- the direct `HudLabel` `RichTextLabel` route is a real clip-owner route on the preserved runtime: `clip_contents=true`, `global_rect=(16,16,504,460)`, matching the preserved packet artifact's `clip_rect={x=16,y=16,w=504,h=460}`
+- the fixed first heading `G` packet is translated from local `(-1,3,14,16)` to global `(15,19,14,16)` against that owner clip rect
+- exact containment fails only on the left edge (`15 < 16`), while the right/top/bottom edges remain contained (`29 <= 520`, `19 >= 16`, `35 <= 476`)
+- the surviving visible overlap is the exact intersection `(16,19,13,16)`, so the packet is not fully contained but still positively overlaps by `13x16` and remains drawable under the owner clip instead of disappearing
+- the renderer-side preserve-rect gate still classifies the batch by `rect-like && current_batch->clip != nullptr && gdgs_canvas_blend_mode_uses_prior_color(...)`; this slice closes the deeper packet-local fact that makes the now-fixed `G` packet **actually clipped** on that preserved route rather than merely clip-capable
+- best narrow wording after this slice is:
+  - `owner clip rect (16,16,504,460)` vs `packet global rect (15,19,14,16)` -> `intersection (16,19,13,16)` -> non-empty partial-overlap, not full containment and not zero-overlap drop
+
+Next seam materialized by this stop point:
+
+- the immediate packet/clip intersection seam is now closed; any continuation on the same preserved lane would need a genuinely new adjacent fact rather than reopening already-closed owner/caller/glyph-local/clip-overlap steps
+
+## 2026-05-26 documentation follow-up — Task 217 (`oc-r0qa`)
+
+Stayed on the same preserved first-`L88` lane after Task 216 fixed the left overhang as glyph-local, and resolved the adjacent baseline-anchor rung behind the packet's local `y=3` inset instead of reopening broader provenance.
+
+Durable note:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-heading-g-y-inset-origin-2026-05-26.md`
+
+Concrete finding:
+
+- on the direct `HudLabel -> RichTextLabel::_draw_line(...) -> DRAW_STEP_TEXT -> TS->font_draw_glyph(...)` route, the first line's glyph anchor is built from the line ascent before the MSDF glyph rect-position term is applied
+- a smallest reversible preserved-runtime probe fixed the exact metrics for the same preserved pair (`font_rid RID(687194767361)`, `font_size 16`, `glyph index 42`): `shaped_text_get_ascent(...) = 18`, `font_get_glyph_offset(...) = (-1,-15)`, `font_get_glyph_size(...) = (14,16)`, `font_baseline_offset = 0`, `font_spacing_top = 0`, `label.get_line_offset(0) = 0`
+- that closes the local packet-y decomposition exactly: `18 + (-15) = 3`
+- the stricter source-only tie is also now fixed: on the MSDF path `font_get_glyph_offset(...)` returns the same scaled `fgl.rect.position` term that `_font_draw_glyph(...)` adds into `cpos` before `draw_msdf_rect_region(...)`
+- best narrow wording after this slice is:
+  - `packet local y = 3` = `first-line shaped ascent 18` + `glyph-local MSDF rect-position y term -15`
+
+Next seam materialized by this stop point:
+
+- the immediate packet-local geometry seam is now closed; any continuation on the same preserved lane would need a genuinely new adjacent fact rather than reopening the already-resolved owner/caller/left-overhang/baseline-anchor steps
+
 ## 2026-05-26 documentation follow-up — Task 216 (`oc-zo3z`)
 
 Stayed on the same preserved first-`L88` lane after Task 215 fixed the packet's 1-pixel left-edge clip geometry, and resolved the origin of that overhang rather than reopening broader packet provenance.
@@ -307,10 +350,10 @@ Durable note:
 Concrete finding:
 
 - the first heading `G` packet's `1 px` left overhang comes directly from the glyph's own MSDF rect/bearing, not from an upstream line/layout offset
-- a preserved-runtime probe showed the first shaped glyph has `offset=(0,0)`, while `font_get_glyph_offset(...) = (-1,-14)` and `font_get_glyph_size(...) = (14,16)` for the same preserved-runtime pair (`font_rid RID(687194767361)`, `font_size 16`, `glyph index 42`)
+- a preserved-runtime probe showed the first shaped glyph has `offset=(0,0)`, while `font_get_glyph_offset(...) = (-1,-15)` and `font_get_glyph_size(...) = (14,16)` for the same preserved-runtime pair (`font_rid RID(687194767361)`, `font_size 16`, `glyph index 42`)
 - those glyph-local metrics line up exactly with the preserved packet-local rect's horizontal side: local packet `x=-1`, `w=14`
 - best narrow wording after this slice is:
-  - `first shaped glyph layout offset = (0,0)`, glyph-local bearing/rect = `(-1,-14)` with size `(14,16)`, packet local rect = `(-1,3,14,16)` -> left overhang is glyph-local, while `y=3` is the baseline-side draw anchor plus glyph-local vertical bearing
+  - `first shaped glyph layout offset = (0,0)`, glyph-local bearing/rect = `(-1,-15)` with size `(14,16)`, packet local rect = `(-1,3,14,16)` -> left overhang is glyph-local, while `y=3` is the baseline-side draw anchor plus glyph-local vertical bearing
 
 Next seam materialized by this stop point:
 
@@ -8078,3 +8121,57 @@ Validation for this documentation slice:
 Exact next seam now materialized:
 
 - if continuation is still wanted on the same preserved lane, stay on the now-fixed direct `DRAW_STEP_TEXT -> font_draw_glyph(...)` route and classify the tightest useful next rung inside that branch — either the `font_color` identity after `_find_color(...)` / bold-format resolution, or the exact first glyph/subspan within the `HudLabel` BBCode text that maps to the preserved clipped packet.
+
+## 2026-05-26 — Task 219: resolve the exact source-backed origin of the direct `HudLabel` clip rect left/top edge `(16,16)`
+
+Durable note:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-clip-origin-16-16-2026-05-26.md`
+
+Source-backed conclusion:
+
+- the direct `HudLabel` clip edge does not pick up its `(16,16)` left/top from glyph-local geometry or a hidden late draw offset
+- the repro scene and builder script both author the parent `HudMargin` `MarginContainer` at `offset_left = 16`, `offset_top = 16`
+- because `HudMargin` sits directly under `CanvasLayer`, its anchorable parent rect on this route is the viewport visible rect; the `CanvasLayer` itself contributes no authored transform shift here
+- the default theme gives `MarginContainer` zero margins on all four sides, so `MarginContainer::_notification(NOTIFICATION_SORT_CHILDREN)` lays out `HudLabel` into an inner rect that begins at `(0,0)`
+- `HudLabel` is therefore placed at local `(0,0)` inside `HudMargin`, and `Control::_update_canvas_item_transform()` plus `Control::get_global_rect()` expose the resulting owner global origin as `(16,16)`
+- because `RichTextLabel` has `clip_contents=true`, that same owner global-rect origin becomes the direct clip rect left/top edge behind the already-fixed packet/clip overlap fact
+
+Validation for this documentation slice:
+
+- `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scenes/gdgs_happy_path_control.tscn | sed -n '59,70p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/scripts/build_control_scene.gd | sed -n '68,85p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '708,726p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '755,769p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/control.cpp | sed -n '1573,1594p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/container.cpp | sed -n '109,150p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/margin_container.cpp | sed -n '117,132p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/theme/default_theme.cpp | sed -n '1268,1271p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/main/canvas_layer.cpp | sed -n '90,103p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/scene/gui/rich_text_label.cpp | sed -n '8453,8458p'`
+- `nl -ba /home/derrick/.openclaw/workspace/projects/godot/servers/rendering/renderer_canvas_cull.cpp | sed -n '413,424p'`
+- `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-hudlabel-clip-origin-16-16-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`
+
+## 2026-05-26 — Task 220: run a minimal reversible contrast that removes only the first heading `G` packet's 1 px left-edge non-containment
+
+Durable note:
+
+- `/home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-left-edge-only-contrast-2026-05-26.md`
+
+Fresh artifact root:
+
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/official-first-l88-left-edge-contrast-vulkan-sourcebuild-20260526-201400/`
+
+Tight result:
+
+- the smallest successful reversible contrast was a runtime-only `HudLabel` `normal` stylebox override that increased the effective left content margin from `0` to `1`, leaving the direct owner clip rect fixed at `clip_rect={x=16,y=16,w=504,h=460}` while shifting the first traced heading-`G` packet from `command.rect={x=-1,y=3,w=14,h=16}` to `command.rect={x=0,y=3,w=14,h=16}`
+- that means the exact 1 px left-edge-only non-containment was removed: the packet moved from global `(15,19,14,16)` to global `(16,19,14,16)` against the same owner clip origin `(16,16)`
+- despite that geometry change, the preserved failing lane stayed unchanged in both fresh launches: `temp_diag_clipped_preserve_rect_gate_result={matched=10,skipped=9}`, `fence_wait_error submit_serial=9`, command-summary tail still ending on `Tonemap (L87) (Draw) -> Command Graph (L88) (Draw)`, later breadcrumb still reaching `BLIT_PASS`, and process exit still `134` / signal `6`
+- the honest read is therefore that the first heading `G` packet's 1 px left-edge-only partial overlap is **not required** for either the clipped preserve-rect family classification or the surviving crash identity on this lane; it is a coexisting packet-local fact, not the dependency that explains the lane
+
+Validation for this documentation slice:
+
+- `python3 /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/run_first_l88_left_edge_contrast.py`
+- `cat /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/official-first-l88-left-edge-contrast-vulkan-sourcebuild-20260526-201400/comparison.txt`
+- `cat /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-26/official-first-l88-left-edge-contrast-vulkan-sourcebuild-20260526-201400/results.json`
+- `git diff --check -- /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-first-l88-left-edge-only-contrast-2026-05-26.md /home/derrick/.openclaw/workspace/projects/godot/doc/gdgs-compositor-staged-qa-2026-05-17.md /home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-godot-local-rd-compositor-instrumentation.md`

@@ -45,7 +45,7 @@ A tiny reversible preserved-runtime probe shaped the first heading body, inspect
 Relevant facts:
 
 - first shaped glyph offset = `(0, 0)`
-- `font_get_glyph_offset(...) = (-1, -14)`
+- `font_get_glyph_offset(...) = (-1, -15)`
 - `font_get_glyph_size(...) = (14, 16)`
 - `font_get_glyph_uv_rect(...) = [P: (1, 1), S: (14, 16)]`
 - `font_get_glyph_advance(...) = (11.909375..., 21.79688)`
@@ -89,7 +89,7 @@ The same probe plus source reads also make the `y=3` inset understandable on the
 The glyph-local font offset reports:
 
 ```text
-glyph y offset = -14
+glyph y offset = -15
 ```
 
 while the emitted packet rect reports:
@@ -101,11 +101,11 @@ packet local y = 3
 That means the draw-call anchor `p_pos.y` on this route is effectively the line baseline origin for the glyph, and the packet's top edge is then shifted upward by the glyph-local vertical bearing:
 
 ```text
-p_pos.y + (-14) = 3
-=> p_pos.y = 17
+p_pos.y + (-15) = 3
+=> p_pos.y = 18
 ```
 
-This is consistent with the RichTextLabel line draw path, where the baseline-side anchor is built from the line offset and ascent before `TS->font_draw_glyph(...)` is called. So the vertical inset is not an unrelated clip artifact; it is the baseline anchor plus the glyph's negative vertical bearing.
+This is consistent with the RichTextLabel line draw path, where the baseline-side anchor is built from the line offset and ascent before `TS->font_draw_glyph(...)` is called. Task 217 then tightened that source-backed decomposition exactly to `shaped_text_get_ascent(...) = 18` plus glyph-local y term `-15`. So the vertical inset is not an unrelated clip artifact; it is the baseline anchor plus the glyph's negative vertical bearing.
 
 ## Classification
 
@@ -119,7 +119,7 @@ More explicitly:
 
 ```text
 first shaped glyph layout offset = (0, 0)
-glyph-local font offset = (-1, -14)
+glyph-local font offset = (-1, -15)
 glyph-local font size   = (14, 16)
 packet local rect       = (-1, 3, 14, 16)
 => left overhang comes from the glyph's own x bearing / MSDF rect position, not upstream layout
@@ -129,7 +129,7 @@ And on the same route:
 
 ```text
 packet y = 3
-= baseline-side draw anchor y (17) + glyph-local y bearing (-14)
+= baseline-side draw anchor y (18) + glyph-local y bearing (-15)
 ```
 
 ## Conclusion
@@ -144,7 +144,7 @@ If continuation is still wanted on the same preserved lane, the next honest adja
 
 The next narrow seam would be to split one rung deeper inside the same glyph-local geometry, such as:
 
-- the exact source-backed origin of the baseline-side anchor `p_pos.y = 17` that combines with glyph y bearing `-14` to produce packet local `y = 3`, and/or
+- the exact source-backed origin of the baseline-side anchor `p_pos.y = 18` that combines with glyph y bearing `-15` to produce packet local `y = 3`, and/or
 - whether the preserved route needs any stricter source-only tie between `font_get_glyph_offset(...)` and the internal `fgl.rect.position` cache field for this exact MSDF glyph
 
 without reopening already-closed provenance links or broader crash theories.
