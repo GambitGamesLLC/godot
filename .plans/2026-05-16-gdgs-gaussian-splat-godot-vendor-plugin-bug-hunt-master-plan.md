@@ -9087,6 +9087,7 @@ Repo-local validation completed on the touched files:
 - `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit`
 - `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_render_manager.gd --check-only --quit`
 - `godot --headless --path . --script addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd --check-only --quit`
+- `godot --headless --path . --import`
 
 Artifact roots for this coder slice: no new runtime repro artifact root was produced because this pass intentionally stopped at reversible instrumentation + syntax validation. The next QA slice should write its repro outputs under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/` (or the current dated sibling root if QA rolls to a fresh day) and capture separate logs for `markers_only` and `empty_compute_boundary` against the locked `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` ladder.
 
