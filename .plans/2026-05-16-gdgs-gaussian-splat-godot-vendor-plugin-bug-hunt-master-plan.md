@@ -8979,7 +8979,89 @@ On the GDScript side, the new rung was threaded only through the existing debug-
 **Files Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-post-barrier-no-scratch-qa-sourcebuild-20260527-081118/`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-b955`, updated the temp checkpoint harness to expose the new `projection_post_barrier_no_scratch_immediate_return_only` raster-stage enum value, then reran the exact same host-Wayland / Vulkan source-built repro lane against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Exact artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-post-barrier-no-scratch-qa-sourcebuild-20260527-081118/` with `context.txt`, `run_summary.tsv`, per-case stdout/stderr logs, command captures, and exit-status files under `logs/`.
+
+Concrete three-rung comparison on the shared `scratch_projection_mirror_only` checkpoint:
+- `projection_non_footprint_immediate_return_only`: **still good**. Exit `0`; repeated runs continue to mirror `projection_shader_mode=non_footprint_immediate_return_only`, `scratch_projection_stage_bits_hex=0x00000801`, `scratch_projection_entered=true`, and `scratch_projection_non_footprint_immediate_return=true`, with every later projection bit false.
+- `projection_post_barrier_no_scratch_immediate_return_only`: **already fails**. Exit `134`; the same `submit_serial=9` / fence-loss / `BLIT_PASS` failure identity appears even though this rung crosses the barrier and returns before any post-barrier scratch write. The mirrored scratch probe remains all zeroes: `scratch_projection_stage_bits_hex=0x00000000`, `scratch_projection_entered=false`, `scratch_projection_post_barrier_no_scratch_immediate_return=false`, and `scratch_projection_post_barrier_immediate_return=false`.
+- `projection_post_barrier_immediate_return_only`: **matches the same failure profile**. Exit `134`; same `submit_serial=9` fence-loss / `BLIT_PASS` identity and same all-zero scratch mirror.
+
+Exact QA conclusion: crossing the shared post-footprint `barrier()` is sufficient by itself to reproduce the failure. The crash does **not** depend on the first post-barrier scratch write, later instance-data marker writes, or any `splat_instance_data[id]` read. The projection-only seam is now sharp enough for audit: `projection_non_footprint_immediate_return_only` is the last surviving rung, while both post-barrier variants fail identically before any mirrored post-barrier proof survives.
+
+### Task 230: Auditor truth-check the projection-only boundary and recommend whether to stop splitting or pivot to backend/barrier-focused investigation
+
+**Bead ID:** `oc-7v8d`
+**SubAgent:** `primary` (for `auditor`)
+**Role:** `auditor`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and independently truth-check the now-sharpened boundary. Verify from the plan, code diff, and saved artifacts that `projection_non_footprint_immediate_return_only` is the last good rung and that both post-barrier variants (`projection_post_barrier_no_scratch_immediate_return_only` and `projection_post_barrier_immediate_return_only`) fail with the same pre-mirror `submit_serial=9` / fence-loss / `BLIT_PASS` identity. Then recommend whether the projection-only split objective is complete enough to close this seam and pivot future work toward backend/barrier-focused investigation, or whether one more projection-only split is still justified. Update this plan with the audit conclusion and close the bead directly if the seam is fully audited complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-7v8d` and independently re-checked the projection-only boundary against the plan, the landed debug seams, and the saved artifact roots:
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-non-footprint-qa-sourcebuild-20260527-075229/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-post-barrier-qa-sourcebuild-20260527-080130/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-post-barrier-no-scratch-qa-sourcebuild-20260527-081118/`
+
+Audit truth-check outcome:
+- The run summaries consistently show `projection_non_footprint_immediate_return_only` exiting `0` while every rung that crosses the shared post-footprint barrier exits `134`.
+- The surviving pre-barrier rung repeatedly mirrors `projection_shader_mode=non_footprint_immediate_return_only`, `scratch_projection_stage_bits_hex=0x00000801`, `scratch_projection_entered=true`, and `scratch_projection_non_footprint_immediate_return=true`, with later projection bits remaining false.
+- Both post-barrier variants (`projection_post_barrier_no_scratch_immediate_return_only` and `projection_post_barrier_immediate_return_only`) fail with the same pre-mirror identity: `queue_submit submit_serial=9`, `fence_wait_error submit_serial=9 wait_result=-4`, `last_breadcrumb="BLIT_PASS"`, and an all-zero mirrored scratch probe (`scratch_projection_stage_bits_hex=0x00000000`, `scratch_projection_entered=false`, no surviving post-barrier bits).
+- Because the no-scratch post-barrier rung fails identically to the post-barrier-write rung, the failure does not depend on the first post-barrier scratch write, later instance-data-block markers, or any `splat_instance_data[id]` read.
+
+Auditor conclusion: the projection-only split objective is **audited complete enough to stop splitting here**. The boundary is already sharp at `projection_non_footprint_immediate_return_only` (last good) → `projection_post_barrier_no_scratch_immediate_return_only` / `projection_post_barrier_immediate_return_only` (first bad). Another projection-only split is not justified because the remaining difference is effectively barrier crossing itself, and the failing variants die before any mirrored post-barrier proof survives. Future work should pivot from projection-mode surgery to backend/barrier-focused investigation around the post-footprint barrier / command-graph interaction that culminates in the stable `submit_serial=9` / fence-loss / `BLIT_PASS` signature.
+
+### Task 231: Materialize the backend/barrier pivot after the audited projection-only stop point
+
+**Bead ID:** `oc-0d08`
+**SubAgent:** `primary` (for `research`)
+**Role:** `research`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-0d08` and build directly on the audited conclusion that projection-only splitting is complete enough to stop: `projection_non_footprint_immediate_return_only` is the last good rung, and any rung that crosses the shared post-footprint barrier reproduces the same pre-mirror `submit_serial=9` / fence-loss / `BLIT_PASS` identity. Do not widen back into generic ancestry work. Instead, materialize the next narrow backend/barrier-focused investigation seam around that barrier crossing and its command-graph interaction: identify the highest-signal next discriminator, update this master plan with a concrete new task/result block near the active projection/barrier tasks, create any narrower follow-on bead if the seam becomes concrete, and keep the work diagnostic/reversible. Commit/push the plan update if you land a durable planning slice, and close bead `oc-0d08` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-0d08` and stayed strictly on the already-audited projection stop point instead of reopening broader projection ancestry. Re-read the active plan plus the decisive QA/audit artifact roots for the last-good and first-bad rungs: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-non-footprint-qa-sourcebuild-20260527-075229/`, `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-post-barrier-qa-sourcebuild-20260527-080130/`, and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-post-barrier-no-scratch-qa-sourcebuild-20260527-081118/`. Those artifacts keep the same sharp read: `projection_non_footprint_immediate_return_only` is still the last good rung, while every rung that crosses the shared post-footprint barrier fails with the same pre-mirror `submit_serial=9` / `fence_wait_error submit_serial=9 wait_result=-4` / later `BLIT_PASS` identity and an all-zero mirrored scratch probe.
+
+Highest-signal next discriminator: do **not** keep splitting shader-side rungs that die before any mirrored post-barrier proof survives. The next honest seam is the **first backend-visible consume boundary after the shared post-footprint barrier is crossed**, because that is the smallest place left where we can still distinguish whether the crash is reintroduced at barrier crossing / same-dispatch completion / immediate downstream handoff, versus only later when the command-graph-visible packet is consumed. In plain terms: the right next question is no longer "which later projection instruction?"; it is "what is the first backend-visible thing that becomes different once the good pre-barrier rung turns into the bad post-barrier rung?"
+
+To materialize that seam concretely, I created follow-on bead `oc-0d08.1` as the next backend/barrier-focused coder slice: trace the first backend-visible consume boundary after `gsplat_projection` crosses the shared post-footprint barrier while preserving the same locked identity checks and without reopening blend/request-hash/ancestry detours. This closes `oc-0d08` because the projection-side stop point is now translated into a specific, narrower backend/barrier investigation target with an executable follow-on bead.
+
+### Task 232: Trace the first backend-visible consume boundary after `gsplat_projection` crosses the shared post-footprint barrier
+
+**Bead ID:** `oc-0d08.1`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-0d08.1` at start and continue the already-approved active plan from Task 231's stop point. Stay strictly on the locked source-built projection-only lane; do not reopen generic projection ancestry, blend-state, request-hash, or unrelated L88 packet theory. Build directly on the audited barrier pivot: `projection_non_footprint_immediate_return_only` is the last good rung, while both `projection_post_barrier_no_scratch_immediate_return_only` and `projection_post_barrier_immediate_return_only` fail with the same pre-mirror `submit_serial=9` / fence-loss / `BLIT_PASS` identity. Add the narrowest default-off backend/barrier-focused instrumentation needed to discriminate whether the crash is reintroduced at the first backend-visible consume point after barrier crossing — e.g. same-dispatch completion / immediate downstream handoff / first command-graph-visible packet boundary — versus only later in a deeper backend packet. Preserve the same `gsplat_projection` pipeline/descriptor/push-constant contract, preserve the same locked identity checks, keep the work diagnostic/reversible, update this plan with exact touched files, validation, artifact roots, and the next QA slice, then close the bead with a clear reason if the coder package is ready.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- backend/barrier diagnostic files as needed
 
 **Status:** ⏳ Pending
 
-**Results:** Pending QA rerun.
+**Results:** Pending. Highest-signal discriminator to answer in this slice: whether the first bad post-barrier rung diverges already at the earliest backend-visible consume/handoff boundary, or whether that boundary still looks equivalent and the stable `submit_serial=9` / `BLIT_PASS` crash identity first becomes visible only deeper in the same command-graph path.
