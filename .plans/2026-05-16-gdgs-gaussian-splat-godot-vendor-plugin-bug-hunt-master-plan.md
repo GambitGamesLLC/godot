@@ -8798,11 +8798,68 @@ Repo-local validation for the touched GDGS files completed: `git diff --check`; 
 
 ### Task 223: QA the new post-footprint / pre-instance-load rung against the failing first instance-data read
 
-**Bead ID:** `Pending`
+**Bead ID:** `oc-ajw9`
 **SubAgent:** `primary` (for `qa`)
 **Role:** `qa`
 **References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and rerun the same staged repro lane on the `scratch_projection_mirror_only` checkpoint across `projection_footprint_only`, the new `projection_instance_data_block_only`, and `projection_instance_data_only`. Verify whether the new middle rung survives and records `scratch_projection_instance_data_block_entered=true` before the first instance-data load, or whether the old failure identity already returns there; then compare that directly against the next rung where `scratch_projection_instance_data_read=true` becomes eligible. Capture the exact artifact root, update this plan with a concrete three-rung comparison, and materialize the next narrow seam based on the first rung that breaks.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-instance-block-qa-sourcebuild-20260527-074228/`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-ajw9`, updated the temp checkpoint harness to expose the newly inserted `projection_instance_data_block_only` raster-stage enum value, then reran the exact same host-Wayland / Vulkan source-built repro lane against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Exact artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-instance-block-qa-sourcebuild-20260527-074228/` with `context.txt`, `run_summary.tsv`, per-case stdout/stderr logs, command captures, and exit-status files under `logs/`.
+
+Concrete three-rung comparison on the shared `scratch_projection_mirror_only` checkpoint:
+- `projection_footprint_only`: **still good**. Exit `0`; the rung executed and mirrored back exactly the earlier safe profile: `projection_shader_mode=footprint_only`, `scratch_projection_stage_bits_hex=0x00000021`, `scratch_projection_entered=true`, `scratch_projection_footprint_returned=true`, and `scratch_projection_instance_data_block_entered=false` / `scratch_projection_instance_data_read=false`. It also produced the expected PNG at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-instance-block-qa-sourcebuild-20260527-074228/projection_footprint_only__scratch_projection_mirror_only.png`.
+- `projection_instance_data_block_only`: **first break already returns here**. Exit `134`; the same old failure identity comes back immediately (`queue_submit submit_serial=9`, `fence_wait_error submit_serial=9 wait_result=-4`, later `Command Graph (L88) (Copy)` / `BLIT_PASS`). Critically, the mirrored scratch probe remains completely zeroed: `scratch_projection_stage_bits_hex=0x00000000`, `scratch_projection_entered=false`, `scratch_projection_instance_data_block_entered=false`, and `scratch_projection_instance_data_read=false`. So this rung does **not** survive far enough to prove the shader reached the post-footprint barrier/return point.
+- `projection_instance_data_only`: **matches the same broken profile as the new middle rung**. Exit `134`; same `submit_serial=9` fence-loss / `BLIT_PASS` identity; scratch mirror still all zeroes with `scratch_projection_entered=false`, `scratch_projection_instance_data_block_entered=false`, and `scratch_projection_instance_data_read=false`.
+
+Exact QA conclusion: the new post-footprint / pre-instance-load split did **not** move the surviving boundary forward. The failure returns as soon as the ladder leaves the safe `projection_footprint_only` mode family, and it returns **before any mirrored proof of shader entry** survives. That means the next narrow seam is no longer `"first instance-data load vs earlier block entry"`; it is `"still footprint-only mode"` vs `"first non-footprint projection mode selection"` — i.e. classify whether merely leaving the footprint-only shader-mode/control path is enough to reintroduce the crash, even if the shader would return immediately before the post-footprint barrier/body can mirror anything.
+
+### Task 224: Add a first non-footprint immediate-return control to isolate mode-family break vs post-footprint body entry
+
+**Bead ID:** `oc-x1ro`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and add the narrowest reversible rung that distinguishes `footprint_only` from the first surviving **non-footprint mode selection**. Reuse the same `gsplat_projection` pipeline/descriptors/push-constant contract, but introduce a new projection debug mode that is no longer `footprint_only` while still returning immediately at the earliest possible point before the post-footprint barrier/body work. Thread it through the existing raster-stage / shader-mode control surface and scratch/readback logs only as needed, update this plan with the exact implementation result plus the next QA seam, run relevant repo-local validation, commit/push if complete, and close the bead with a clear reason.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-x1ro` and landed the narrowest reversible rung that leaves the safe `footprint_only` family without yet entering the post-footprint barrier/body lane. The new control is exposed as `projection_non_footprint_immediate_return_only` / **Projection Non-Footprint Immediate Return Only** and still uses the same `gsplat_projection` pipeline, descriptor-set surface, push-constant contract, and dispatch footprint as the rest of the projection ladder.
+
+Inside `gsplat_projection.glsl`, the new seam lives exactly at the requested boundary: after the existing shared projection-entry probe writes and after the `footprint_only` branch, but still **before** the existing `barrier()` and before any later post-footprint body work. In this new mode the shader now stamps a dedicated scratch bit `SCRATCH_PROJECTION_STAGE_NON_FOOTPRINT_IMMEDIATE_RETURN` and returns immediately. That means QA can now distinguish three states cleanly on the same readback surface: (1) safe `footprint_only`, (2) first non-footprint mode selection before the post-footprint barrier/body, and (3) the later `projection_instance_data_block_only` rung that attempts to reach the post-footprint barrier/body path.
+
+On the GDScript side, the new rung was threaded only through the existing debug-control surface: `GaussianRenderer.RasterDebugStage`, the raster-stage gate logs, stage-name helpers, shader-mode mapping, shader-mode naming, scratch-probe decode/log fields, and the compositor effect export enum now all understand `projection_non_footprint_immediate_return_only` plus `scratch_projection_non_footprint_immediate_return=true/false`. No Godot engine source files changed in this slice; the Godot repo change remains the living-plan handoff.
+
+Repo-local validation for the touched GDGS files completed: `git diff --check`; `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`; `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit`; `godot --headless --path . --script addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd --check-only --quit`; and `godot --headless --path . --import`. This coder pass stayed diagnostic and reversible.
+
+### Task 225: QA the first non-footprint immediate-return seam against footprint-only and the post-footprint body rung
+
+**Bead ID:** `oc-ktpa`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-05`, `REF-06`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and rerun the same staged repro lane on the `scratch_projection_mirror_only` checkpoint across `projection_footprint_only`, the new `projection_non_footprint_immediate_return_only`, and `projection_instance_data_block_only`. Update the temp checkpoint harness only as needed to expose the new rung. Verify whether the first non-footprint immediate-return rung still survives and mirrors `scratch_projection_non_footprint_immediate_return=true`, or whether the old `submit_serial=9` / fence-loss / `BLIT_PASS` identity already returns there; then compare that directly against the later post-footprint body rung. Capture the exact artifact root, update this plan with a concrete three-rung comparison, and materialize the next narrow seam based on the first rung that breaks.
 
 **Folders Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/`
