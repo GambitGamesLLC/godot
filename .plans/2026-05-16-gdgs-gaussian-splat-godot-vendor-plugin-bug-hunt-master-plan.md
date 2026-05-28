@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** In Progress
-**Last Updated:** 2026-05-27 20:40 EDT
+**Last Updated:** 2026-05-27 23:24 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -159,11 +159,90 @@ The existing scratch readback surface was extended—not replaced—so QA can no
 
 ### Task 0d: QA the post-footprint split ladder to find the first failing sub-step
 
-**Bead ID:** `Pending`
+**Bead ID:** `oc-peay`
 **SubAgent:** `primary` (for `qa`)
 **Role:** `qa`
 **References:** `REF-04`, `REF-05`, `REF-07`, `REF-08`
 **Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and run the same staged repro lane across `projection_footprint_only`, `projection_instance_data_only`, `projection_model_matrix_only`, `projection_splat_payload_only`, `projection_dummy_output_write_only`, and the real `projection_only` path. Use the existing scratch/projection readback checkpoints to confirm which rung actually executed on each run, then identify the first rung where the earlier success profile breaks or the later `BLIT_PASS` / fence-loss identity returns. Capture the exact artifact root and update this plan with a concrete rung-by-rung comparison plus the next narrow seam.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- repro artifacts under a new `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-.../` root
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the projection-only ladder on the source-built editor with both existing post-dispatch checkpoints and captured fresh artifacts under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-ladder-scratch-qa-sourcebuild-20260527-2244/` and `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-projection-ladder-probe-qa-sourcebuild-20260527-2230/`. Exact command lane used for each mode was `env DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- <mode>__<checkpoint> <artifact_root> no_present compositor <mode> <checkpoint> 120`, run once each for `projection_footprint_only`, `projection_instance_data_only`, `projection_model_matrix_only`, `projection_splat_payload_only`, `projection_dummy_output_write_only`, and `projection_only`.
+
+Concrete rung-by-rung QA comparison from the fresh roots:
+- `projection_footprint_only` is the only surviving rung. Exit status `0` on both checkpoints. Scratch readback shows `scratch_projection_invocations=271123`, `scratch_projection_stage_bits=33`, `scratch_projection_entered=true`, `scratch_projection_footprint_returned=true`, and every later rung flag stays `false`. Probe readback agrees: `probe_invocations=271123`, `probe_visible_splats=0`, `probe_emitted_sort_elements=0`, `probe_first_failure_stage_name=none`, `probe_error_flags=0`. This confirms the shader really executed through the footprint-return path and then exited cleanly.
+- `projection_instance_data_only` is the first failing rung. Exit status `134` on both checkpoints. Both readbacks collapse to the zero/fence-loss identity before any projection payload is recorded: scratch shows `scratch_projection_invocations=0`, `scratch_projection_stage_bits=0`, `scratch_projection_entered=false`; probe shows `probe_invocations=0`, `probe_error_flags=0`, `probe_first_failure_stage_name=none`, `probe_max_requested_tile_id_within_capacity=false`. The same run also reintroduces the known `BLIT_PASS` / fence-loss signature (`last_breadcrumb="BLIT_PASS"`, `fence_wait_error ... wait_result=-4`).
+- `projection_model_matrix_only`, `projection_splat_payload_only`, `projection_dummy_output_write_only`, and full `projection_only` all match the exact same failure profile as `projection_instance_data_only`: exit `134`, `BLIT_PASS` breadcrumb identity present, fence wait loss present, and both scratch/probe checkpoints return fully zeroed readbacks before any shader-stage evidence is retained.
+
+Actual QA conclusion: the earlier success profile breaks immediately after the footprint-only rung. The failure does **not** first appear only on the full projection path; it appears as soon as the ladder advances from the footprint-return rung to `projection_instance_data_only`. The exact artifact root for the surviving seam is therefore the transition between `projection_footprint_only` and `projection_instance_data_only`, not anything later in model-matrix, payload, dummy-write, or full projection logic.
+
+Next narrow seam materialized: split the post-footprint path again so the next QA pass can distinguish “entered after footprint but before first instance-data readback-visible write” from “first instance-data read actually executes.” I created follow-up bead `oc-78di` in `/home/derrick/.openclaw/workspace/projects/godot/` for that micro-rung split (`Split projection after-footprint seam into pre-instance-read micro-rungs`).
+
+### Task 0e: Add pre-instance-read micro-rungs between the safe footprint return and the first real instance-data read
+
+**Bead ID:** `oc-78di`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-78di` and stay strictly inside the already-approved projection-only scope. Build directly on the proven seam between `projection_footprint_only` and `projection_instance_data_only`. Add the narrowest reversible micro-rungs needed to split “safe footprint return” from “first real `splat_instance_data` consumption” without widening into later model-matrix, payload, or downstream `BLIT_PASS` ancestry work. Prefer modes that can distinguish entry after the footprint checkpoint, any pre-read probe/write that still survives, and the exact first real instance-data touch. Reuse the existing scratch/projection probe surfaces so QA can tell exactly which micro-rung executed. Update this plan with the ladder you landed, run relevant repo-local validation, commit/push if you land the instrumentation slice, and close bead `oc-78di` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Landed the narrowest projection-only micro-rung ladder that splits the already-proven safe `projection_footprint_only` return from the first real `splat_instance_data` touch, while reusing the exact same projection pipeline footprint and the existing scratch/projection readback surfaces.
+
+Concrete ladder landed:
+- `projection_footprint_only` — existing safe control; stamps entry + `SCRATCH_PROJECTION_STAGE_FOOTPRINT_RETURN` and returns before the post-footprint lane.
+- `projection_instance_data_block_only` — existing post-barrier / pre-read rung; stamps `SCRATCH_PROJECTION_STAGE_INSTANCE_DATA_BLOCK_ENTERED` and returns before any new pre-read probe.
+- `projection_pre_instance_read_probe_only` — **new** surviving pre-read probe/write rung; stamps `SCRATCH_PROJECTION_STAGE_PRE_INSTANCE_READ_PROBE` after the block-entered checkpoint and returns before touching `splat_instance_data`.
+- `projection_instance_data_touch_only` — **new** exact first-real-touch rung; stamps `SCRATCH_PROJECTION_STAGE_INSTANCE_DATA_TOUCH`, performs the first real `splat_instance_data[id]` load, and returns immediately after that touch. A tiny impossible-value branch keeps the loaded value semantically consumed so the read cannot be optimized away while still avoiding new broad probe surfaces.
+- `projection_instance_data_only` — existing post-read rung, now kept as the first confirmed post-touch-success rung by stamping `SCRATCH_PROJECTION_STAGE_INSTANCE_DATA_READ` only after the load has already completed.
+
+That gives QA the sharp three-way split requested in this task: safe footprint return vs surviving post-footprint pre-read probe/write vs the exact first real instance-data touch, without widening into model-matrix, splat-payload, dummy-write, or later `BLIT_PASS` ancestry work.
+
+Actual files changed in this slice:
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+Validation run/results:
+- `git diff --check` in `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/` — passed.
+- `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl` — passed.
+- `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit` — passed.
+- `godot --headless --path . --script addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd --check-only --quit` — passed.
+- `godot --headless --path . --import` — passed and reimported `gsplat_projection.glsl`.
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path . --import` — passed.
+
+Commit/push info: instrumentation slice not yet committed at the moment of this plan update.
+
+Even sharper next seam materialized from this implementation: QA can now classify whether the failure returns already at `projection_pre_instance_read_probe_only` (meaning the first new post-footprint probe/write is enough) or only at `projection_instance_data_touch_only` (meaning the exact first `splat_instance_data` read is the first toxic touch). That follow-up is captured explicitly in Task `0f` below.
+
+### Task 0f: QA the pre-instance micro-rung ladder to isolate whether failure begins before or at the first `splat_instance_data` read
+
+**Bead ID:** `oc-g2al`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, stay strictly inside the approved projection-only scope and rerun the staged repro lane across `projection_footprint_only`, `projection_instance_data_block_only`, `projection_pre_instance_read_probe_only`, `projection_instance_data_touch_only`, and `projection_instance_data_only` using the existing probe/scratch checkpoints. Confirm which new micro-rung actually executes on each run, then identify the first rung where the zero-readback / `BLIT_PASS` / fence-loss classifier returns. Capture the exact artifact root and update this plan with a rung-by-rung comparison so the next seam can stay projection-only and narrower than the current instance-data boundary.
 
 **Folders Created/Deleted/Modified:**
 - `/home/derrick/.openclaw/workspace/projects/godot/`
