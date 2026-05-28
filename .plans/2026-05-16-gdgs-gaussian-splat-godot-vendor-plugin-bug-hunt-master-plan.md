@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** In Progress
-**Last Updated:** 2026-05-28 10:02 EDT
+**Last Updated:** 2026-05-28 10:30 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -10053,10 +10053,77 @@ Validation completed:
 
 **Exact next QA follow-up:** rerun the same locked six-case backend/barrier ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-scope-tail-qa-sourcebuild-20260528-100559/` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`). On the decisive submit-9 packet, compare `first_later_post_scope_draw_payload_content.content_signature_hash`, `draw_payload_signature_hash`, `first_content`, `last_content`, `first_draw_payload_entry`, and `last_draw_payload_entry` across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` to determine whether divergence starts inside that later `Command Graph` draw payload or whether that payload still matches too and the seam must move later again.
 
-### Session Handoff (2026-05-28 10:10 EDT)
+### Task 263: QA rerun the locked six-case ladder and compare the later submit-9 draw-payload content fields
 
-**Stopping Point:** Coder landed the finer-grained later-draw-payload probe for bead `oc-qoam`, so the decisive submit-9 packet can now expose detailed content/state for the later `Command Graph` draw payload rather than only the outer matching scope boundary.
+**Bead ID:** `oc-sdku`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim the next QA bead in the godot repo and stay strictly inside the already-approved active backend/barrier seam. Use `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-scope-tail-qa-sourcebuild-20260528-100559/` as the baseline comparison root, and use the freshly rebuilt `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the skipped `device_lost_edge` wrinkle. Rerun the same locked six-case backend/barrier ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`) across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`. Capture a fresh artifact root with per-case stdout/stderr, command capture, env capture, and exit status. On the decisive submit-9 packet, compare `first_later_post_scope_draw_payload_content.content_signature_hash`, `draw_payload_signature_hash`, `first_content`, `last_content`, `first_draw_payload_entry`, and `last_draw_payload_entry` across the good rung and both first-bad rungs, determine whether divergence starts inside that later `Command Graph` draw payload or whether that payload still matches too and the seam must move later again, update this master plan with the exact artifact root and concrete conclusion, close the QA bead with a clear reason if complete, and materialize the next narrow follow-on bead if the seam sharpens cleanly.
 
-**Next Slice:** QA should rerun the same locked six-case ladder and compare `first_later_post_scope_draw_payload_content` across the good rung and both first-bad rungs to determine whether divergence starts inside that later draw payload or whether the payload still matches too and the seam must move later again.
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked six-case ladder with the fresh source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` and captured a fresh artifact root at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-draw-payload-qa-sourcebuild-20260528-102559/`.
+
+Artifacts in that root include:
+- `context.txt`, `commands.txt`, `run_summary.tsv`
+- per-case `logs/*.stdout.log`, `logs/*.stderr.log`, `logs/*.env.txt`, `logs/*.exact_command.txt`, `logs/*.exit_status.txt`
+- parsed comparison outputs: `submit9_later_draw_payload_compare.json`, `submit9_later_draw_payload_compare.md`
+
+Submit-9 rung-by-rung QA result for the requested later draw-payload fields:
+- `markers_only`
+  - good rung `projection_non_footprint_immediate_return_only`: exit `0`; `first_later_post_scope_draw_payload_content` resolves to the same later draw surface (`owner_begin="Command Graph (L94) (Draw)"`) but collapses to `status=scope_without_inner_labels`; requested fields `content_signature_hash`, `draw_payload_signature_hash`, `first_content`, `last_content`, `first_draw_payload_entry`, and `last_draw_payload_entry` are all absent; `post_scope_failure_surface_classifier.status="packet_local_surface_present"`
+  - first-bad rung `projection_post_barrier_no_scratch_immediate_return_only`: exit `134`; same later draw surface (`Command Graph (L94) (Draw)`), same `status=scope_without_inner_labels`, same total absence of all six requested fields, same classifier `packet_local_surface_present`
+  - first-bad rung `projection_post_barrier_immediate_return_only`: exit `134`; same later draw surface (`Command Graph (L94) (Draw)`), same `status=scope_without_inner_labels`, same total absence of all six requested fields, same classifier `packet_local_surface_present`
+- `empty_compute_boundary`
+  - good rung `projection_non_footprint_immediate_return_only`: exit `0`; same later draw surface family (`owner_begin="Command Graph (L98) (Draw)"`) and the same `status=scope_without_inner_labels`; all six requested fields remain absent; classifier still `packet_local_surface_present`
+  - first-bad rung `projection_post_barrier_no_scratch_immediate_return_only`: exit `134`; same later draw surface (`Command Graph (L98) (Draw)`), same `status=scope_without_inner_labels`, same total absence of all six requested fields, same classifier `packet_local_surface_present`
+  - first-bad rung `projection_post_barrier_immediate_return_only`: exit `134`; same later draw surface (`Command Graph (L98) (Draw)`), same `status=scope_without_inner_labels`, same total absence of all six requested fields, same classifier `packet_local_surface_present`
+
+Concrete QA conclusion:
+- The decisive submit-9 packet still reaches the same later `Command Graph` draw surface on the good rung and both first-bad rungs in both trace modes, so the coarse later draw-payload seam still matches.
+- The requested finer-grained discriminator fields never emit at all. Instead, `first_later_post_scope_draw_payload_content` uniformly degrades to `status=scope_without_inner_labels` on every rung.
+- Because those hashes / first-last summaries are absent everywhere, this probe does **not** establish any divergence inside that later draw payload. It also does **not** show a divergence at the current seam boundary itself; the later draw-payload probe result is identical across the good rung and both first-bad rungs.
+- So QA cannot truthfully claim that divergence starts inside the later draw payload from this run. The remaining seam is still later than the matched outer draw-payload boundary, but the next honest move is to make the draw-payload probe summarize label-free payload content instead of stopping at the no-inner-labels case.
+
+Next seam materialized: bead `oc-yiv8` — `Emit label-free submit-9 later draw payload content summary when inner labels are absent`.
+
+### Task 264: Coder emit a label-free submit-9 later draw-payload summary when the later Command Graph scope has no inner labels
+
+**Bead ID:** `oc-yiv8`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-yiv8` at start and stay strictly inside the already-approved active backend/barrier seam. Use `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-draw-payload-qa-sourcebuild-20260528-102559/` as the source-of-truth QA root. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the missing `submit9_error_surface_trace` / `device_lost_edge` print wrinkle. Build directly on QA’s latest conclusion: the later submit-9 `Command Graph` draw surface still matches on the good rung and both first-bad rungs, but the current probe bottoms out at `first_later_post_scope_draw_payload_content.status=scope_without_inner_labels`, so none of the requested inner discriminator fields emit. Add the smallest honest reversible backend instrumentation needed to emit a label-free payload/content summary and hash when that later draw scope has no inner labels, keep the existing identity checks intact, update this master plan with exact touched files, validation, and the exact QA follow-up, commit/push if the coder package is ready, and close bead `oc-yiv8` with a clear reason.
+
+**Status:** ✅ Complete
+
+**Results:** Extended the same default-off `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` backend summary in `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp` without widening scope or changing renderer behavior. The earlier probe stopped at `status=scope_without_inner_labels` whenever the first later post-scope render-pass surface had no inner labels; this slice keeps that exact downstream seam but adds a label-free fallback summary for that no-inner-label case.
+
+New `first_later_post_scope_draw_payload_content=` label-free fallback behavior now emitted under the same existing gate:
+- when `labels_started == 0`, the field now emits `status=label_free_scope_payload` instead of stopping with `scope_without_inner_labels`
+- it computes `label_free_signature_hash` from the later scope’s owner labels, owner entry/index provenance, owner levels, breadcrumbs, attachment load-op recipe, attachment hashes, command-count shape, and first/last backend command names
+- it also emits focused label-free discriminator fields QA can diff directly even without inner labels: `owner_entry_indexes`, `owner_label_indexes`, `owner_levels`, `label_free_attachment`, `label_free_commands`, and `label_free_backend_commands`
+- the existing outer normalized scope summary remains intact, so QA still keeps the same identity checks while gaining a hashable/contentful fallback packet for the no-inner-label case
+
+Exact touched files:
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+Validation completed:
+- `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.dev.x86_64.o`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | rg -F "label_free_scope_payload"`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | rg -F "label_free_signature_hash"`
+
+**Exact next QA follow-up:** rerun the same locked six-case backend/barrier ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-draw-payload-qa-sourcebuild-20260528-102559/` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`). On the decisive submit-9 packet, compare `first_later_post_scope_draw_payload_content.label_free_signature_hash`, `owner_entry_indexes`, `owner_label_indexes`, `owner_levels`, `label_free_attachment`, `label_free_commands`, and `label_free_backend_commands` across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` to determine whether divergence starts inside that later label-free `Command Graph` draw payload summary or whether the label-free payload still matches too and the seam must move later again.
+
+### Session Handoff (2026-05-28)
+
+**Stopping Point:** Coder landed bead `oc-yiv8` on the active backend/barrier seam by replacing the no-inner-label dead end with a label-free later draw-payload summary/hash for the first later submit-9 `Command Graph` draw scope.
+
+**Next Slice:** QA should rerun the locked six-case ladder against the rebuilt Godot binary and compare `label_free_signature_hash` plus the focused label-free attachment/command/backend-command fields across the good rung and both first-bad rungs.
 
 **Blockers/Decisions:** No new human decision needed. Derrick’s earlier decision to skip the optional `device_lost_edge` wrinkle still stands. The seam remains strictly inside the approved backend/barrier lane.
