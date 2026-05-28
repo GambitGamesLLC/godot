@@ -10196,3 +10196,11 @@ Validation note / blocker encountered:
 **Next Slice:** Coder should claim bead `oc-p4qd` and instrument the narrower indexed-draw payload / tightly adjacent bound state nested under `post_scope_failure_surface_classifier.last_post_scope_content.draw_indexed` for that later `Command Graph` packet.
 
 **Blockers/Decisions:** No new human decision needed. Derrick’s earlier decision to skip the optional `device_lost_edge` wrinkle still stands. The seam remains strictly inside the approved backend/barrier lane.
+
+### Session Handoff (2026-05-28 18:39 EDT)
+
+**Stopping Point:** The zeroed master plan file was restored from git history, harness parity was repaired, disk pressure was reduced enough to relink the dev editor again, and the indexed-draw QA lane was recovered to the validated later submit-9 packet shape. The latest parity-restored rerun root is `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-indexed-draw-payload-qa-sourcebuild-20260528-113650/`. Raw logs there are back on the later path (`labels=106`, later `Command Graph (L94) (Draw)`), but the generated compare summary appears out of sync with those raw outputs.
+
+**Next Slice:** Resume with bead `oc-8od6` and adjudicate the indexed-draw comparison directly from the restored raw stdout/packet excerpts in the `...113650/` root instead of trusting the generated compare summary. The concrete question is whether `first_later_post_scope_draw_payload_content.label_free_draw_payload_signature_hash`, `label_free_first_draw_payload_entry`, `label_free_last_draw_payload_entry`, and `post_scope_failure_surface_classifier.last_post_scope_content.draw_indexed` actually materialize on the restored later submit-9 packet for the good rung versus the two first-bad rungs.
+
+**Blockers/Decisions:** No product or scope blocker. Operationally, `/` is still nearly full even after cleanup, so future full relinks may need another low-risk cleanup pass. Current bead state for resume: `oc-gnvl` closed after restoring temp harness parity, `oc-p4qd` closed because the source slice is landed, and `oc-8od6` is intentionally set to `blocked` only for session wrap-up so next session has a clean handoff target.
