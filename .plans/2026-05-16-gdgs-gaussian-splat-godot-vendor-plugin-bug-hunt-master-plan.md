@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** In Progress
-**Last Updated:** 2026-05-27 23:24 EDT
+**Last Updated:** 2026-05-28 02:26 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -253,9 +253,100 @@ Even sharper next seam materialized from this implementation: QA can now classif
 - `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 - repro artifacts under a new `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-.../` root
 
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-**Results:** Pending QA execution.
+**Results:** Re-ran the host-Vulkan staged repro lane with the source-built editor across all five requested projection-only micro-rungs and captured the package under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-pre-instance-microrungs-qa-sourcebuild-20260527-233613/` (`run_summary.tsv`, `qa_summary.md`, per-case logs under `logs/`). Exact command shape per case:
+`env DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 /home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64 --display-driver wayland --rendering-driver vulkan --path /home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs --script /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd -- <mode>__scratch_projection_mirror_only /home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-27/official-pre-instance-microrungs-qa-sourcebuild-20260527-233613 no_present compositor <mode> scratch_projection_mirror_only 120`.
+
+Rung-by-rung comparison:
+- `projection_footprint_only` (`logs/projection_footprint_only__scratch_projection_mirror_only.normal.log`): executed the intended rung (`projection_shader_mode=footprint_only`, `renderer stage=projection_footprint_only_gate`) and stayed healthy. Scratch checkpoint proved real execution beyond dispatch with `scratch_projection_stage_bits=0x00000021`, `scratch_projection_entered=true`, `scratch_projection_footprint_returned=true`, and all later instance-data / payload bits still false. No fence loss (`frame_stall_end ... fence_wait_error=0`).
+- `projection_instance_data_block_only` (`logs/projection_instance_data_block_only__scratch_projection_mirror_only.normal.log`): executed the intended rung (`projection_shader_mode=instance_data_block_only`, `renderer stage=projection_instance_data_block_only_gate`) but immediately reproduced the classifier: `fence_wait_error submit_serial=9 ... last_label="Command Graph (L88) (Copy)"`, `frame_stall_end ... fence_wait_error=1`, and scratch readback stayed all-zero with `scratch_projection_entered=false`, `scratch_projection_instance_data_block_entered=false`, `scratch_projection_pre_instance_read_probe=false`, `scratch_projection_instance_data_touch=false`, `scratch_projection_instance_data_read=false`.
+- `projection_pre_instance_read_probe_only` (`logs/projection_pre_instance_read_probe_only__scratch_projection_mirror_only.normal.log`): same failure signature as above, with the intended rung confirmed (`projection_shader_mode=pre_instance_read_probe_only`) but zero readback and `scratch_projection_pre_instance_read_probe=false`.
+- `projection_instance_data_touch_only` (`logs/projection_instance_data_touch_only__scratch_projection_mirror_only.normal.log`): same failure signature, intended rung confirmed (`projection_shader_mode=instance_data_touch_only`), zero readback, and `scratch_projection_instance_data_touch=false`.
+- `projection_instance_data_only` (`logs/projection_instance_data_only__scratch_projection_mirror_only.normal.log`): same failure signature, intended rung confirmed (`projection_shader_mode=instance_data_only`), zero readback, and `scratch_projection_instance_data_read=false`.
+
+Conclusion: the first failing rung is `projection_instance_data_block_only`, and the zero-readback / `BLIT_PASS`-adjacent L88 fence-loss classifier returns **before** the first real `splat_instance_data` read — in fact before the first new post-footprint scratch/probe marker inside that block can flip at all. That narrows the next projection-only seam to the span between `projection_footprint_only` and the first instruction inside `projection_instance_data_block_only` (best next cut: the already-existing post-barrier / immediate-return micro-rungs, or one new probe immediately before the first `scratch_projection_instance_data_block_entered` write). This sharper continuation stays under bead `oc-g2al`’s isolation finding.
+
+### Task 0g: Add immediate post-footprint micro-rungs before the first instance-data-block marker
+
+**Bead ID:** `oc-c3qd`
+**SubAgent:** `primary` (for `coder`)
+**Role:** `coder`
+**References:** `REF-04`, `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-c3qd` and stay strictly inside the already-approved projection-only scope. Build directly on the proven seam between `projection_footprint_only` and `projection_instance_data_block_only`. Add the narrowest reversible immediate post-footprint micro-rungs needed to split the span before the first `SCRATCH_PROJECTION_STAGE_INSTANCE_DATA_BLOCK_ENTERED` marker flips. Prefer modes that can distinguish: (1) successful return immediately after leaving the footprint-only path, (2) any surviving probe/write immediately before the current block-entered marker, and (3) the exact first instruction that reintroduces the zero-readback / fence-loss classifier. Reuse the existing scratch/projection readback surfaces so QA can tell exactly which micro-rung executed. Update this plan with the ladder you landed, run relevant repo-local validation, commit/push if you land the instrumentation slice, and close bead `oc-c3qd` with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Landed one additional immediate post-footprint projection micro-rung instead of broadening the ladder. The existing code already had three useful post-footprint cuts in place from the prior seam work — `projection_non_footprint_immediate_return_only` (successful return immediately after leaving the footprint-only path), `projection_post_barrier_no_scratch_immediate_return_only` (successful return after the barrier but before any new scratch write), and `projection_post_barrier_immediate_return_only` (successful return after the first surviving post-barrier scratch write). This slice adds the missing dedicated “last safe probe immediately before the current block-entered marker” rung so QA can now separate “any surviving write immediately before the block-entered marker is toxic” from “the block-entered marker itself is the first toxic instruction.”
+
+Concrete micro-rung ladder landed for the `projection_footprint_only` -> `projection_instance_data_block_only` span:
+- `projection_footprint_only` — existing safe control; returns on the footprint path and stamps `SCRATCH_PROJECTION_STAGE_FOOTPRINT_RETURN`.
+- `projection_non_footprint_immediate_return_only` — existing first post-footprint return; proves whether simply leaving the footprint-only branch already reintroduces the classifier.
+- `projection_post_barrier_no_scratch_immediate_return_only` — existing barrier-only rung; returns after the shader barrier but before any new post-footprint scratch write.
+- `projection_post_barrier_immediate_return_only` — existing first post-barrier write rung; stamps `SCRATCH_PROJECTION_STAGE_POST_BARRIER_IMMEDIATE_RETURN` and returns.
+- `projection_pre_block_enter_probe_only` — **new** dedicated last-safe-probe rung; stamps `SCRATCH_PROJECTION_STAGE_PRE_BLOCK_ENTER_PROBE` immediately before the old `SCRATCH_PROJECTION_STAGE_INSTANCE_DATA_BLOCK_ENTERED` write and returns.
+- `projection_instance_data_block_only` — existing prior failure boundary; stamps `SCRATCH_PROJECTION_STAGE_INSTANCE_DATA_BLOCK_ENTERED` and returns before any later pre-read probe or instance-data read.
+
+That keeps the work strictly projection-only, reuses the same scratch/projection readback surfaces QA already knows, and makes the next seam sharper than Task `0f`: QA can now tell whether the zero-readback / fence-loss classifier returns at (a) the first post-footprint control-flow escape, (b) the first post-barrier synchronization point, (c) the first surviving post-barrier scratch write, (d) the new immediate-before-block-enter probe, or only (e) the existing block-entered marker itself.
+
+Actual files changed in this slice:
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/gaussian_renderer.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+Validation command/results:
+- `python3 /home/derrick/.openclaw/workspace/projects/godot/misc/scripts/file_format.py addons/gdgs/runtime/render/gaussian_renderer.gd addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd addons/gdgs/runtime/render/shaders/compute/gsplat_projection.glsl` — passed.
+- `git diff --check` in `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/` — passed.
+- `godot --headless --path . --script addons/gdgs/runtime/render/gaussian_renderer.gd --check-only --quit` — passed.
+- `godot --headless --path . --script addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd --check-only --quit` — passed.
+- `godot --headless --path . --import` — passed and reimported `gsplat_projection.glsl`.
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-godot-47-dev5-nightly-repro-2026-05-16/godot-dev5/Godot_v4.7-dev5_linux.x86_64 --headless --path . --import` — passed.
+
+Commit/push info: instrumentation slice not yet committed or pushed in this coder pass.
+
+Even sharper next seam materialized and was turned into a concrete follow-up QA task: the next pass should run the new ladder across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, `projection_post_barrier_immediate_return_only`, `projection_pre_block_enter_probe_only`, and `projection_instance_data_block_only` to identify the exact first instruction in that span that reintroduces the zero-readback / fence-loss classifier.
+
+### Task 0h: QA the immediate post-footprint micro-rungs to isolate the first toxic pre-block-enter instruction
+
+**Bead ID:** `oc-gu12`
+**SubAgent:** `primary` (for `qa`)
+**Role:** `qa`
+**References:** `REF-04`, `REF-05`, `REF-07`, `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-gu12` and stay strictly inside the approved projection-only scope. Rerun the staged repro lane across `projection_footprint_only`, `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, `projection_post_barrier_immediate_return_only`, `projection_pre_block_enter_probe_only`, and `projection_instance_data_block_only` using the existing scratch/projection checkpoints. Confirm which micro-rung actually executed on each run, then identify the exact first rung where the zero-readback / `BLIT_PASS` / fence-loss classifier returns. Capture the exact artifact root and update this plan with a rung-by-rung comparison so the next seam can stay projection-only and sharper than the current block-entered boundary.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+- `/home/derrick/.openclaw/workspace/.temp/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- repro artifacts under a new `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-.../` root
+
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked source-built repro lane across all six projection-only micro-rungs plus both existing checkpoints after a temp-only harness sync so `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-17/run_stage_case_checkpoint.gd` matched the current `GaussianRenderer.RasterDebugStage` ordering and exposed `projection_pre_block_enter_probe_only` at the correct enum slot. Exact artifact root: `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-footprint-microrungs-qa-sourcebuild-20260528-004852/`. Exact command matrix is captured in `commands.txt`; the batch ran `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` against `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` for each of: `projection_footprint_only`, `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, `projection_post_barrier_immediate_return_only`, `projection_pre_block_enter_probe_only`, and `projection_instance_data_block_only`, first with `scratch_projection_mirror_only`, then with `projection_probe_only`.
+
+Rung-by-rung comparison from `run_summary.tsv` + per-case logs:
+- `projection_footprint_only`: **passes** (`exit 0`) on both checkpoints. Scratch mirror confirms the shader actually executed the footprint rung: `projection_shader_mode=footprint_only`, `renderer stage=projection_footprint_only_gate`, `scratch_projection_stage_bits_hex=0x00000021`, `scratch_projection_entered=true`, `scratch_projection_footprint_returned=true`. Projection probe also survives with `probe_invocations=271123`, `probe_error_flags=0`, `probe_first_failure_stage_name=none`.
+- `projection_non_footprint_immediate_return_only`: **passes** (`exit 0`) on both checkpoints. This is the last known-good non-footprint rung. Scratch mirror proves the intended micro-rung executed: `projection_shader_mode=non_footprint_immediate_return_only`, `renderer stage=projection_non_footprint_immediate_return_only_gate`, `scratch_projection_stage_bits_hex=0x00000801`, `scratch_projection_entered=true`, `scratch_projection_non_footprint_immediate_return=true`. Projection probe also survives with `probe_invocations=271123`, `probe_error_flags=0`, `probe_first_failure_stage_name=none`.
+- `projection_post_barrier_no_scratch_immediate_return_only`: **first failing rung**. Both checkpoint variants abort with `exit 134`. The intended micro-rung still executed (`projection_shader_mode=post_barrier_no_scratch_immediate_return_only`, `renderer stage=projection_post_barrier_no_scratch_immediate_return_only_gate`), but both readbacks are all-zero before any surviving post-barrier proof (`scratch_projection_stage_bits_hex=0x00000000`, `scratch_projection_entered=false`; projection probe `probe_invocations=0`, `probe_error_flags=0`). The stable classifier returns here already: first present packet still reports `last_breadcrumb="BLIT_PASS"`, then the bad submit hits `fence_wait_error submit_serial=9 ... wait_result=-4`, and `frame_stall_end ... fence_wait_error=1`.
+- `projection_post_barrier_immediate_return_only`: **also fails** (`exit 134`) with the same identity. Intended rung confirmed by `projection_shader_mode=post_barrier_immediate_return_only` and `renderer stage=projection_post_barrier_immediate_return_only_gate`, but scratch/projection readbacks stay zero (`scratch_projection_stage_bits_hex=0x00000000`, `probe_invocations=0`) and the same `BLIT_PASS` -> `submit_serial=9` -> `wait_result=-4` classifier returns.
+- `projection_pre_block_enter_probe_only`: **also fails** (`exit 134`) with the same identity. Intended rung confirmed by `projection_shader_mode=pre_block_enter_probe_only` and `renderer stage=projection_pre_block_enter_probe_only_gate`, but no surviving pre-block probe bit reaches readback (`scratch_projection_pre_block_enter_probe=false`, `scratch_projection_stage_bits_hex=0x00000000`, `probe_invocations=0`) before the same `BLIT_PASS` / submit-9 fence-loss failure.
+- `projection_instance_data_block_only`: **also fails** (`exit 134`) with the same identity. Intended rung confirmed by `projection_shader_mode=instance_data_block_only` and `renderer stage=projection_instance_data_block_only_gate`, but scratch/projection remain zero (`scratch_projection_instance_data_block_entered=false`, `scratch_projection_stage_bits_hex=0x00000000`, `probe_invocations=0`) before the same submit-9 / `BLIT_PASS` fence-loss edge.
+
+QA conclusion: the exact first failing rung is `projection_post_barrier_no_scratch_immediate_return_only`. That sharpens the projection-only seam from the older broad `projection_instance_data_block_only` boundary down to the single transition `projection_non_footprint_immediate_return_only` (**good**) -> `projection_post_barrier_no_scratch_immediate_return_only` (**bad**). No sharper projection-only split is justified from these readbacks because every rung at or after post-barrier crossing dies before any post-barrier scratch/probe proof survives. The next seam therefore stops being shader-ancestry work and is the already-materialized backend/barrier follow-up under bead `oc-0d08.1`.
 
 ### Task 1: Map instrumentation points and staged isolation order in Godot/GDGS boundary
 
@@ -9497,10 +9588,83 @@ Best next seam: stay inside the same backend-local diagnostic seam only if we ne
 
 The missing dedicated `submit9_error_surface_trace device_lost_edge ...` line does **not** block closure of this seam. Audit found that the current source tree still contains the print in `drivers/vulkan/rendering_device_driver_vulkan.cpp`, but the refreshed binary used for Task 244 does not carry that format string (`strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "submit9_error_surface_trace device_lost_edge"` returned no match), which explains why the artifact logs never showed the extra marker. That is an instrumentation-integrity wrinkle, not contradictory evidence against the seam result. It can be left alone unless we explicitly want a separate backend-only diagnostic slice to verify why that specific print did not make it into the built editor. For the audited question here, no further backend slice is required.
 
-### Session Handoff (2026-05-27 17:50 EDT)
+### Task 246: Identify the next downstream pipeline/provenance seam after `RenderingDevice::render_pipeline_create(...)` fingerprint divergence
 
-**Stopping Point:** The submit-9 wait-vs-status simultaneity seam is audited closed. The strongest current read is still that the good and bad rungs seal the same submit-9 packet surface and only diverge at fence-resolution / final wait completion, where both `wait_result` and `fence_status` surface `VK_ERROR_DEVICE_LOST` together on the same final poll in the bad rungs.
+**Bead ID:** `oc-j1q5`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-j1q5` at start and stay strictly inside the already-approved backend/barrier lane. Build directly on the latest audited state: the driver-facing `RenderingDevice::render_pipeline_create(...)` create fingerprint divergence is already proven, the runtime freshness/formatting blockers are resolved, and no human decision is needed to resume. Do not reopen shader ancestry or stale duplicate bead `oc-cmdn`. Instead, identify the highest-signal next downstream pipeline/provenance seam after that proven create-site divergence, update this master plan with a concrete new task/result block near the active backend pipeline/provenance tasks, create any narrower follow-on bead if the seam becomes concrete, and keep the work diagnostic/reversible. Close bead `oc-j1q5` with a clear reason if the planning/research slice is complete.
 
-**Next Slice:** If Derrick wants to keep pushing this exact backend lane, the next narrow slice is optional and backend-only: verify why the refreshed editor binary did not carry the dedicated `submit9_error_surface_trace device_lost_edge` format string even though the source contains that print. Otherwise, treat this seam as closed and resume from the ranked root-cause list with the current leading theory: a post-barrier projection compute hazard that produces a semantically matched submit-9 packet but only becomes externally visible during GPU/backend completion.
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
-**Blockers/Decisions:** No hard blocker is currently open. Decision for next session: either (a) spend one narrow slice on the missing `device_lost_edge` print/build-integrity wrinkle, or (b) leave that wrinkle alone and advance to the next best backend-local root-cause discriminator from the active theory list.
+**Status:** ✅ Complete
+
+**Results:** Completed as a plan/history classification pass on the already-audited backend/provenance lane without reopening shader ancestry or the stale duplicate bead `oc-cmdn`. Re-read the decisive create-site and immediate downstream task history (especially Tasks 159-162 plus the follow-on execution/resource seam tasks) and recorded the highest-signal next seam after the proven `RenderingDevice::render_pipeline_create(...)` divergence.
+
+Concrete next seam: the first backend-owned identity **after** the diverging RD create fingerprint — i.e. the first-L88 **post-create / driver-pipeline ownership provenance path through first bind/consume**, not another request-hash/cache/create-input pass and not the optional missing `device_lost_edge` print wrinkle. The plan history already proves why this is the right downstream seam:
+- Task 159 proved the three approved cases already diverge at the driver-facing create fingerprint while the same outer `submit_serial=9` / `Tonemap (L87) -> Command Graph (L88)` / later `BLIT_PASS` envelope persists.
+- Task 161 then materialized the immediate downstream seam and showed the apparent repeated render-pipeline RID was only a recycled process-local number; the backend-owned `driver_pipeline_id` still diverged per case and stayed exact from create to first bind/consume.
+- Task 162 independently audited that read and explicitly classified the next honest seam as the first executed L88 draw/consume packet downstream of `draw_list_bind_render_pipeline()`.
+- The later pipeline/provenance ladder (Tasks 163-170) then confirmed that divergence survives through first execution packet, command-emission boundary, and descriptor-set object identity, while stable backing provenance and semantic descriptor payload later reconverge. That historical chain is the actual research finding here: the immediate next downstream seam after create-site divergence was real, concrete, and already sharp enough to move the investigation from create provenance into execution/backend-completion behavior.
+
+Follow-on bead materialization: no new bead was created in this research slice because the seam was already concretized and executed in the existing plan/bead history (`oc-fw0s` for the coder slice, `oc-vg5r` for the audit, then the narrower completed follow-ons beginning with `oc-vt8r`). The living plan now reflects that Task 246 is no longer a pending gap; the correct downstream answer is the already-proven post-create / driver-pipeline ownership seam, with later work showing that the active surviving lane eventually moves past pipeline provenance and into backend completion/barrier behavior rather than back into create-site classification.
+
+### Task 247: Materialize the next backend-local root-cause discriminator after the audited submit-9 simultaneity seam
+
+**Bead ID:** `oc-35pu`
+**SubAgent:** `primary`
+**Role:** `research`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-35pu` at start with `bd update oc-35pu --status in_progress --json` and stay strictly inside the already-approved active GDGS / Godot submit-9 backend/barrier lane. Derrick explicitly chose path **(b)**: skip the optional missing `submit9_error_surface_trace device_lost_edge` build-integrity wrinkle. Do **not** reopen stale shader-ancestry, blend-state, request-hash/create/provenance detours, or the missing-print wrinkle. Build directly on the audited conclusion that the good/bad rungs stay semantically matched until submit-9 fence resolution and that the current leading theory is a post-barrier projection compute hazard that only becomes externally visible during backend/GPU completion. Re-read the active plan and latest relevant backend/barrier task history, identify the highest-signal next backend-local discriminator from the active theory list, update this master plan with a concrete new task/result block near the active backend/barrier tasks, create a narrower follow-on bead if the seam becomes concrete, and keep the work diagnostic/reversible. Close bead `oc-35pu` with a clear reason if the research/planning slice is complete.
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Completed as a plan/history classification pass only. Derrick explicitly chose path **(b)**, so this slice intentionally skipped the optional backend-only build-integrity wrinkle about the missing `submit9_error_surface_trace device_lost_edge` print and stayed on the already-approved active backend/barrier lane. Re-read the decisive projection barrier pivot (Tasks 230-233), the matched-packet completion ladder (Tasks 234-245), and the latest handoff state. Those results jointly keep the same highest-confidence read: once the projection shader crosses the shared post-footprint barrier, the last-good and first-bad rungs still preserve the same backend-visible packet sequence and the same semantically matched submit-9 packet surface through queue-submit construction, pre-wait status, in-wait timeout/not-ready polling, and the first backend consume packet; divergence only becomes externally visible when that matched packet completes with `VK_SUCCESS` on the good rung versus `VK_ERROR_DEVICE_LOST` on the bad rungs.
+
+Highest-signal next backend-local discriminator from the active theory list: trace the **first driver-visible projection-output resource handoff after the shared post-footprint barrier**. This is the next honest seam because it directly tests the leading theory without reopening stale create/provenance or build-integrity detours: if the good pre-barrier rung and the first-bad post-barrier rungs already diverge in the exact output-resource identities / access masks / stage masks / layouts / first downstream consumer boundary immediately after projection dispatch, the remaining root cause stays in a concrete backend resource-state/barrier hazard; if that handoff is still semantically matched too, the theory sharpens toward a data-dependent compute execution/completion failure that only manifests during GPU completion on an otherwise matched downstream handoff.
+
+Follow-on bead materialized below as `oc-lui5`; no code or runtime execution was performed in this research slice.
+
+### Task 248: Trace the first driver-visible projection-output resource handoff after the shared post-footprint barrier
+
+**Bead ID:** `oc-lui5`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-lui5` at start with `bd update oc-lui5 --status in_progress --json` and stay strictly inside the already-approved active backend/barrier seam. Derrick explicitly chose path **(b)**: skip the optional missing `submit9_error_surface_trace device_lost_edge` build-integrity wrinkle. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or generic packet theory. Build directly on the audited read that the good pre-barrier rung and first-bad post-barrier rungs keep the same backend-visible packet sequence until submit-9 fence resolution. Add the smallest default-off backend instrumentation needed to trace the first driver-visible projection-output resource handoff after `gsplat_projection` crosses the shared post-footprint barrier: the exact output resource identities and the first downstream barrier/consumer metadata for those resources (buffer/image handles, access masks, stage masks, layouts, queue packet / command serials, and first consumer boundary). The goal is to discriminate whether the leading post-barrier projection compute hazard first appears as a concrete resource-state/barrier mismatch at that handoff or only as a later content/execution failure on an otherwise matched handoff. Keep it diagnostic/reversible, update this master plan with exact touched files, validation, artifact roots, and the next QA slice, and close bead `oc-lui5` with a clear reason if the coder package is ready.
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Added a new default-off backend handoff trace gate, `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1`, without changing renderer behavior or reopening the skipped shader/request-hash/build-integrity detours. The Vulkan driver now preserves enough structured state to follow the first projection compute dispatch, the first downstream compute consumer after the `gdgs_projection_boundary ... boundary=immediate_downstream_handoff` marker, and the exact barrier/resource metadata connecting them.
+
+The driver-side instrumentation changes are all in `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.{h,cpp}`. `DebugPipelineBarrierPayload` now retains per-buffer/per-image barrier entries (driver buffer/image handle, offset/size, access masks, layouts) in addition to the existing hashes. `UniformSetInfo` now keeps structured debug refs for the realized buffer/image resources behind each descriptor set binding. Compute-side command recording now mirrors the existing draw-side provenance capture: `command_bind_compute_uniform_sets()`, `command_compute_dispatch()`, and `command_compute_dispatch_indirect()` record the bound descriptor-set handles, uniform-bind provenance, last barrier serial/payload, and the first compute-dispatch consumer payload inside each active debug label. The command-buffer summary now emits a new `projection_backend_handoff=` block when the gate is enabled. That block reports the producer `gdgs_projection_backend_trace` dispatch payload, the handoff marker, the first downstream compute consumer boundary after the marker, the shared projection resource identities visible on both sides of the handoff, and the matched downstream barrier metadata for those shared resources (`src/dst` stage masks, access masks, layouts, driver handles, and command serials).
+
+Validation performed in `/home/derrick/.openclaw/workspace/projects/godot/`:
+- `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp .plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE"`
+- `strings bin/godot.linuxbsd.editor.dev.x86_64 | grep -F "projection_backend_handoff="`
+
+Artifact roots for this coder slice: no new runtime repro artifact root yet, because this pass intentionally stopped at reversible instrumentation + rebuild validation.
+
+**Exact next QA slice:** rerun only the locked backend/barrier ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled against `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`, while keeping the existing projection backend trace modes (`markers_only` and `empty_compute_boundary`) available from the vendor repro lane. Capture a fresh artifact root under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/` (or the current dated sibling root) and compare the new `projection_backend_handoff=` summaries across the three rungs. Expected QA artifacts: per-case `stdout.log` / `stderr.log`, command captures, exit-status files, plus a parsed comparison that answers whether the first downstream handoff already diverges in shared resource identity/barrier metadata or stays matched until a later completion/content failure.
+
+### Session Handoff (2026-05-28 07:24 EDT)
+
+**Stopping Point:** The submit-9 wait-vs-status simultaneity seam remains closed, and this coder slice landed the next backend-local discriminator: a default-off projection handoff trace that records the producer projection dispatch, the first downstream compute consumer boundary, and the exact shared barrier/resource metadata at that handoff.
+
+**Next Slice:** QA should rerun the locked good-vs-first-bad projection ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled and compare the new `projection_backend_handoff=` summaries. The narrow question is whether the first driver-visible projection-output handoff already diverges in resource-state/barrier metadata or remains matched until a later completion/content failure.
+
+**Blockers/Decisions:** No hard blocker is open. Derrick’s earlier decision to skip the optional `device_lost_edge` build-integrity wrinkle still stands and was respected in this slice.

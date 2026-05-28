@@ -3076,6 +3076,13 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 		barrier_payload.buffer_barrier_hash = hash_murmur3_one_64((uint64_t)vk_buffer_barriers[i].buffer, barrier_payload.buffer_barrier_hash);
 		barrier_payload.buffer_barrier_hash = hash_murmur3_one_64(vk_buffer_barriers[i].offset, barrier_payload.buffer_barrier_hash);
 		barrier_payload.buffer_barrier_hash = hash_murmur3_one_64(vk_buffer_barriers[i].size, barrier_payload.buffer_barrier_hash);
+		DebugBufferBarrierEntry entry;
+		entry.buffer_id = (uint64_t)vk_buffer_barriers[i].buffer;
+		entry.offset = vk_buffer_barriers[i].offset;
+		entry.size = vk_buffer_barriers[i].size;
+		entry.src_access_mask = vk_buffer_barriers[i].srcAccessMask;
+		entry.dst_access_mask = vk_buffer_barriers[i].dstAccessMask;
+		barrier_payload.buffer_barriers.push_back(entry);
 		if (i == 0) {
 			barrier_payload.first_buffer_id = (uint64_t)vk_buffer_barriers[i].buffer;
 		}
@@ -3091,6 +3098,13 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].subresourceRange.levelCount, barrier_payload.texture_barrier_hash);
 		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].subresourceRange.baseArrayLayer, barrier_payload.texture_barrier_hash);
 		barrier_payload.texture_barrier_hash = hash_murmur3_one_64(vk_image_barriers[i].subresourceRange.layerCount, barrier_payload.texture_barrier_hash);
+		DebugTextureBarrierEntry entry;
+		entry.texture_id = (uint64_t)vk_image_barriers[i].image;
+		entry.src_access_mask = vk_image_barriers[i].srcAccessMask;
+		entry.dst_access_mask = vk_image_barriers[i].dstAccessMask;
+		entry.old_layout = vk_image_barriers[i].oldLayout;
+		entry.new_layout = vk_image_barriers[i].newLayout;
+		barrier_payload.texture_barriers.push_back(entry);
 		if (i == 0) {
 			barrier_payload.first_texture_id = (uint64_t)vk_image_barriers[i].image;
 			barrier_payload.first_texture_old_layout = vk_image_barriers[i].oldLayout;
@@ -3664,8 +3678,11 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buf
 	command_buffer->debug_bound_render_pipeline_handle = 0;
 	command_buffer->debug_bound_render_pipeline_provenance = DebugPipelineBindingProvenance();
 	command_buffer->debug_bound_descriptor_set_handles.clear();
+	command_buffer->debug_bound_compute_descriptor_set_handles.clear();
 	command_buffer->debug_last_uniform_bind_provenance = DebugUniformBindingProvenance();
+	command_buffer->debug_last_compute_uniform_bind_provenance = DebugUniformBindingProvenance();
 	command_buffer->debug_last_uniform_bind_serial = 0;
+	command_buffer->debug_last_compute_uniform_bind_serial = 0;
 	command_buffer->debug_vertex_binding_count = 0;
 	command_buffer->debug_bound_vertex_buffer_ids.clear();
 	command_buffer->debug_bound_vertex_buffer_offsets.clear();
@@ -3731,8 +3748,11 @@ bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID
 	command_buffer->debug_bound_render_pipeline_handle = 0;
 	command_buffer->debug_bound_render_pipeline_provenance = DebugPipelineBindingProvenance();
 	command_buffer->debug_bound_descriptor_set_handles.clear();
+	command_buffer->debug_bound_compute_descriptor_set_handles.clear();
 	command_buffer->debug_last_uniform_bind_provenance = DebugUniformBindingProvenance();
+	command_buffer->debug_last_compute_uniform_bind_provenance = DebugUniformBindingProvenance();
 	command_buffer->debug_last_uniform_bind_serial = 0;
+	command_buffer->debug_last_compute_uniform_bind_serial = 0;
 	command_buffer->debug_vertex_binding_count = 0;
 	command_buffer->debug_bound_vertex_buffer_ids.clear();
 	command_buffer->debug_bound_vertex_buffer_offsets.clear();
@@ -5557,6 +5577,105 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	usi->debug_pool_key_hash = hash_murmur3_one_64(MAX_UNIFORM_POOL_ELEMENT);
 	for (uint32_t i = 0; i < UNIFORM_TYPE_MAX; i++) {
 		usi->debug_pool_key_hash = hash_murmur3_one_64((uint64_t)pool_key.uniform_type[i], usi->debug_pool_key_hash);
+	}
+	for (uint32_t uniform_index = 0; uniform_index < p_uniforms.size(); uniform_index++) {
+		const BoundUniform &uniform = p_uniforms[uniform_index];
+		uint32_t descriptor_count = uniform.ids.size();
+		if (uniform.type == UNIFORM_TYPE_SAMPLER_WITH_TEXTURE || uniform.type == UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER) {
+			descriptor_count /= 2;
+		}
+		for (uint32_t slot = 0; slot < descriptor_count; slot++) {
+			switch (uniform.type) {
+				case UNIFORM_TYPE_TEXTURE: {
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[slot].id;
+					DebugUniformSetTextureRef ref;
+					ref.binding = uniform.binding;
+					ref.descriptor_slot = slot;
+					ref.kind = "texture";
+					ref.texture_id = (uint64_t)tex_info->vk_view_create_info.image;
+					ref.texture_view_id = (uint64_t)tex_info->vk_view;
+					ref.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					usi->debug_texture_refs.push_back(ref);
+				} break;
+				case UNIFORM_TYPE_IMAGE: {
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[slot].id;
+					DebugUniformSetTextureRef ref;
+					ref.binding = uniform.binding;
+					ref.descriptor_slot = slot;
+					ref.kind = "image";
+					ref.texture_id = (uint64_t)tex_info->vk_view_create_info.image;
+					ref.texture_view_id = (uint64_t)tex_info->vk_view;
+					ref.layout = VK_IMAGE_LAYOUT_GENERAL;
+					usi->debug_texture_refs.push_back(ref);
+				} break;
+				case UNIFORM_TYPE_INPUT_ATTACHMENT: {
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[slot].id;
+					DebugUniformSetTextureRef ref;
+					ref.binding = uniform.binding;
+					ref.descriptor_slot = slot;
+					ref.kind = "input_attachment";
+					ref.texture_id = (uint64_t)tex_info->vk_view_create_info.image;
+					ref.texture_view_id = (uint64_t)tex_info->vk_view;
+					ref.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					usi->debug_texture_refs.push_back(ref);
+				} break;
+				case UNIFORM_TYPE_TEXTURE_BUFFER: {
+					const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[slot].id;
+					DebugUniformSetBufferRef ref;
+					ref.binding = uniform.binding;
+					ref.descriptor_slot = slot;
+					ref.kind = "texel_buffer";
+					ref.buffer_id = (uint64_t)buf_info->vk_buffer;
+					ref.requested_size = buf_info->debug_requested_size;
+					usi->debug_buffer_refs.push_back(ref);
+				} break;
+				case UNIFORM_TYPE_UNIFORM_BUFFER:
+				case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
+					const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
+					DebugUniformSetBufferRef ref;
+					ref.binding = uniform.binding;
+					ref.descriptor_slot = slot;
+					ref.kind = "uniform_buffer";
+					ref.buffer_id = (uint64_t)buf_info->vk_buffer;
+					ref.requested_size = buf_info->debug_requested_size;
+					usi->debug_buffer_refs.push_back(ref);
+				} break;
+				case UNIFORM_TYPE_STORAGE_BUFFER:
+				case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
+					const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
+					DebugUniformSetBufferRef ref;
+					ref.binding = uniform.binding;
+					ref.descriptor_slot = slot;
+					ref.kind = "storage_buffer";
+					ref.buffer_id = (uint64_t)buf_info->vk_buffer;
+					ref.requested_size = buf_info->debug_requested_size;
+					usi->debug_buffer_refs.push_back(ref);
+				} break;
+				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[slot * 2 + 1].id;
+					DebugUniformSetTextureRef ref;
+					ref.binding = uniform.binding;
+					ref.descriptor_slot = slot;
+					ref.kind = "texture";
+					ref.texture_id = (uint64_t)tex_info->vk_view_create_info.image;
+					ref.texture_view_id = (uint64_t)tex_info->vk_view;
+					ref.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					usi->debug_texture_refs.push_back(ref);
+				} break;
+				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
+					const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[slot * 2 + 1].id;
+					DebugUniformSetBufferRef ref;
+					ref.binding = uniform.binding;
+					ref.descriptor_slot = slot;
+					ref.kind = "texel_buffer";
+					ref.buffer_id = (uint64_t)buf_info->vk_buffer;
+					ref.requested_size = buf_info->debug_requested_size;
+					usi->debug_buffer_refs.push_back(ref);
+				} break;
+				default: {
+				} break;
+			}
+		}
 	}
 	gdgs_debug_uniform_set_info_by_vk_handle[(uint64_t)vk_descriptor_set] = usi;
 
@@ -8052,8 +8171,9 @@ bool RenderingDeviceDriverVulkan::raytracing_pipeline_get_shader_group_handles(R
 // ----- COMMANDS -----
 
 void RenderingDeviceDriverVulkan::command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, (VkPipeline)p_pipeline.id);
+	_debug_record_label_backend_command(command_buffer, "bind_compute_pipeline");
 }
 
 void RenderingDeviceDriverVulkan::command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
@@ -8085,20 +8205,137 @@ void RenderingDeviceDriverVulkan::command_bind_compute_uniform_sets(CommandBuffe
 		}
 	}
 
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
+	DebugUniformBindingProvenance uniform_bind_provenance;
+	uniform_bind_provenance.valid = true;
+	uniform_bind_provenance.bind_shader_pipeline_layout_handle = (uint64_t)shader_info->vk_pipeline_layout;
+	uniform_bind_provenance.bind_shader_name = shader_info->name;
+	uniform_bind_provenance.first_set_index = p_first_set_index;
+	uniform_bind_provenance.set_count = p_set_count;
+	uniform_bind_provenance.dynamic_offset_count = curr_dynamic_offset;
+	if (p_set_count > 0) {
+		uniform_bind_provenance.bind_expected_first_descriptor_set_layout_handle =
+				p_first_set_index < shader_info->vk_descriptor_set_layouts.size() ? (uint64_t)shader_info->vk_descriptor_set_layouts[p_first_set_index] : 0;
+		const uint32_t last_set_index = p_first_set_index + p_set_count - 1;
+		uniform_bind_provenance.bind_expected_last_descriptor_set_layout_handle =
+				last_set_index < shader_info->vk_descriptor_set_layouts.size() ? (uint64_t)shader_info->vk_descriptor_set_layouts[last_set_index] : 0;
+	}
+	for (uint32_t i = 0; i < p_set_count; i++) {
+		const UniformSetInfo *usi = (const UniformSetInfo *)p_uniform_sets[i].id;
+		uniform_bind_provenance.dynamic_buffer_count_total += usi->dynamic_buffers.size();
+		if (i == 0) {
+			uniform_bind_provenance.first_descriptor_set_handle = (uint64_t)usi->vk_descriptor_set;
+			uniform_bind_provenance.first_uniform_set_descriptor_set_layout_handle = usi->debug_descriptor_set_layout_handle;
+			uniform_bind_provenance.first_uniform_set_shader_pipeline_layout_handle = usi->debug_shader_pipeline_layout_handle;
+			uniform_bind_provenance.first_uniform_set_declared_set_index = usi->debug_set_index;
+		}
+		if (i + 1 == p_set_count) {
+			uniform_bind_provenance.last_descriptor_set_handle = (uint64_t)usi->vk_descriptor_set;
+			uniform_bind_provenance.last_uniform_set_descriptor_set_layout_handle = usi->debug_descriptor_set_layout_handle;
+			uniform_bind_provenance.last_uniform_set_shader_pipeline_layout_handle = usi->debug_shader_pipeline_layout_handle;
+			uniform_bind_provenance.last_uniform_set_declared_set_index = usi->debug_set_index;
+		}
+		if (usi->debug_shader_pipeline_layout_handle != uniform_bind_provenance.bind_shader_pipeline_layout_handle) {
+			uniform_bind_provenance.all_sets_match_bind_shader_pipeline_layout = false;
+		}
+		if (usi->debug_shader_name != shader_info->name) {
+			uniform_bind_provenance.all_sets_match_bind_shader_name = false;
+		}
+		const uint32_t expected_set_index = p_first_set_index + i;
+		if (usi->debug_set_index != expected_set_index) {
+			uniform_bind_provenance.all_sets_match_declared_set_index = false;
+		}
+		if (expected_set_index >= shader_info->vk_descriptor_set_layouts.size() || usi->debug_descriptor_set_layout_handle != (uint64_t)shader_info->vk_descriptor_set_layouts[expected_set_index]) {
+			uniform_bind_provenance.all_sets_match_bind_shader_layout = false;
+		}
+	}
 	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
+	_debug_record_label_backend_command(command_buffer, "bind_compute_uniform_sets");
+	const uint64_t uniform_bind_serial = command_buffer->debug_backend_command_serial;
+	if (command_buffer->debug_bound_compute_descriptor_set_handles.size() < (uint32_t)(p_first_set_index + p_set_count)) {
+		command_buffer->debug_bound_compute_descriptor_set_handles.resize(p_first_set_index + p_set_count);
+	}
+	for (uint32_t i = 0; i < p_set_count; i++) {
+		const UniformSetInfo *usi = (const UniformSetInfo *)p_uniform_sets[i].id;
+		command_buffer->debug_bound_compute_descriptor_set_handles[p_first_set_index + i] = (uint64_t)usi->vk_descriptor_set;
+	}
+	command_buffer->debug_last_compute_uniform_bind_serial = uniform_bind_serial;
+	command_buffer->debug_last_compute_uniform_bind_provenance = uniform_bind_provenance;
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			if (entry.first_compute_uniform_bind_serial == 0) {
+				entry.first_compute_uniform_bind_serial = uniform_bind_serial;
+				entry.first_compute_uniform_bind_provenance = uniform_bind_provenance;
+			}
+		}
+	}
 }
 
 void RenderingDeviceDriverVulkan::command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
+	const DebugCommandStateSnapshot consume_state_snapshot = _debug_capture_command_state_snapshot(command_buffer);
 	vkCmdDispatch(command_buffer->vk_command_buffer, p_x_groups, p_y_groups, p_z_groups);
+	_debug_record_label_backend_command(command_buffer, "dispatch");
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			if (!entry.first_compute_dispatch_consumption.valid) {
+				entry.first_compute_dispatch_consumption.valid = true;
+				entry.first_compute_dispatch_consumption.serial = command_buffer->debug_backend_command_serial;
+				entry.first_compute_dispatch_consumption.last_uniform_bind_serial = command_buffer->debug_last_compute_uniform_bind_serial;
+				entry.first_compute_dispatch_consumption.last_pipeline_barrier_serial = command_buffer->debug_last_pipeline_barrier_serial;
+				entry.first_compute_dispatch_consumption.x_groups = p_x_groups;
+				entry.first_compute_dispatch_consumption.y_groups = p_y_groups;
+				entry.first_compute_dispatch_consumption.z_groups = p_z_groups;
+				entry.first_compute_dispatch_consumption.consume_state_snapshot = consume_state_snapshot;
+				entry.first_compute_dispatch_consumption.uniform_bind_provenance = command_buffer->debug_last_compute_uniform_bind_provenance;
+				entry.first_compute_dispatch_consumption.last_pipeline_barrier_payload = command_buffer->debug_last_pipeline_barrier_payload;
+				for (uint32_t i = 0; i < command_buffer->debug_bound_compute_descriptor_set_handles.size(); i++) {
+					const uint64_t descriptor_set_handle = command_buffer->debug_bound_compute_descriptor_set_handles[i];
+					if (descriptor_set_handle == 0) {
+						continue;
+					}
+					entry.first_compute_dispatch_consumption.descriptor_set_indices.push_back(i);
+					entry.first_compute_dispatch_consumption.descriptor_set_handles.push_back(descriptor_set_handle);
+				}
+			}
+		}
+	}
 }
 
 void RenderingDeviceDriverVulkan::command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) {
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	CommandBufferInfo *command_buffer = (CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *buf_info = (const BufferInfo *)p_indirect_buffer.id;
+	const DebugCommandStateSnapshot consume_state_snapshot = _debug_capture_command_state_snapshot(command_buffer);
 	vkCmdDispatchIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset);
+	_debug_record_label_backend_command(command_buffer, "dispatch_indirect");
+	if (command_buffer->debug_active_label_stack_size > 0) {
+		const uint32_t entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
+		if (entry_index < command_buffer->debug_label_entry_count) {
+			DebugLabelEntry &entry = command_buffer->debug_label_entries[entry_index];
+			if (!entry.first_compute_dispatch_consumption.valid) {
+				entry.first_compute_dispatch_consumption.valid = true;
+				entry.first_compute_dispatch_consumption.serial = command_buffer->debug_backend_command_serial;
+				entry.first_compute_dispatch_consumption.last_uniform_bind_serial = command_buffer->debug_last_compute_uniform_bind_serial;
+				entry.first_compute_dispatch_consumption.last_pipeline_barrier_serial = command_buffer->debug_last_pipeline_barrier_serial;
+				entry.first_compute_dispatch_consumption.consume_state_snapshot = consume_state_snapshot;
+				entry.first_compute_dispatch_consumption.uniform_bind_provenance = command_buffer->debug_last_compute_uniform_bind_provenance;
+				entry.first_compute_dispatch_consumption.last_pipeline_barrier_payload = command_buffer->debug_last_pipeline_barrier_payload;
+				for (uint32_t i = 0; i < command_buffer->debug_bound_compute_descriptor_set_handles.size(); i++) {
+					const uint64_t descriptor_set_handle = command_buffer->debug_bound_compute_descriptor_set_handles[i];
+					if (descriptor_set_handle == 0) {
+						continue;
+					}
+					entry.first_compute_dispatch_consumption.descriptor_set_indices.push_back(i);
+					entry.first_compute_dispatch_consumption.descriptor_set_handles.push_back(descriptor_set_handle);
+				}
+			}
+		}
+	}
 }
 
 // ----- PIPELINE -----
@@ -12879,6 +13116,239 @@ void RenderingDeviceDriverVulkan::_debug_record_label_backend_command(CommandBuf
 	}
 }
 
+String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_handoff_summary(const CommandBufferInfo *p_command_buffer) const {
+	if (!_debug_projection_backend_handoff_trace_enabled()) {
+		return "disabled";
+	}
+
+	int32_t trace_entry_index = -1;
+	int32_t handoff_marker_index = -1;
+	for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.label.begins_with("gdgs_projection_backend_trace serial=") && trace_entry_index == -1) {
+			trace_entry_index = (int32_t)i;
+		}
+		if (entry.label.find("gdgs_projection_boundary serial=") != -1 && entry.label.find("boundary=immediate_downstream_handoff") != -1 && handoff_marker_index == -1) {
+			handoff_marker_index = (int32_t)i;
+		}
+	}
+	if (trace_entry_index == -1) {
+		return "none";
+	}
+
+	const DebugLabelEntry &trace_entry = p_command_buffer->debug_label_entries[trace_entry_index];
+	if (!trace_entry.first_compute_dispatch_consumption.valid) {
+		return String("{status=missing_projection_dispatch,trace_label=\"") + trace_entry.label + "\"}";
+	}
+
+	int32_t consumer_entry_index = -1;
+	const uint32_t search_start_label_index = handoff_marker_index >= 0 ? p_command_buffer->debug_label_entries[handoff_marker_index].label_index : trace_entry.label_index;
+	for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.label_index <= search_start_label_index) {
+			continue;
+		}
+		if (entry.first_compute_dispatch_consumption.valid) {
+			consumer_entry_index = (int32_t)i;
+			break;
+		}
+	}
+
+	const auto append_descriptor_set_list = [&](String &r_text, const LocalVector<uint32_t> &p_set_indices, const LocalVector<uint64_t> &p_descriptor_set_handles) {
+		r_text += "[";
+		for (uint32_t i = 0; i < p_descriptor_set_handles.size(); i++) {
+			if (i > 0) {
+				r_text += ",";
+			}
+			const uint32_t set_index = i < p_set_indices.size() ? p_set_indices[i] : i;
+			const uint64_t handle = p_descriptor_set_handles[i];
+			HashMap<uint64_t, const void *>::ConstIterator usi_it = gdgs_debug_uniform_set_info_by_vk_handle.find(handle);
+			if (!usi_it) {
+				r_text += String("{set=") + itos(set_index) + ",descriptor_set_driver_id=" + String::num_uint64(handle) + ",status=missing_lookup}";
+				continue;
+			}
+			const UniformSetInfo *usi = (const UniformSetInfo *)usi_it->value;
+			r_text += "{set=" + itos(set_index);
+			r_text += ",descriptor_set_driver_id=" + String::num_uint64(handle);
+			r_text += ",binding_realizations=" + usi->debug_binding_realization_summary;
+			r_text += "}";
+		}
+		r_text += "]";
+	};
+
+	struct ResourceLists {
+		LocalVector<DebugUniformSetBufferRef> buffers;
+		LocalVector<DebugUniformSetTextureRef> textures;
+	};
+	const auto gather_resources = [&](const DebugComputeDispatchConsumptionPayload &p_payload) {
+		ResourceLists lists;
+		for (uint32_t i = 0; i < p_payload.descriptor_set_handles.size(); i++) {
+			HashMap<uint64_t, const void *>::ConstIterator usi_it = gdgs_debug_uniform_set_info_by_vk_handle.find(p_payload.descriptor_set_handles[i]);
+			if (!usi_it) {
+				continue;
+			}
+			const UniformSetInfo *usi = (const UniformSetInfo *)usi_it->value;
+			for (uint32_t j = 0; j < usi->debug_buffer_refs.size(); j++) {
+				lists.buffers.push_back(usi->debug_buffer_refs[j]);
+			}
+			for (uint32_t j = 0; j < usi->debug_texture_refs.size(); j++) {
+				lists.textures.push_back(usi->debug_texture_refs[j]);
+			}
+		}
+		return lists;
+	};
+	const auto producer_resources = gather_resources(trace_entry.first_compute_dispatch_consumption);
+
+	const auto append_buffer_resource_list = [&](String &r_text, const LocalVector<DebugUniformSetBufferRef> &p_refs) {
+		r_text += "[";
+		for (uint32_t i = 0; i < p_refs.size(); i++) {
+			if (i > 0) {
+				r_text += ",";
+			}
+			const DebugUniformSetBufferRef &ref = p_refs[i];
+			r_text += "{binding=" + itos(ref.binding);
+			r_text += ",slot=" + itos(ref.descriptor_slot);
+			r_text += ",kind=\"" + ref.kind + "\"";
+			r_text += ",driver_buffer_id=" + String::num_uint64(ref.buffer_id);
+			r_text += ",requested_size=" + String::num_uint64(ref.requested_size) + "}";
+		}
+		r_text += "]";
+	};
+	const auto append_texture_resource_list = [&](String &r_text, const LocalVector<DebugUniformSetTextureRef> &p_refs) {
+		r_text += "[";
+		for (uint32_t i = 0; i < p_refs.size(); i++) {
+			if (i > 0) {
+				r_text += ",";
+			}
+			const DebugUniformSetTextureRef &ref = p_refs[i];
+			r_text += "{binding=" + itos(ref.binding);
+			r_text += ",slot=" + itos(ref.descriptor_slot);
+			r_text += ",kind=\"" + ref.kind + "\"";
+			r_text += ",driver_image_id=" + String::num_uint64(ref.texture_id);
+			r_text += ",driver_view_id=" + String::num_uint64(ref.texture_view_id);
+			r_text += ",layout=" + itos(ref.layout) + "}";
+		}
+		r_text += "]";
+	};
+
+	String text = "{trace_label=\"" + trace_entry.label + "\"";
+	text += ",projection_dispatch={serial=" + String::num_uint64(trace_entry.first_compute_dispatch_consumption.serial);
+	text += ",last_uniform_bind_serial=" + String::num_uint64(trace_entry.first_compute_dispatch_consumption.last_uniform_bind_serial);
+	text += ",last_pipeline_barrier_serial=" + String::num_uint64(trace_entry.first_compute_dispatch_consumption.last_pipeline_barrier_serial);
+	text += ",groups=[" + itos(trace_entry.first_compute_dispatch_consumption.x_groups) + "," + itos(trace_entry.first_compute_dispatch_consumption.y_groups) + "," + itos(trace_entry.first_compute_dispatch_consumption.z_groups) + "]";
+	text += ",descriptor_sets=";
+	append_descriptor_set_list(text, trace_entry.first_compute_dispatch_consumption.descriptor_set_indices, trace_entry.first_compute_dispatch_consumption.descriptor_set_handles);
+	text += ",producer_buffer_resources=";
+	append_buffer_resource_list(text, producer_resources.buffers);
+	text += ",producer_texture_resources=";
+	append_texture_resource_list(text, producer_resources.textures);
+	text += "}";
+	text += ",handoff_marker=";
+	if (handoff_marker_index == -1) {
+		text += "none";
+	} else {
+		const DebugLabelEntry &marker_entry = p_command_buffer->debug_label_entries[handoff_marker_index];
+		text += "{label=\"" + marker_entry.label + "\"";
+		text += ",label_index=" + itos(marker_entry.label_index);
+		text += ",begin_backend_command_serial=" + String::num_uint64(marker_entry.begin_backend_command_serial);
+		text += ",end_backend_command_serial=" + String::num_uint64(marker_entry.end_backend_command_serial) + "}";
+	}
+	text += ",first_downstream_consumer=";
+	if (consumer_entry_index == -1) {
+		text += "{status=missing_consumer_after_handoff}";
+		text += "}";
+		return text;
+	}
+
+	const DebugLabelEntry &consumer_entry = p_command_buffer->debug_label_entries[consumer_entry_index];
+	const DebugComputeDispatchConsumptionPayload &consumer_payload = consumer_entry.first_compute_dispatch_consumption;
+	const auto consumer_resources = gather_resources(consumer_payload);
+	LocalVector<DebugUniformSetBufferRef> shared_buffers;
+	for (uint32_t i = 0; i < consumer_resources.buffers.size(); i++) {
+		const DebugUniformSetBufferRef &consumer_ref = consumer_resources.buffers[i];
+		for (uint32_t j = 0; j < producer_resources.buffers.size(); j++) {
+			if (consumer_ref.buffer_id == producer_resources.buffers[j].buffer_id) {
+				shared_buffers.push_back(consumer_ref);
+				break;
+			}
+		}
+	}
+	LocalVector<DebugUniformSetTextureRef> shared_textures;
+	for (uint32_t i = 0; i < consumer_resources.textures.size(); i++) {
+		const DebugUniformSetTextureRef &consumer_ref = consumer_resources.textures[i];
+		for (uint32_t j = 0; j < producer_resources.textures.size(); j++) {
+			if (consumer_ref.texture_id == producer_resources.textures[j].texture_id) {
+				shared_textures.push_back(consumer_ref);
+				break;
+			}
+		}
+	}
+	text += "{label=\"" + consumer_entry.label + "\"";
+	text += ",dispatch_serial=" + String::num_uint64(consumer_payload.serial);
+	text += ",last_uniform_bind_serial=" + String::num_uint64(consumer_payload.last_uniform_bind_serial);
+	text += ",last_pipeline_barrier_serial=" + String::num_uint64(consumer_payload.last_pipeline_barrier_serial);
+	text += ",groups=[" + itos(consumer_payload.x_groups) + "," + itos(consumer_payload.y_groups) + "," + itos(consumer_payload.z_groups) + "]";
+	text += ",descriptor_sets=";
+	append_descriptor_set_list(text, consumer_payload.descriptor_set_indices, consumer_payload.descriptor_set_handles);
+	text += ",shared_projection_buffers=";
+	append_buffer_resource_list(text, shared_buffers);
+	text += ",shared_projection_textures=";
+	append_texture_resource_list(text, shared_textures);
+	text += ",downstream_barrier={serial=" + String::num_uint64(consumer_payload.last_pipeline_barrier_payload.serial);
+	text += ",src_stage_mask=0x" + String::num_uint64(consumer_payload.last_pipeline_barrier_payload.src_stage_mask, 16);
+	text += ",dst_stage_mask=0x" + String::num_uint64(consumer_payload.last_pipeline_barrier_payload.dst_stage_mask, 16);
+	text += ",matched_buffers=[";
+		bool first_matched = true;
+		for (uint32_t i = 0; i < consumer_payload.last_pipeline_barrier_payload.buffer_barriers.size(); i++) {
+			const DebugBufferBarrierEntry &barrier = consumer_payload.last_pipeline_barrier_payload.buffer_barriers[i];
+			for (uint32_t j = 0; j < shared_buffers.size(); j++) {
+				if (barrier.buffer_id != shared_buffers[j].buffer_id) {
+					continue;
+				}
+				if (!first_matched) {
+					text += ",";
+				}
+				first_matched = false;
+				text += "{binding=" + itos(shared_buffers[j].binding);
+				text += ",slot=" + itos(shared_buffers[j].descriptor_slot);
+				text += ",kind=\"" + shared_buffers[j].kind + "\"";
+				text += ",driver_buffer_id=" + String::num_uint64(barrier.buffer_id);
+				text += ",offset=" + String::num_uint64(barrier.offset);
+				text += ",size=" + String::num_uint64(barrier.size);
+				text += ",src_access_mask=0x" + String::num_uint64(barrier.src_access_mask, 16);
+				text += ",dst_access_mask=0x" + String::num_uint64(barrier.dst_access_mask, 16) + "}";
+				break;
+			}
+		}
+	text += "]";
+	text += ",matched_textures=[";
+	first_matched = true;
+	for (uint32_t i = 0; i < consumer_payload.last_pipeline_barrier_payload.texture_barriers.size(); i++) {
+		const DebugTextureBarrierEntry &barrier = consumer_payload.last_pipeline_barrier_payload.texture_barriers[i];
+		for (uint32_t j = 0; j < shared_textures.size(); j++) {
+			if (barrier.texture_id != shared_textures[j].texture_id) {
+				continue;
+			}
+			if (!first_matched) {
+				text += ",";
+			}
+			first_matched = false;
+			text += "{binding=" + itos(shared_textures[j].binding);
+			text += ",slot=" + itos(shared_textures[j].descriptor_slot);
+			text += ",kind=\"" + shared_textures[j].kind + "\"";
+			text += ",driver_image_id=" + String::num_uint64(barrier.texture_id);
+			text += ",old_layout=" + itos(barrier.old_layout);
+			text += ",new_layout=" + itos(barrier.new_layout);
+			text += ",src_access_mask=0x" + String::num_uint64(barrier.src_access_mask, 16);
+			text += ",dst_access_mask=0x" + String::num_uint64(barrier.dst_access_mask, 16) + "}";
+			break;
+		}
+	}
+	text += "]}";
+	text += "}";
+	return text;
+}
+
 String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<CommandBufferID> p_cmd_buffers) const {
 	if (p_cmd_buffers.size() == 0) {
 		return "[]";
@@ -12926,6 +13396,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_summary(VectorView<Com
 		text += ",depth_prepass_pass_scope=" + _debug_command_buffer_depth_prepass_pass_scope_summary(command_buffer);
 		text += ",opaque_pass_scope=" + _debug_command_buffer_opaque_pass_scope_summary(command_buffer);
 		text += ",tonemap_pass_scope=" + _debug_command_buffer_tonemap_pass_scope_summary(command_buffer);
+		text += ",projection_backend_handoff=" + _debug_command_buffer_projection_backend_handoff_summary(command_buffer);
 		text += ",breadcrumbs=" + itos(command_buffer->debug_breadcrumb_count);
 		text += ",last_breadcrumb=\"" + _debug_breadcrumb_to_string(command_buffer->debug_last_breadcrumb) + "\"}";
 	}
@@ -12949,6 +13420,14 @@ uint64_t RenderingDeviceDriverVulkan::_debug_command_buffer_identity_hash(Vector
 		hash = hash_murmur3_one_64(hash_murmur3_buffer((const uint8_t *)label_tail.get_data(), label_tail.length()), hash);
 	}
 	return hash;
+}
+
+bool RenderingDeviceDriverVulkan::_debug_projection_backend_handoff_trace_enabled() const {
+	static const bool enabled = []() {
+		const char *value = getenv("GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE");
+		return value != nullptr && value[0] != '\0' && value[0] != '0';
+	}();
+	return enabled;
 }
 
 bool RenderingDeviceDriverVulkan::_debug_submit9_completion_trace_enabled() const {

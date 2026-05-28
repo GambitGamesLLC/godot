@@ -701,6 +701,22 @@ private:
 		IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
 	};
 
+	struct DebugBufferBarrierEntry {
+		uint64_t buffer_id = 0;
+		uint64_t offset = 0;
+		uint64_t size = 0;
+		uint64_t src_access_mask = 0;
+		uint64_t dst_access_mask = 0;
+	};
+
+	struct DebugTextureBarrierEntry {
+		uint64_t texture_id = 0;
+		uint64_t src_access_mask = 0;
+		uint64_t dst_access_mask = 0;
+		uint32_t old_layout = 0;
+		uint32_t new_layout = 0;
+	};
+
 	struct DebugPipelineBarrierPayload {
 		bool valid = false;
 		uint64_t serial = 0;
@@ -718,6 +734,25 @@ private:
 		uint64_t first_texture_id = 0;
 		uint32_t first_texture_old_layout = 0;
 		uint32_t first_texture_new_layout = 0;
+		LocalVector<DebugBufferBarrierEntry> buffer_barriers;
+		LocalVector<DebugTextureBarrierEntry> texture_barriers;
+	};
+
+	struct DebugUniformSetBufferRef {
+		uint32_t binding = 0;
+		uint32_t descriptor_slot = 0;
+		String kind;
+		uint64_t buffer_id = 0;
+		uint64_t requested_size = 0;
+	};
+
+	struct DebugUniformSetTextureRef {
+		uint32_t binding = 0;
+		uint32_t descriptor_slot = 0;
+		String kind;
+		uint64_t texture_id = 0;
+		uint64_t texture_view_id = 0;
+		uint32_t layout = 0;
 	};
 
 	struct DebugDrawIndexedConsumptionPayload {
@@ -738,6 +773,21 @@ private:
 		LocalVector<uint64_t> descriptor_set_handles;
 		DebugVertexBindingPayload vertex_binding_payload;
 		DebugIndexBindingPayload index_binding_payload;
+		DebugPipelineBarrierPayload last_pipeline_barrier_payload;
+	};
+
+	struct DebugComputeDispatchConsumptionPayload {
+		bool valid = false;
+		uint64_t serial = 0;
+		uint64_t last_uniform_bind_serial = 0;
+		uint64_t last_pipeline_barrier_serial = 0;
+		uint32_t x_groups = 0;
+		uint32_t y_groups = 0;
+		uint32_t z_groups = 0;
+		DebugCommandStateSnapshot consume_state_snapshot;
+		DebugUniformBindingProvenance uniform_bind_provenance;
+		LocalVector<uint32_t> descriptor_set_indices;
+		LocalVector<uint64_t> descriptor_set_handles;
 		DebugPipelineBarrierPayload last_pipeline_barrier_payload;
 	};
 
@@ -805,6 +855,9 @@ private:
 		DebugUniformBindingProvenance first_uniform_bind_provenance;
 		LocalVector<DebugUniformBindCallPayload> uniform_bind_calls;
 		uint64_t last_uniform_bind_serial = 0;
+		uint64_t first_compute_uniform_bind_serial = 0;
+		DebugUniformBindingProvenance first_compute_uniform_bind_provenance;
+		DebugComputeDispatchConsumptionPayload first_compute_dispatch_consumption;
 		DebugVertexBindingPayload first_vertex_binding_payload;
 		DebugIndexBindingPayload first_index_binding_payload;
 		DebugDrawIndexedConsumptionPayload first_draw_indexed_consumption;
@@ -901,8 +954,11 @@ private:
 		uint64_t debug_bound_render_pipeline_handle = 0;
 		DebugPipelineBindingProvenance debug_bound_render_pipeline_provenance;
 		LocalVector<uint64_t> debug_bound_descriptor_set_handles;
+		LocalVector<uint64_t> debug_bound_compute_descriptor_set_handles;
 		DebugUniformBindingProvenance debug_last_uniform_bind_provenance;
+		DebugUniformBindingProvenance debug_last_compute_uniform_bind_provenance;
 		uint64_t debug_last_uniform_bind_serial = 0;
+		uint64_t debug_last_compute_uniform_bind_serial = 0;
 		uint32_t debug_vertex_binding_count = 0;
 		LocalVector<uint64_t> debug_bound_vertex_buffer_ids;
 		LocalVector<uint64_t> debug_bound_vertex_buffer_offsets;
@@ -1110,6 +1166,8 @@ private:
 		uint32_t debug_write_count = 0;
 		uint32_t debug_buffer_reference_count = 0;
 		String debug_binding_realization_summary;
+		LocalVector<DebugUniformSetBufferRef> debug_buffer_refs;
+		LocalVector<DebugUniformSetTextureRef> debug_texture_refs;
 	};
 
 	bool adreno_5xx_empty_descriptor_set_layout_workaround = false;
@@ -1375,6 +1433,7 @@ public:
 	static String _debug_command_buffer_depth_prepass_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_opaque_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_tonemap_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
+	String _debug_command_buffer_projection_backend_handoff_summary(const CommandBufferInfo *p_command_buffer) const;
 	static String _debug_command_buffer_late_tail_summary(const CommandBufferInfo *p_command_buffer);
 	static DebugCommandStateSnapshot _debug_capture_command_state_snapshot(const CommandBufferInfo *p_command_buffer);
 	uint32_t _debug_record_command_label(CommandBufferInfo *p_command_buffer, const String &p_label_name);
@@ -1385,6 +1444,7 @@ public:
 	String _debug_wait_semaphore_summary(CommandQueue *p_command_queue, VectorView<SemaphoreID> p_wait_semaphores) const;
 	String _debug_wait_semaphore_provenance_summary(VectorView<SemaphoreID> p_wait_semaphores, const Fence *p_fence = nullptr);
 	String _debug_signal_semaphore_summary(VectorView<SemaphoreID> p_cmd_semaphores, VectorView<SwapChainID> p_swap_chains) const;
+	bool _debug_projection_backend_handoff_trace_enabled() const;
 	bool _debug_submit9_completion_trace_enabled() const;
 	bool _debug_submit9_sync_payload_enabled() const;
 	bool _debug_submit9_prewait_window_enabled() const;
