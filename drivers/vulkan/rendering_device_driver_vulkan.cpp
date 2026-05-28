@@ -13615,6 +13615,183 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		r_text += ",scope=" + _debug_render_pass_scope_summary_text(p_scope);
 		r_text += "}";
 	};
+	const auto append_hash_hex = [](String &r_text, uint64_t p_hash) {
+		r_text += "0x" + String::num_uint64(p_hash, 16);
+	};
+	const auto accumulate_hash_string = [](const String &p_value, uint64_t &r_hash) {
+		r_hash = hash_murmur3_one_64(p_value.hash64(), r_hash);
+	};
+	const auto accumulate_hash_uint64 = [](uint64_t p_value, uint64_t &r_hash) {
+		r_hash = hash_murmur3_one_64(p_value, r_hash);
+	};
+	const auto accumulate_descriptor_set_payload_hash = [&](const LocalVector<uint32_t> &p_set_indices, const LocalVector<uint64_t> &p_descriptor_set_handles, uint64_t &r_hash) {
+		accumulate_hash_uint64(p_set_indices.size(), r_hash);
+		accumulate_hash_uint64(p_descriptor_set_handles.size(), r_hash);
+		for (uint32_t i = 0; i < p_set_indices.size(); i++) {
+			accumulate_hash_uint64(p_set_indices[i], r_hash);
+		}
+		for (uint32_t i = 0; i < p_descriptor_set_handles.size(); i++) {
+			accumulate_hash_uint64(p_descriptor_set_handles[i], r_hash);
+		}
+	};
+	const auto accumulate_vertex_binding_payload_hash = [&](const DebugVertexBindingPayload &p_payload, uint64_t &r_hash) {
+		accumulate_hash_uint64(p_payload.valid ? 1 : 0, r_hash);
+		if (!p_payload.valid) {
+			return;
+		}
+		accumulate_hash_uint64(p_payload.serial, r_hash);
+		accumulate_hash_uint64(p_payload.buffer_ids.size(), r_hash);
+		for (uint32_t i = 0; i < p_payload.buffer_ids.size(); i++) {
+			accumulate_hash_uint64(p_payload.buffer_ids[i], r_hash);
+			const uint64_t offset = i < p_payload.offsets.size() ? p_payload.offsets[i] : 0;
+			accumulate_hash_uint64(offset, r_hash);
+		}
+	};
+	const auto accumulate_index_binding_payload_hash = [&](const DebugIndexBindingPayload &p_payload, uint64_t &r_hash) {
+		accumulate_hash_uint64(p_payload.valid ? 1 : 0, r_hash);
+		if (!p_payload.valid) {
+			return;
+		}
+		accumulate_hash_uint64(p_payload.serial, r_hash);
+		accumulate_hash_uint64(p_payload.buffer_id, r_hash);
+		accumulate_hash_uint64(p_payload.offset, r_hash);
+		accumulate_hash_uint64((uint64_t)p_payload.format, r_hash);
+	};
+	const auto accumulate_uniform_bind_calls_hash = [&](const LocalVector<DebugUniformBindCallPayload> &p_calls, uint64_t &r_hash) {
+		accumulate_hash_uint64(p_calls.size(), r_hash);
+		for (uint32_t i = 0; i < p_calls.size(); i++) {
+			const DebugUniformBindCallPayload &call = p_calls[i];
+			accumulate_hash_uint64(call.serial, r_hash);
+			accumulate_hash_uint64(call.first_set_index, r_hash);
+			accumulate_hash_uint64(call.set_count, r_hash);
+			accumulate_descriptor_set_payload_hash(call.set_indices, call.descriptor_set_handles, r_hash);
+		}
+	};
+	const auto accumulate_entry_payload_hash = [&](const DebugLabelEntry &p_entry, uint64_t &r_hash) {
+		accumulate_hash_string(p_entry.label, r_hash);
+		accumulate_hash_string(p_entry.operation_tag, r_hash);
+		accumulate_hash_uint64(p_entry.label_index, r_hash);
+		accumulate_hash_uint64(p_entry.render_pipeline_bind_count, r_hash);
+		accumulate_hash_uint64(p_entry.render_uniform_bind_count, r_hash);
+		accumulate_hash_uint64(p_entry.vertex_buffer_bind_count, r_hash);
+		accumulate_hash_uint64(p_entry.index_buffer_bind_count, r_hash);
+		accumulate_hash_uint64(p_entry.draw_count, r_hash);
+		accumulate_hash_uint64(p_entry.draw_indexed_count, r_hash);
+		accumulate_hash_uint64(p_entry.draw_indirect_count, r_hash);
+		accumulate_hash_uint64(p_entry.draw_indexed_indirect_count, r_hash);
+		accumulate_hash_uint64(p_entry.execute_secondary_count, r_hash);
+		accumulate_hash_uint64(p_entry.secondary_command_buffer_count, r_hash);
+		accumulate_hash_uint64(p_entry.secondary_label_count, r_hash);
+		accumulate_hash_uint64(p_entry.secondary_draw_label_count, r_hash);
+		accumulate_hash_uint64(p_entry.begin_backend_command_serial, r_hash);
+		accumulate_hash_uint64(p_entry.end_backend_command_serial, r_hash);
+		if (p_entry.first_compute_dispatch_consumption.valid) {
+			const DebugComputeDispatchConsumptionPayload &payload = p_entry.first_compute_dispatch_consumption;
+			accumulate_hash_uint64(payload.serial, r_hash);
+			accumulate_hash_uint64(payload.x_groups, r_hash);
+			accumulate_hash_uint64(payload.y_groups, r_hash);
+			accumulate_hash_uint64(payload.z_groups, r_hash);
+			accumulate_hash_uint64(payload.last_uniform_bind_serial, r_hash);
+			accumulate_hash_uint64(payload.last_pipeline_barrier_serial, r_hash);
+			accumulate_descriptor_set_payload_hash(payload.descriptor_set_indices, payload.descriptor_set_handles, r_hash);
+		}
+		if (p_entry.first_draw_indexed_consumption.valid) {
+			const DebugDrawIndexedConsumptionPayload &payload = p_entry.first_draw_indexed_consumption;
+			accumulate_hash_uint64(payload.serial, r_hash);
+			accumulate_hash_uint64(payload.index_count, r_hash);
+			accumulate_hash_uint64(payload.instance_count, r_hash);
+			accumulate_hash_uint64(payload.first_index, r_hash);
+			accumulate_hash_uint64((uint64_t)(uint32_t)payload.vertex_offset, r_hash);
+			accumulate_hash_uint64(payload.first_instance, r_hash);
+			accumulate_hash_uint64(payload.last_uniform_bind_serial, r_hash);
+			accumulate_hash_uint64(payload.last_vertex_bind_serial, r_hash);
+			accumulate_hash_uint64(payload.last_index_bind_serial, r_hash);
+			accumulate_hash_uint64(payload.last_pipeline_barrier_serial, r_hash);
+			accumulate_descriptor_set_payload_hash(payload.descriptor_set_indices, payload.descriptor_set_handles, r_hash);
+			accumulate_vertex_binding_payload_hash(payload.vertex_binding_payload, r_hash);
+			accumulate_index_binding_payload_hash(payload.index_binding_payload, r_hash);
+		}
+		if (!p_entry.uniform_bind_calls.is_empty()) {
+			accumulate_uniform_bind_calls_hash(p_entry.uniform_bind_calls, r_hash);
+		}
+	};
+	const auto append_later_scope_draw_payload_probe = [&](String &r_text, const DebugRenderPassScope &p_scope, int32_t p_scope_distance) {
+		r_text += "{scope_distance=" + itos(p_scope_distance);
+		r_text += ",class=\"" + _debug_render_pass_scope_class(p_scope) + "\"";
+		r_text += ",scope=" + _debug_render_pass_scope_summary_text(p_scope);
+		if (p_scope.labels_started == 0) {
+			r_text += ",status=scope_without_inner_labels}";
+			return;
+		}
+		int32_t first_content_entry_index = -1;
+		int32_t last_content_entry_index = -1;
+		int32_t first_draw_payload_entry_index = -1;
+		int32_t last_draw_payload_entry_index = -1;
+		uint32_t content_entry_count = 0;
+		uint32_t draw_payload_entry_count = 0;
+		uint64_t content_signature_hash = 0;
+		uint64_t draw_payload_signature_hash = 0;
+		for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
+			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+			if (entry.label_index < p_scope.first_label_index || entry.label_index > p_scope.last_label_index) {
+				continue;
+			}
+			if (!entry_has_content(entry)) {
+				continue;
+			}
+			content_entry_count++;
+			last_content_entry_index = (int32_t)i;
+			if (first_content_entry_index == -1) {
+				first_content_entry_index = (int32_t)i;
+			}
+			accumulate_entry_payload_hash(entry, content_signature_hash);
+			const bool draw_payload_like = entry.first_draw_indexed_consumption.valid || entry.draw_count > 0 || entry.render_pipeline_bind_count > 0 || entry.render_uniform_bind_count > 0 || entry.vertex_buffer_bind_count > 0 || entry.index_buffer_bind_count > 0;
+			if (!draw_payload_like) {
+				continue;
+			}
+			draw_payload_entry_count++;
+			last_draw_payload_entry_index = (int32_t)i;
+			if (first_draw_payload_entry_index == -1) {
+				first_draw_payload_entry_index = (int32_t)i;
+			}
+			accumulate_entry_payload_hash(entry, draw_payload_signature_hash);
+		}
+		r_text += ",content_entry_count=" + itos(content_entry_count);
+		r_text += ",draw_payload_entry_count=" + itos(draw_payload_entry_count);
+		r_text += ",content_signature_hash=";
+		append_hash_hex(r_text, content_signature_hash);
+		r_text += ",draw_payload_signature_hash=";
+		append_hash_hex(r_text, draw_payload_signature_hash);
+		r_text += ",first_content=";
+		if (first_content_entry_index == -1) {
+			r_text += "none";
+		} else {
+			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[first_content_entry_index];
+			append_meaningful_content_entry_summary(r_text, entry, &p_scope, 0);
+		}
+		r_text += ",last_content=";
+		if (last_content_entry_index == -1) {
+			r_text += "none";
+		} else {
+			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[last_content_entry_index];
+			append_meaningful_content_entry_summary(r_text, entry, &p_scope, 0);
+		}
+		r_text += ",first_draw_payload_entry=";
+		if (first_draw_payload_entry_index == -1) {
+			r_text += "none";
+		} else {
+			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[first_draw_payload_entry_index];
+			append_meaningful_content_entry_summary(r_text, entry, &p_scope, 0);
+		}
+		r_text += ",last_draw_payload_entry=";
+		if (last_draw_payload_entry_index == -1) {
+			r_text += "none";
+		} else {
+			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[last_draw_payload_entry_index];
+			append_meaningful_content_entry_summary(r_text, entry, &p_scope, 0);
+		}
+		r_text += "}";
+	};
 	uint32_t post_scope_probe_boundary_label_index = search_start_label_index;
 	String post_scope_probe_boundary_source = "handoff_marker";
 	if (first_meaningful_post_handoff_scope_index != -1) {
@@ -13760,6 +13937,13 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[first_later_post_scope_content_entry_index];
 			append_meaningful_content_entry_summary(text, entry, nullptr, -1);
 		}
+	}
+	text += ",first_later_post_scope_draw_payload_content=";
+	if (first_later_post_scope_index == -1) {
+		text += "{status=missing_scope_surface_for_draw_payload_probe}";
+	} else {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[first_later_post_scope_index];
+		append_later_scope_draw_payload_probe(text, scope, first_meaningful_post_handoff_scope_index == -1 ? -1 : first_later_post_scope_index - first_meaningful_post_handoff_scope_index);
 	}
 	text += ",post_scope_failure_surface_classifier={status=\"";
 	if (first_later_post_scope_index != -1 || first_later_post_scope_content_entry_index != -1) {

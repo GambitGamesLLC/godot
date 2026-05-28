@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** In Progress
-**Last Updated:** 2026-05-28 09:32 EDT
+**Last Updated:** 2026-05-28 10:02 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -9992,10 +9992,71 @@ Validation completed:
 
 **Exact next QA follow-up:** rerun the same locked six-case backend/barrier ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`). For the decisive submit-9 packet, compare the new `post_scope_probe_boundary`, `first_later_post_scope_surface`, and `post_scope_failure_surface_classifier` fields across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`, and determine whether the first later packet-local surface after the still-matched post-scope region already diverges inside submit-9 or whether the packet tail is exhausted and the remaining divergence is only visible at later completion/device-loss.
 
-### Session Handoff (2026-05-28 10:08 EDT)
+### Task 261: QA classify the submit-9 post-scope tail surface across the locked six-case ladder
 
-**Stopping Point:** Coder landed the post-scope tail classifier and rebuilt the source-built editor so QA can finally separate “there is still a later packet-local surface inside submit-9” from “the packet is exhausted and only the completion edge remains.”
+**Bead ID:** `oc-z8aw`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim the next QA bead in the godot repo and stay strictly inside the already-approved active backend/barrier seam. Use `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/` as the source-of-truth comparison root, and use the freshly rebuilt `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the skipped `device_lost_edge` wrinkle. Rerun the same locked six-case ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`) across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`. Capture a fresh artifact root with per-case stdout/stderr, command capture, env capture, exit status, and a parsed comparison. On the decisive submit-9 packet, compare the new `post_scope_probe_boundary`, `first_later_post_scope_surface`, and `post_scope_failure_surface_classifier` fields across the good rung and both first-bad rungs, determine whether divergence starts at a later packet-local surface inside submit-9 or only at the later completion/device-loss boundary, update this master plan with the exact artifact root and concrete conclusion, close the QA bead with a clear reason if complete, and materialize the next narrow follow-on bead if the seam sharpens cleanly.
 
-**Next Slice:** Hand the lane to QA on bead `oc-69ph` to rerun the same six-case ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` and classify the new `first_later_post_scope_surface` / `post_scope_failure_surface_classifier` fields.
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked six-case ladder with the fresh source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` and captured a fresh artifact root at `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-scope-tail-qa-sourcebuild-20260528-100559/`.
+
+Artifacts in that root include:
+- `context.txt`, `commands.txt`, `run_summary.tsv`
+- per-case `logs/*.stdout.log`, `logs/*.stderr.log`, `logs/*.env.txt`, `logs/*.exact_command.txt`, `logs/*.exit_status.txt`
+- parsed comparison outputs: `submit9_post_scope_compare.json`, `submit9_post_scope_compare.md`, `submit9_post_scope_compare.normalized.json`, `submit9_post_scope_compare.normalized.md`
+
+Submit-9 rung-by-rung QA result:
+- `markers_only`
+  - good rung `projection_non_footprint_immediate_return_only`: `post_scope_probe_boundary={source="first_meaningful_post_handoff_scope_owner_end",label_index=103}`; `first_later_post_scope_surface=Command Graph (L94) (Draw)` draw-payload scope with `pipeline_binds=1`, `uniform_binds=11`, `vertex_buffer_binds=10`, `index_buffer_binds=1`, `draw_calls=10`, `draw_indexed_calls=10`, breadcrumb `UI_PASS`; `post_scope_failure_surface_classifier={status="packet_local_surface_present",later_scope_count=1,later_content_count=1,...}`
+  - first-bad rung `projection_post_barrier_no_scratch_immediate_return_only`: same normalized values as the good rung; exit status still flips to `134`
+  - first-bad rung `projection_post_barrier_immediate_return_only`: same normalized values as the good rung; exit status still flips to `134`
+- `empty_compute_boundary`
+  - good rung `projection_non_footprint_immediate_return_only`: `post_scope_probe_boundary={source="first_meaningful_post_handoff_scope_owner_end",label_index=107}`; `first_later_post_scope_surface=Command Graph (L98) (Draw)` draw-payload scope with the same normalized command shape as above; `post_scope_failure_surface_classifier={status="packet_local_surface_present",later_scope_count=1,later_content_count=1,...}`
+  - first-bad rung `projection_post_barrier_no_scratch_immediate_return_only`: same normalized values as the good rung; exit status still flips to `134`
+  - first-bad rung `projection_post_barrier_immediate_return_only`: same normalized values as the good rung; exit status still flips to `134`
+
+Concrete QA conclusion:
+- The packet tail is **not exhausted**. In both trace modes, submit-9 still contains a later packet-local surface after the matched post-scope Tonemap region.
+- The first later packet-local surface is the same normalized `Command Graph` draw-payload scope on the good rung and both first-bad rungs, and the classifier stays `status="packet_local_surface_present"` everywhere.
+- So the completion-only/device-loss-only hypothesis is ruled out by this probe. However, this probe also does **not** show a divergence at the first later surface boundary itself; the remaining divergence has been narrowed to content *inside* that later submit-9 draw payload (or another finer-grained comparison within it), not to packet exhaustion.
+
+Next seam materialized: bead `oc-qoam` — `Compare submit-9 later Command Graph draw payload content across the good rung and both first-bad backend/barrier rungs`.
+
+### Task 262: Coder instrument the later submit-9 Command Graph draw-payload content across the good and first-bad rungs
+
+**Bead ID:** `oc-qoam`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-qoam` at start and stay strictly inside the already-approved active backend/barrier seam. Use `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-scope-tail-qa-sourcebuild-20260528-100559/` as the source-of-truth QA root. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the skipped `device_lost_edge` wrinkle. Build directly on QA’s latest conclusion: submit-9 still contains a later packet-local `Command Graph` draw surface after the matched post-scope Tonemap region, and that coarse later surface still matches on the good rung plus both first-bad rungs. Add the smallest honest reversible backend instrumentation needed to compare the finer-grained content/state *inside* that later draw payload so QA can tell whether divergence starts there or whether that draw payload still matches too and the seam must move later again. Keep the existing identity checks intact, update this master plan with exact touched files, validation, and the exact QA follow-up, commit/push if the coder package is ready, and close bead `oc-qoam` with a clear reason.
+
+**Status:** ✅ Complete
+
+**Results:** Extended the existing default-off `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` backend summary in `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp` without widening scope or changing renderer behavior. The earlier post-scope probe already proved the first later packet-local submit-9 surface is a still-matched `Command Graph` draw scope; this slice instruments the finer-grained payload *inside that scope* instead of only the outer surface envelope.
+
+New submit-9 handoff field now emitted under the same existing gate:
+- `first_later_post_scope_draw_payload_content=` summarizes the first later post-scope render-pass surface as a draw-payload container rather than only a coarse scope boundary. It reports the normalized scope identity, `content_entry_count`, `draw_payload_entry_count`, `content_signature_hash`, and `draw_payload_signature_hash`, then emits `first_content`, `last_content`, `first_draw_payload_entry`, and `last_draw_payload_entry` using the existing detailed entry serializer.
+- Those per-entry payload summaries preserve the exact finer-grained state QA needs for the good rung vs both first-bad rungs: label/operation identity, command counts, first/last backend command names, descriptor-set driver handles, indexed-draw payload (`serial`, counts, first index / vertex offset / first instance), vertex-buffer bindings, index-buffer binding, last relevant bind/barrier serials, and projection-resource overlap if any.
+- The two new hashes give QA an immediate discriminator without throwing away detail: if a bad rung differs inside the later draw payload, the hashes and/or detailed first/last entry summaries should diverge there; if they still match too, the seam honestly moves later again.
+
+Exact touched runtime file: `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+
+Validation completed:
+- `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.dev.x86_64.o`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64 && strings bin/godot.linuxbsd.editor.dev.x86_64 | rg -F "first_later_post_scope_draw_payload_content"`
+
+**Exact next QA follow-up:** rerun the same locked six-case backend/barrier ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-scope-tail-qa-sourcebuild-20260528-100559/` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`). On the decisive submit-9 packet, compare `first_later_post_scope_draw_payload_content.content_signature_hash`, `draw_payload_signature_hash`, `first_content`, `last_content`, `first_draw_payload_entry`, and `last_draw_payload_entry` across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` to determine whether divergence starts inside that later `Command Graph` draw payload or whether that payload still matches too and the seam must move later again.
+
+### Session Handoff (2026-05-28 10:10 EDT)
+
+**Stopping Point:** Coder landed the finer-grained later-draw-payload probe for bead `oc-qoam`, so the decisive submit-9 packet can now expose detailed content/state for the later `Command Graph` draw payload rather than only the outer matching scope boundary.
+
+**Next Slice:** QA should rerun the same locked six-case ladder and compare `first_later_post_scope_draw_payload_content` across the good rung and both first-bad rungs to determine whether divergence starts inside that later draw payload or whether the payload still matches too and the seam must move later again.
 
 **Blockers/Decisions:** No new human decision needed. Derrick’s earlier decision to skip the optional `device_lost_edge` wrinkle still stands. The seam remains strictly inside the approved backend/barrier lane.
