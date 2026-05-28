@@ -13323,6 +13323,28 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		return text;
 	}
 
+	const auto render_pass_scope_anchor_label_index = [](const DebugRenderPassScope &p_scope) {
+		if (p_scope.begin_owner_entry_index != UINT32_MAX) {
+			return p_scope.begin_owner_label_index;
+		}
+		if (p_scope.end_owner_entry_index != UINT32_MAX) {
+			return p_scope.end_owner_label_index;
+		}
+		return p_scope.labels_started > 0 ? p_scope.first_label_index : uint32_t(0);
+	};
+	const auto render_pass_scope_end_label_index = [&](const DebugRenderPassScope &p_scope) {
+		if (p_scope.labels_started > 0) {
+			return p_scope.last_label_index;
+		}
+		if (p_scope.end_owner_entry_index != UINT32_MAX) {
+			return p_scope.end_owner_label_index;
+		}
+		if (p_scope.begin_owner_entry_index != UINT32_MAX) {
+			return p_scope.begin_owner_label_index;
+		}
+		return uint32_t(0);
+	};
+
 	int32_t consumer_entry_index = -1;
 	int32_t first_post_handoff_scope_index = -1;
 	int32_t first_meaningful_post_handoff_scope_index = -1;
@@ -13330,7 +13352,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 	int32_t first_post_handoff_projection_resource_consumer_entry_index = -1;
 	for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
 		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
-		const uint32_t scope_anchor_label_index = scope.begin_owner_entry_index != UINT32_MAX ? scope.begin_owner_label_index : (scope.end_owner_entry_index != UINT32_MAX ? scope.end_owner_label_index : (scope.labels_started > 0 ? scope.first_label_index : 0));
+		const uint32_t scope_anchor_label_index = render_pass_scope_anchor_label_index(scope);
 		if (scope_anchor_label_index <= search_start_label_index) {
 			continue;
 		}
@@ -13587,8 +13609,49 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		}
 		r_text += "}";
 	};
+	const auto append_scope_surface_summary = [&](String &r_text, const DebugRenderPassScope &p_scope, int32_t p_scope_distance) {
+		r_text += "{scope_distance=" + itos(p_scope_distance);
+		r_text += ",class=\"" + _debug_render_pass_scope_class(p_scope) + "\"";
+		r_text += ",scope=" + _debug_render_pass_scope_summary_text(p_scope);
+		r_text += "}";
+	};
+	uint32_t post_scope_probe_boundary_label_index = search_start_label_index;
+	String post_scope_probe_boundary_source = "handoff_marker";
+	if (first_meaningful_post_handoff_scope_index != -1) {
+		const DebugRenderPassScope &meaningful_scope = p_command_buffer->debug_render_pass_scopes[first_meaningful_post_handoff_scope_index];
+		post_scope_probe_boundary_label_index = render_pass_scope_end_label_index(meaningful_scope);
+		post_scope_probe_boundary_source = meaningful_scope.labels_started > 0 ? "first_meaningful_post_handoff_scope_last_label" : "first_meaningful_post_handoff_scope_owner_end";
+	} else if (first_post_handoff_scope_index != -1) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[first_post_handoff_scope_index];
+		post_scope_probe_boundary_label_index = render_pass_scope_end_label_index(scope);
+		post_scope_probe_boundary_source = scope.labels_started > 0 ? "first_post_handoff_scope_last_label" : "first_post_handoff_scope_owner_end";
+	}
+	int32_t first_later_post_scope_index = -1;
+	int32_t first_later_post_scope_content_entry_index = -1;
+	int32_t last_post_scope_index = -1;
+	int32_t last_post_scope_content_entry_index = -1;
+	uint32_t later_post_scope_count = 0;
+	uint32_t later_post_scope_content_count = 0;
+	for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+		if (render_pass_scope_anchor_label_index(scope) <= post_scope_probe_boundary_label_index) {
+			continue;
+		}
+		later_post_scope_count++;
+		last_post_scope_index = (int32_t)i;
+		if (first_later_post_scope_index == -1) {
+			first_later_post_scope_index = (int32_t)i;
+		}
+	}
 	for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
 		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.label_index > post_scope_probe_boundary_label_index && entry_has_content(entry)) {
+			later_post_scope_content_count++;
+			last_post_scope_content_entry_index = (int32_t)i;
+			if (first_later_post_scope_content_entry_index == -1) {
+				first_later_post_scope_content_entry_index = (int32_t)i;
+			}
+		}
 		if (entry.label_index <= search_start_label_index || !entry_has_content(entry)) {
 			continue;
 		}
@@ -13682,6 +13745,45 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		}
 		append_meaningful_content_entry_summary(text, entry, scope, scope_distance);
 	}
+	text += ",post_scope_probe_boundary={source=\"" + post_scope_probe_boundary_source + "\"";
+	text += ",label_index=" + itos(post_scope_probe_boundary_label_index) + "}";
+	text += ",first_later_post_scope_surface=";
+	if (first_later_post_scope_index == -1 && first_later_post_scope_content_entry_index == -1) {
+		text += "{status=none_after_post_scope_probe}";
+	} else {
+		const uint32_t first_later_scope_label_index = first_later_post_scope_index == -1 ? UINT32_MAX : render_pass_scope_anchor_label_index(p_command_buffer->debug_render_pass_scopes[first_later_post_scope_index]);
+		const uint32_t first_later_content_label_index = first_later_post_scope_content_entry_index == -1 ? UINT32_MAX : p_command_buffer->debug_label_entries[first_later_post_scope_content_entry_index].label_index;
+		if (first_later_scope_label_index <= first_later_content_label_index) {
+			const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[first_later_post_scope_index];
+			append_scope_surface_summary(text, scope, first_meaningful_post_handoff_scope_index == -1 ? -1 : first_later_post_scope_index - first_meaningful_post_handoff_scope_index);
+		} else {
+			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[first_later_post_scope_content_entry_index];
+			append_meaningful_content_entry_summary(text, entry, nullptr, -1);
+		}
+	}
+	text += ",post_scope_failure_surface_classifier={status=\"";
+	if (first_later_post_scope_index != -1 || first_later_post_scope_content_entry_index != -1) {
+		text += "packet_local_surface_present";
+	} else {
+		text += "no_packet_local_surface_completion_boundary_candidate";
+	}
+	text += "\",later_scope_count=" + itos(later_post_scope_count);
+	text += ",later_content_count=" + itos(later_post_scope_content_count);
+	text += ",last_post_scope=";
+	if (last_post_scope_index == -1) {
+		text += "none";
+	} else {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[last_post_scope_index];
+		append_scope_surface_summary(text, scope, first_meaningful_post_handoff_scope_index == -1 ? -1 : last_post_scope_index - first_meaningful_post_handoff_scope_index);
+	}
+	text += ",last_post_scope_content=";
+	if (last_post_scope_content_entry_index == -1) {
+		text += "none";
+	} else {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[last_post_scope_content_entry_index];
+		append_meaningful_content_entry_summary(text, entry, nullptr, -1);
+	}
+	text += "}";
 	text += ",first_downstream_consumer=";
 	if (consumer_entry_index == -1) {
 		text += "{status=missing_consumer_after_handoff}";

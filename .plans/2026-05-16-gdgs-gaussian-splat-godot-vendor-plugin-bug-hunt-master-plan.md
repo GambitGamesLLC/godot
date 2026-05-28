@@ -9927,10 +9927,75 @@ Validation run/results:
 
 **Exact next QA follow-up:** rerun the same locked six-case ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-adopted-dispatch-handoff-scope-qa-sourcebuild-relinked-20260528-092534/` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`). For the decisive submit-9 packet, compare the new `first_meaningful_post_handoff_content` and `first_post_handoff_projection_resource_consumer` fields across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`, and determine whether the first content/resource packet after the matched scopes diverges immediately or whether those packets still match and the first shared projection-resource consumer/failure surface occurs later.
 
-### Session Handoff (2026-05-28 09:30 EDT)
+### Task 259: QA compare the first post-scope content/resource-consumer seam on the decisive submit-9 packet
 
-**Stopping Point:** The downstream consumer/content seam is now instrumented past the still-matched `first_post_handoff_scope` / `first_meaningful_post_handoff_scope` boundary. The source-built editor compiles with two new trace fields on the existing `projection_backend_handoff` summary: `first_meaningful_post_handoff_content` and `first_post_handoff_projection_resource_consumer`.
+**Bead ID:** `oc-6oek`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, create/claim the next QA bead in the godot repo and stay strictly inside the already-approved active backend/barrier seam. Use `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-adopted-dispatch-handoff-scope-qa-sourcebuild-relinked-20260528-092534/` as the source-of-truth comparison root, and use the freshly rebuilt `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the skipped `device_lost_edge` wrinkle. Rerun the same locked six-case ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`) across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`. Capture a fresh artifact root with per-case stdout/stderr, command capture, env capture, exit status, and a parsed comparison. On the decisive submit-9 packet, compare the new `first_meaningful_post_handoff_content` and `first_post_handoff_projection_resource_consumer` fields across the good rung and both first-bad rungs, determine whether divergence starts immediately after the already-matched scopes or only at the first later shared projection-resource consumer, update this plan with the exact artifact root and concrete conclusion, close the QA bead with a clear reason if complete, and materialize the next narrow follow-on bead if the seam sharpens cleanly.
 
-**Next Slice:** Hand the lane back to QA to rerun the exact same six-case ladder and compare those two new downstream fields across the last-good rung and both first-bad rungs, so we can tell whether the first meaningful content/resource usage after the matched scopes already diverges or whether the first shared projection-resource consumer still matches and the failure surfaces later.
+**Status:** ✅ Complete
 
-**Blockers/Decisions:** No new human decision needed. Derrick’s earlier decision to skip the optional `device_lost_edge` wrinkle still stands. The seam remains strictly inside the approved backend/barrier lane, and the next step is a QA comparison pass on the newly emitted downstream content/resource summaries.
+**Results:** QA created and used bead `oc-6oek`, verified the fresh source-built editor already contained the new downstream field strings, and reran the locked six-case ladder under fresh artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/`. Captured artifacts include `context.txt`, `binary_strings_check.txt`, `commands.txt`, `run_summary.tsv`, `comparison_summary.txt`, `content_consumer_compare.json`, and per-case `stdout.log`, `stderr.log`, `env.txt`, `exact_command.txt`, and `exit_status.txt` under `logs/`.
+
+Run outcomes stayed locked to the established ladder again:
+- `projection_non_footprint_immediate_return_only` (`markers_only`, `empty_compute_boundary`) exited `0`.
+- `projection_post_barrier_no_scratch_immediate_return_only` (`markers_only`, `empty_compute_boundary`) exited `134`.
+- `projection_post_barrier_immediate_return_only` (`markers_only`, `empty_compute_boundary`) exited `134`.
+
+On the decisive submit-9 packet, the runtime still advanced through the adopted-dispatch path on all six reruns, but the newly instrumented downstream fields remained semantically matched across the last-good rung and both first-bad rungs in **both** vendor trace modes:
+- `first_meaningful_post_handoff_content`
+  - good rung: `{status=missing_content_inside_meaningful_scope}`
+  - first-bad `projection_post_barrier_no_scratch_immediate_return_only`: `{status=missing_content_inside_meaningful_scope}`
+  - first-bad `projection_post_barrier_immediate_return_only`: `{status=missing_content_inside_meaningful_scope}`
+- `first_post_handoff_projection_resource_consumer`
+  - good rung: `{status=none_with_shared_projection_resources}`
+  - first-bad `projection_post_barrier_no_scratch_immediate_return_only`: `{status=none_with_shared_projection_resources}`
+  - first-bad `projection_post_barrier_immediate_return_only`: `{status=none_with_shared_projection_resources}`
+
+Exact QA conclusion: divergence does **not** start immediately after the already-matched `first_post_handoff_scope` / `first_meaningful_post_handoff_scope` boundary, and it also does **not** begin at the first later shared projection-resource consumer because this matched submit-9 packet still finds **no** content inside the first meaningful scope and **no** later post-handoff label whose descriptor-backed content overlaps the adopted projection producer resources on any rung. The seam therefore sharpens one step later again: the decisive submit-9 packet still stays matched through the newly instrumented post-scope content/resource-consumer probes, so the next discriminator must classify the first later failure surface beyond a post-handoff region that never consumes the adopted projection resources at all.
+
+Follow-on seam materialized as new coder bead `oc-69ph`: classify the first later submit-9 failure surface after these still-matched post-scope probes, while staying inside the approved backend/barrier seam and without reopening the excluded shader/request-hash/create/provenance/device-lost detours.
+
+Relevant fresh artifacts:
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/commands.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/comparison_summary.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/content_consumer_compare.json`
+
+### Task 260: Coder classify the first later submit-9 failure surface beyond the still-matched post-scope probes
+
+**Bead ID:** `oc-69ph`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-69ph` at start and stay strictly inside the already-approved active backend/barrier seam. Use `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/` as the source-of-truth QA root. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, the skipped `device_lost_edge` wrinkle, or the resolved stale-binary relink issue. Build directly on the latest QA result: the decisive submit-9 packet still matches across the good and bad rungs through adopted-dispatch selection, `first_post_handoff_scope`, `first_meaningful_post_handoff_scope`, `first_meaningful_post_handoff_content={status=missing_content_inside_meaningful_scope}`, and `first_post_handoff_projection_resource_consumer={status=none_with_shared_projection_resources}`. Add the smallest honest reversible backend instrumentation or comparison needed to classify the **first later failure surface after that still-matched post-scope region**—specifically, the earliest downstream packet/scope/state that differs once the handoff summary has proven the adopted projection resources are no longer consumed in the compared submit-9 packet. Keep the slice diagnostic/reversible, update this master plan with exact touched files, validation, and the next QA follow-up, and close the bead with a clear reason if the coder package is ready.
+
+**Status:** ✅ Complete
+
+**Results:** Landed the next narrow backend-only classifier in `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`, keeping the locked adopted-dispatch identity checks and all earlier post-handoff probes intact. The existing handoff summary already proved that the decisive submit-9 packet still matches through `first_post_handoff_scope`, `first_meaningful_post_handoff_scope`, `first_meaningful_post_handoff_content={status=missing_content_inside_meaningful_scope}`, and `first_post_handoff_projection_resource_consumer={status=none_with_shared_projection_resources}`; this slice adds the smallest later-surface discriminator after that matched region without reopening excluded seams.
+
+New default-off fields now emitted under the existing `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` gate:
+- `post_scope_probe_boundary={source,label_index}` records the exact label boundary where the already-matched post-scope probe region ends. On the current lane this is expected to anchor to the first meaningful post-handoff scope owner end (the Tonemap draw wrapper when the scope has no inner labels).
+- `first_later_post_scope_surface=` reports the earliest later packet-local surface after that boundary, preferring the earliest later render-pass scope vs the earliest later label-level content by actual label ordering.
+- `post_scope_failure_surface_classifier=` separates the two outcomes this seam needed: `status="packet_local_surface_present"` when there is still a useful later submit-9 scope/content surface to compare inside the same packet, versus `status="no_packet_local_surface_completion_boundary_candidate"` when the compared packet is exhausted after the current probes and the remaining failure only looks visible at later execution/completion. The classifier also reports `later_scope_count`, `later_content_count`, `last_post_scope`, and `last_post_scope_content` so QA can tell whether the packet tail still contains additional local surfaces even if the first one still matches.
+
+Exact touched runtime file: `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+
+Validation completed:
+- `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.dev.x86_64.o`
+- `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64 && strings bin/godot.linuxbsd.editor.dev.x86_64 | rg -F "post_scope_failure_surface_classifier"`
+
+**Exact next QA follow-up:** rerun the same locked six-case backend/barrier ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-post-handoff-content-consumer-qa-sourcebuild-20260528-094900/` using `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`). For the decisive submit-9 packet, compare the new `post_scope_probe_boundary`, `first_later_post_scope_surface`, and `post_scope_failure_surface_classifier` fields across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`, and determine whether the first later packet-local surface after the still-matched post-scope region already diverges inside submit-9 or whether the packet tail is exhausted and the remaining divergence is only visible at later completion/device-loss.
+
+### Session Handoff (2026-05-28 10:08 EDT)
+
+**Stopping Point:** Coder landed the post-scope tail classifier and rebuilt the source-built editor so QA can finally separate “there is still a later packet-local surface inside submit-9” from “the packet is exhausted and only the completion edge remains.”
+
+**Next Slice:** Hand the lane to QA on bead `oc-69ph` to rerun the same six-case ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` and classify the new `first_later_post_scope_surface` / `post_scope_failure_surface_classifier` fields.
+
+**Blockers/Decisions:** No new human decision needed. Derrick’s earlier decision to skip the optional `device_lost_edge` wrinkle still stands. The seam remains strictly inside the approved backend/barrier lane.
