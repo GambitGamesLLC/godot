@@ -13226,21 +13226,23 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		return "none";
 	}
 
+	const auto trace_family_key = [](const String &p_label) {
+		const int level_suffix_index = p_label.find(" (L");
+		return level_suffix_index >= 0 ? p_label.substr(0, level_suffix_index) : p_label;
+	};
 	const DebugLabelEntry &trace_entry = p_command_buffer->debug_label_entries[trace_entry_index];
+	const String trace_family = trace_family_key(trace_entry.label);
 	const uint32_t handoff_label_index = handoff_marker_index >= 0 ? p_command_buffer->debug_label_entries[handoff_marker_index].label_index : UINT32_MAX;
-	const uint32_t search_start_label_index = handoff_marker_index >= 0 ? handoff_label_index : trace_entry.label_index;
+	const DebugLabelEntry *projection_dispatch_entry = &trace_entry;
+	int32_t projection_dispatch_entry_index = trace_entry_index;
+	bool adopted_later_family_dispatch = false;
+	uint32_t family_label_count_after_anchor = 0;
+	uint32_t family_compute_label_count_after_anchor = 0;
+	uint32_t family_dispatch_count_after_anchor = 0;
+	uint32_t any_dispatch_count_after_anchor = 0;
+	int32_t first_family_dispatch_entry_index = -1;
+	int32_t first_any_dispatch_entry_index = -1;
 	if (!trace_entry.first_compute_dispatch_consumption.valid) {
-		const auto trace_family_key = [](const String &p_label) {
-			const int level_suffix_index = p_label.find(" (L");
-			return level_suffix_index >= 0 ? p_label.substr(0, level_suffix_index) : p_label;
-		};
-		const String family_key = trace_family_key(trace_entry.label);
-		uint32_t family_label_count_after_anchor = 0;
-		uint32_t family_compute_label_count_after_anchor = 0;
-		uint32_t family_dispatch_count_after_anchor = 0;
-		uint32_t any_dispatch_count_after_anchor = 0;
-		int32_t first_family_dispatch_entry_index = -1;
-		int32_t first_any_dispatch_entry_index = -1;
 		for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
 			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
 			if (entry.label_index <= trace_entry.label_index) {
@@ -13249,7 +13251,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 			if (handoff_marker_index >= 0 && entry.label_index > handoff_label_index) {
 				continue;
 			}
-			const bool family_match = trace_family_key(entry.label) == family_key;
+			const bool family_match = trace_family_key(entry.label) == trace_family;
 			if (family_match) {
 				family_label_count_after_anchor++;
 				if (entry.operation_tag == "Compute") {
@@ -13270,6 +13272,14 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 				}
 			}
 		}
+		if (first_family_dispatch_entry_index != -1) {
+			projection_dispatch_entry_index = first_family_dispatch_entry_index;
+			projection_dispatch_entry = &p_command_buffer->debug_label_entries[first_family_dispatch_entry_index];
+			adopted_later_family_dispatch = true;
+		}
+	}
+	const uint32_t search_start_label_index = handoff_marker_index >= 0 ? handoff_label_index : projection_dispatch_entry->label_index;
+	if (!projection_dispatch_entry->first_compute_dispatch_consumption.valid) {
 		String cause = "no_compute_dispatch_recorded_before_handoff";
 		if (family_dispatch_count_after_anchor > 0) {
 			cause = "trace_anchor_lookup_failed_family_dispatch_present";
@@ -13287,7 +13297,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		text += ",last_descendant_label=" + (trace_entry.last_descendant_label.is_empty() ? String("none") : String("\"") + trace_entry.last_descendant_label + "\"");
 		text += "}";
 		text += ",trace_window={handoff_label_index=" + (handoff_marker_index >= 0 ? itos((int32_t)handoff_label_index) : String("none"));
-		text += ",family_key=\"" + family_key + "\"";
+		text += ",family_key=\"" + trace_family + "\"";
 		text += ",family_labels_after_anchor=" + itos(family_label_count_after_anchor);
 		text += ",family_compute_labels_after_anchor=" + itos(family_compute_label_count_after_anchor);
 		text += ",family_dispatches_after_anchor=" + itos(family_dispatch_count_after_anchor);
@@ -13305,7 +13315,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 			text += ",first_any_dispatch={label=\"" + first_any_dispatch_entry.label + "\"";
 			text += ",label_index=" + itos(first_any_dispatch_entry.label_index);
 			text += ",dispatch_serial=" + String::num_uint64(first_any_dispatch_entry.first_compute_dispatch_consumption.serial);
-			text += ",family_match=" + String(trace_family_key(first_any_dispatch_entry.label) == family_key ? "true" : "false") + "}";
+			text += ",family_match=" + String(trace_family_key(first_any_dispatch_entry.label) == trace_family ? "true" : "false") + "}";
 		} else {
 			text += ",first_any_dispatch=none";
 		}
@@ -13386,7 +13396,7 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		}
 		return lists;
 	};
-	const auto producer_resources = gather_resources(trace_entry.first_compute_dispatch_consumption);
+	const auto producer_resources = gather_resources(projection_dispatch_entry->first_compute_dispatch_consumption);
 
 	const auto append_buffer_resource_list = [&](String &r_text, const LocalVector<DebugUniformSetBufferRef> &p_refs) {
 		r_text += "[";
@@ -13421,12 +13431,19 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 	};
 
 	String text = "{trace_label=\"" + trace_entry.label + "\"";
-	text += ",projection_dispatch={serial=" + String::num_uint64(trace_entry.first_compute_dispatch_consumption.serial);
-	text += ",last_uniform_bind_serial=" + String::num_uint64(trace_entry.first_compute_dispatch_consumption.last_uniform_bind_serial);
-	text += ",last_pipeline_barrier_serial=" + String::num_uint64(trace_entry.first_compute_dispatch_consumption.last_pipeline_barrier_serial);
-	text += ",groups=[" + itos(trace_entry.first_compute_dispatch_consumption.x_groups) + "," + itos(trace_entry.first_compute_dispatch_consumption.y_groups) + "," + itos(trace_entry.first_compute_dispatch_consumption.z_groups) + "]";
+	text += ",trace_anchor_selection={status=\"" + String(adopted_later_family_dispatch ? "adopted_later_family_dispatch" : "trace_label_dispatch") + "\"";
+	text += ",family_key=\"" + trace_family + "\"";
+	text += ",anchor_label_index=" + itos(trace_entry.label_index);
+	text += ",dispatch_label=\"" + projection_dispatch_entry->label + "\"";
+	text += ",dispatch_label_index=" + itos(projection_dispatch_entry->label_index);
+	text += ",dispatch_entry_index=" + itos(projection_dispatch_entry_index);
+	text += ",dispatch_serial=" + String::num_uint64(projection_dispatch_entry->first_compute_dispatch_consumption.serial) + "}";
+	text += ",projection_dispatch={serial=" + String::num_uint64(projection_dispatch_entry->first_compute_dispatch_consumption.serial);
+	text += ",last_uniform_bind_serial=" + String::num_uint64(projection_dispatch_entry->first_compute_dispatch_consumption.last_uniform_bind_serial);
+	text += ",last_pipeline_barrier_serial=" + String::num_uint64(projection_dispatch_entry->first_compute_dispatch_consumption.last_pipeline_barrier_serial);
+	text += ",groups=[" + itos(projection_dispatch_entry->first_compute_dispatch_consumption.x_groups) + "," + itos(projection_dispatch_entry->first_compute_dispatch_consumption.y_groups) + "," + itos(projection_dispatch_entry->first_compute_dispatch_consumption.z_groups) + "]";
 	text += ",descriptor_sets=";
-	append_descriptor_set_list(text, trace_entry.first_compute_dispatch_consumption.descriptor_set_indices, trace_entry.first_compute_dispatch_consumption.descriptor_set_handles);
+	append_descriptor_set_list(text, projection_dispatch_entry->first_compute_dispatch_consumption.descriptor_set_indices, projection_dispatch_entry->first_compute_dispatch_consumption.descriptor_set_handles);
 	text += ",producer_buffer_resources=";
 	append_buffer_resource_list(text, producer_resources.buffers);
 	text += ",producer_texture_resources=";
