@@ -941,6 +941,11 @@ private:
 		uint32_t secondary_draw_label_count = 0;
 		String first_backend_command;
 		String last_backend_command;
+		uint64_t render_pass_handle = 0;
+		uint64_t framebuffer_handle = 0;
+		uint64_t render_pass_attachment_exact_hash = 0;
+		uint64_t render_pass_compatibility_hash = 0;
+		LocalVector<uint8_t> render_pass_attachment_load_ops;
 	};
 
 	struct CommandBufferInfo {
@@ -1430,6 +1435,8 @@ public:
 	static String _debug_command_buffer_pre_tail_copy_handoff_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_level_draw_handoff_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_depth_prepass_consumer_summary(const CommandBufferInfo *p_command_buffer);
+	String _debug_render_pass_scope_summary_text(const DebugRenderPassScope &p_scope) const;
+	String _debug_render_pass_scope_class(const DebugRenderPassScope &p_scope) const;
 	static String _debug_command_buffer_depth_prepass_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_opaque_pass_scope_summary(const CommandBufferInfo *p_command_buffer);
 	static String _debug_command_buffer_tonemap_pass_scope_summary(const CommandBufferInfo *p_command_buffer);

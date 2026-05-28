@@ -6549,6 +6549,11 @@ void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cm
 		scope = DebugRenderPassScope();
 		scope.scope_index = scope_index;
 		scope.begin_breadcrumb = command_buffer->debug_last_breadcrumb;
+		scope.render_pass_handle = (uint64_t)render_pass->vk_render_pass;
+		scope.framebuffer_handle = (uint64_t)framebuffer->vk_framebuffer;
+		scope.render_pass_attachment_exact_hash = render_pass->debug_attachment_exact_hash;
+		scope.render_pass_compatibility_hash = render_pass->debug_compatibility_hash;
+		scope.render_pass_attachment_load_ops = render_pass->debug_attachment_load_ops;
 		if (command_buffer->debug_active_label_stack_size > 0) {
 			const uint32_t owner_entry_index = command_buffer->debug_active_label_stack[command_buffer->debug_active_label_stack_size - 1];
 			if (owner_entry_index < command_buffer->debug_label_entry_count) {
@@ -9734,6 +9739,91 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_consumer
 	}
 	text += "}";
 	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_render_pass_scope_summary_text(const DebugRenderPassScope &p_scope) const {
+	String text = "{index=" + itos(p_scope.scope_index);
+	text += ",owner_begin=";
+	if (p_scope.begin_owner_label.is_empty()) {
+		text += "none";
+	} else {
+		text += "\"" + p_scope.begin_owner_label + "\"";
+	}
+	text += ",owner_end=";
+	if (p_scope.end_owner_label.is_empty()) {
+		text += "none";
+	} else {
+		text += "\"" + p_scope.end_owner_label + "\"";
+	}
+	text += ",labels_started=" + itos(p_scope.labels_started);
+	text += ",draw_labels_started=" + itos(p_scope.draw_labels_started);
+	text += ",label_indexes=";
+	if (p_scope.labels_started == 0) {
+		text += "none";
+	} else {
+		text += itos(p_scope.first_label_index) + ".." + itos(p_scope.last_label_index);
+	}
+	text += ",levels=";
+	if (p_scope.labels_started == 0) {
+		text += "none";
+	} else if (p_scope.first_label_level == p_scope.last_label_level) {
+		text += itos(p_scope.first_label_level);
+	} else {
+		text += itos(p_scope.first_label_level) + ".." + itos(p_scope.last_label_level);
+	}
+	if (!p_scope.first_label.is_empty()) {
+		text += ",first_label=\"" + p_scope.first_label + "\"";
+	}
+	if (!p_scope.last_label.is_empty()) {
+		text += ",last_label=\"" + p_scope.last_label + "\"";
+	}
+	text += ",render_pass_handle=" + (p_scope.render_pass_handle == 0 ? String("none") : String("\"0x") + String::num_uint64(p_scope.render_pass_handle, 16) + "\"");
+	text += ",framebuffer_handle=" + (p_scope.framebuffer_handle == 0 ? String("none") : String("\"0x") + String::num_uint64(p_scope.framebuffer_handle, 16) + "\"");
+	text += ",attachment_load_ops=" + debug_attachment_load_ops_summary(p_scope.render_pass_attachment_load_ops);
+	text += ",attachment_exact_hash=" + (p_scope.render_pass_attachment_exact_hash == 0 ? String("none") : String("\"0x") + String::num_uint64(p_scope.render_pass_attachment_exact_hash, 16) + "\"");
+	text += ",compatibility_hash=" + (p_scope.render_pass_compatibility_hash == 0 ? String("none") : String("\"0x") + String::num_uint64(p_scope.render_pass_compatibility_hash, 16) + "\"");
+	text += ",commands={render_pass_begin=" + itos(p_scope.render_pass_begin_count);
+	text += ",next_subpass=" + itos(p_scope.next_subpass_count);
+	text += ",render_pass_end=" + itos(p_scope.render_pass_end_count);
+	text += ",pipeline_binds=" + itos(p_scope.render_pipeline_bind_count);
+	text += ",uniform_binds=" + itos(p_scope.render_uniform_bind_count);
+	text += ",vertex_buffer_binds=" + itos(p_scope.vertex_buffer_bind_count);
+	text += ",vertex_buffer_binding_total=" + itos(p_scope.vertex_buffer_binding_total);
+	text += ",index_buffer_binds=" + itos(p_scope.index_buffer_bind_count);
+	text += ",draw_calls=" + itos(p_scope.draw_count);
+	text += ",draw_indexed_calls=" + itos(p_scope.draw_indexed_count);
+	text += ",draw_indirect_calls=" + itos(p_scope.draw_indirect_count);
+	text += ",draw_indexed_indirect_calls=" + itos(p_scope.draw_indexed_indirect_count);
+	text += ",execute_secondary_calls=" + itos(p_scope.execute_secondary_count);
+	text += ",secondary_command_buffers=" + itos(p_scope.secondary_command_buffer_count);
+	text += ",secondary_labels=" + itos(p_scope.secondary_label_count);
+	text += ",secondary_draw_labels=" + itos(p_scope.secondary_draw_label_count) + "}";
+	if (!p_scope.first_backend_command.is_empty()) {
+		text += ",first_backend_command=\"" + p_scope.first_backend_command + "\"";
+	}
+	if (!p_scope.last_backend_command.is_empty()) {
+		text += ",last_backend_command=\"" + p_scope.last_backend_command + "\"";
+	}
+	text += ",begin_breadcrumb=\"" + RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(p_scope.begin_breadcrumb) + "\"";
+	text += ",end_breadcrumb=\"" + RenderingDeviceDriverVulkan::_debug_breadcrumb_to_string(p_scope.end_breadcrumb) + "\"}";
+	return text;
+}
+
+String RenderingDeviceDriverVulkan::_debug_render_pass_scope_class(const DebugRenderPassScope &p_scope) const {
+	const bool has_workload = p_scope.labels_started > 0 || p_scope.draw_labels_started > 0 || p_scope.next_subpass_count > 0 || p_scope.render_pipeline_bind_count > 0 || p_scope.render_uniform_bind_count > 0 || p_scope.vertex_buffer_bind_count > 0 || p_scope.index_buffer_bind_count > 0 || p_scope.draw_count > 0 || p_scope.execute_secondary_count > 0 || p_scope.secondary_command_buffer_count > 0 || p_scope.secondary_label_count > 0 || p_scope.secondary_draw_label_count > 0;
+	if (!has_workload && p_scope.render_pass_begin_count > 0 && p_scope.render_pass_end_count > 0) {
+		return "render_pass_wrapper";
+	}
+	if (p_scope.draw_count > 0) {
+		return "draw_payload";
+	}
+	if (p_scope.execute_secondary_count > 0 || p_scope.secondary_command_buffer_count > 0 || p_scope.secondary_label_count > 0 || p_scope.secondary_draw_label_count > 0) {
+		return "secondary_payload";
+	}
+	if (p_scope.labels_started > 0 || p_scope.next_subpass_count > 0 || p_scope.render_pipeline_bind_count > 0 || p_scope.render_uniform_bind_count > 0 || p_scope.vertex_buffer_bind_count > 0 || p_scope.index_buffer_bind_count > 0) {
+		return "pass_local_workload";
+	}
+	return "empty";
 }
 
 String RenderingDeviceDriverVulkan::_debug_command_buffer_depth_prepass_pass_scope_summary(const CommandBufferInfo *p_command_buffer) {
@@ -13143,6 +13233,24 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 
 	int32_t consumer_entry_index = -1;
 	const uint32_t search_start_label_index = handoff_marker_index >= 0 ? p_command_buffer->debug_label_entries[handoff_marker_index].label_index : trace_entry.label_index;
+	int32_t first_post_handoff_scope_index = -1;
+	int32_t first_meaningful_post_handoff_scope_index = -1;
+	for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
+		const uint32_t scope_anchor_label_index = scope.begin_owner_entry_index != UINT32_MAX ? scope.begin_owner_label_index : (scope.end_owner_entry_index != UINT32_MAX ? scope.end_owner_label_index : (scope.labels_started > 0 ? scope.first_label_index : 0));
+		if (scope_anchor_label_index <= search_start_label_index) {
+			continue;
+		}
+		if (first_post_handoff_scope_index == -1) {
+			first_post_handoff_scope_index = (int32_t)i;
+		}
+		if (first_meaningful_post_handoff_scope_index == -1) {
+			const String scope_class = _debug_render_pass_scope_class(scope);
+			if (scope_class != "render_pass_wrapper" && scope_class != "empty") {
+				first_meaningful_post_handoff_scope_index = (int32_t)i;
+			}
+		}
+	}
 	for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
 		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
 		if (entry.label_index <= search_start_label_index) {
@@ -13252,6 +13360,23 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		text += ",label_index=" + itos(marker_entry.label_index);
 		text += ",begin_backend_command_serial=" + String::num_uint64(marker_entry.begin_backend_command_serial);
 		text += ",end_backend_command_serial=" + String::num_uint64(marker_entry.end_backend_command_serial) + "}";
+	}
+	text += ",first_post_handoff_scope=";
+	if (first_post_handoff_scope_index == -1) {
+		text += "{status=none_after_handoff}";
+	} else {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[first_post_handoff_scope_index];
+		text += "{class=\"" + _debug_render_pass_scope_class(scope) + "\"";
+		text += ",scope=" + _debug_render_pass_scope_summary_text(scope) + "}";
+	}
+	text += ",first_meaningful_post_handoff_scope=";
+	if (first_meaningful_post_handoff_scope_index == -1) {
+		text += "{status=none_after_handoff_or_wrapper_only}";
+	} else {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[first_meaningful_post_handoff_scope_index];
+		text += "{distance_scopes=" + itos(first_meaningful_post_handoff_scope_index - MAX<int32_t>(first_post_handoff_scope_index, 0));
+		text += ",class=\"" + _debug_render_pass_scope_class(scope) + "\"";
+		text += ",scope=" + _debug_render_pass_scope_summary_text(scope) + "}";
 	}
 	text += ",first_downstream_consumer=";
 	if (consumer_entry_index == -1) {

@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** In Progress
-**Last Updated:** 2026-05-28 02:26 EDT
+**Last Updated:** 2026-05-28 08:02 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -9661,10 +9661,65 @@ Artifact roots for this coder slice: no new runtime repro artifact root yet, bec
 
 **Exact next QA slice:** rerun only the locked backend/barrier ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled against `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`, while keeping the existing projection backend trace modes (`markers_only` and `empty_compute_boundary`) available from the vendor repro lane. Capture a fresh artifact root under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/` (or the current dated sibling root) and compare the new `projection_backend_handoff=` summaries across the three rungs. Expected QA artifacts: per-case `stdout.log` / `stderr.log`, command captures, exit-status files, plus a parsed comparison that answers whether the first downstream handoff already diverges in shared resource identity/barrier metadata or stays matched until a later completion/content failure.
 
-### Session Handoff (2026-05-28 07:24 EDT)
+### Task 249: QA the projection backend handoff ladder
 
-**Stopping Point:** The submit-9 wait-vs-status simultaneity seam remains closed, and this coder slice landed the next backend-local discriminator: a default-off projection handoff trace that records the producer projection dispatch, the first downstream compute consumer boundary, and the exact shared barrier/resource metadata at that handoff.
+**Bead ID:** `oc-w72j`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim bead `oc-w72j` at start and stay strictly inside the already-approved active backend/barrier seam. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the skipped `device_lost_edge` build-integrity wrinkle. Using the refreshed source-built editor at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64`, rerun only `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled, while keeping the existing vendor-side backend trace modes available (`markers_only` and `empty_compute_boundary`). Capture a fresh artifact root under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/` (or the current dated sibling root), compare the new `projection_backend_handoff=` summaries across the three rungs, and determine whether the first shared producer→consumer handoff already diverges in resource identity/barrier metadata or remains matched until a later completion/content failure. Update this master plan with the concrete comparison and next narrow seam, then close bead `oc-w72j` with a clear reason if the QA evidence package is complete.
 
-**Next Slice:** QA should rerun the locked good-vs-first-bad projection ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled and compare the new `projection_backend_handoff=` summaries. The narrow question is whether the first driver-visible projection-output handoff already diverges in resource-state/barrier metadata or remains matched until a later completion/content failure.
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
 
-**Blockers/Decisions:** No hard blocker is open. Derrick’s earlier decision to skip the optional `device_lost_edge` build-integrity wrinkle still stands and was respected in this slice.
+**Status:** ✅ Complete
+
+**Results:** QA reran the locked source-build ladder under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-handoff-trace-qa-sourcebuild-20260528-074508/` using `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` plus both existing backend trace modes (`markers_only`, `empty_compute_boundary`). Per-case `stdout.log`, `stderr.log`, `exit_status.txt`, `exact_command.txt`, parsed handoff extracts, `run_summary.tsv`, `handoff_summary.tsv`, `comparison_summary.txt`, and `handoff_compare.json` were captured there.
+
+Rung-by-rung comparison:
+- `projection_non_footprint_immediate_return_only`
+  - `markers_only`: exit `0`; repeated projection dispatches survive; no submit-9 device-loss packet appears in this short locked slice.
+  - `empty_compute_boundary`: exit `0`; same good behavior, with the extra empty-compute boundary labels present as expected.
+- `projection_post_barrier_no_scratch_immediate_return_only`
+  - `markers_only`: exit `134`; fails at `submit_serial=9` / `fence_wait_error wait_result=-4`.
+  - `empty_compute_boundary`: exit `134`; same `submit_serial=9` failure, now with the expected extra post-dispatch empty-compute labels expanding the late tail from levels `94`→`98`.
+- `projection_post_barrier_immediate_return_only`
+  - `markers_only`: exit `134`; same `submit_serial=9` / `fence_wait_error wait_result=-4`.
+  - `empty_compute_boundary`: exit `134`; same `submit_serial=9` failure and same empty-compute expansion as the sibling bad rung.
+
+Concrete handoff result: the first shared producer→consumer handoff does **not** diverge in resource identity / barrier metadata. Across both failing rungs, the decisive `submit_serial=9` packet matches on the driver-visible handoff structure: `wait_summary=[stage="ALL_COMMANDS"]`, `wait_provenance.last_signal_submit_serial=8`, `last_signal_source="submit"`, `projection_backend_handoff={status=missing_projection_dispatch,...}`, the same `pre_tail_copy_handoff` / `level_draw_handoff` / `depth_prepass_consumer_seam` shape, and the same first downstream draw-wrapper attachment (`first_backend_command="begin_render_pass"`, `last_backend_command="pipeline_barrier"`). The only differences in those packets are the expected raster-stage names and the extra empty-compute labels injected by the trace mode itself. That means the backend-local producer→consumer handoff metadata still matches; divergence appears later as content / execution failure after the shared handoff, not as an already-bad handoff packet.
+
+Follow-on seam sharpened cleanly enough to materialize the next bead: `oc-bauz` for a coder slice that instruments or compares the first post-handoff command content/execution after the matched `submit_serial=9` handoff, instead of re-opening earlier resource/barrier provenance detours.
+
+Validated artifacts/files:
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-handoff-trace-qa-sourcebuild-20260528-074508/context.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-handoff-trace-qa-sourcebuild-20260528-074508/commands.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-handoff-trace-qa-sourcebuild-20260528-074508/run_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-handoff-trace-qa-sourcebuild-20260528-074508/handoff_summary.tsv`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-handoff-trace-qa-sourcebuild-20260528-074508/comparison_summary.txt`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-handoff-trace-qa-sourcebuild-20260528-074508/handoff_compare.json`
+
+### Task 250: Coder instrumentation for post-handoff content/execution after the matched submit-9 packet
+
+**Bead ID:** `oc-bauz`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-bauz` at start and stay strictly inside the approved active backend/barrier seam. Use the new QA evidence root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-handoff-trace-qa-sourcebuild-20260528-074508/` as the source of truth. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the skipped `device_lost_edge` wrinkle. The new QA result says the first shared producer→consumer handoff packet still matches across the first bad rungs, so instrument the next narrow discriminator *after* that matched handoff: compare the first post-handoff command content/execution path that differs between the surviving `projection_non_footprint_immediate_return_only` rung and the two failing post-barrier rungs, using reversible default-off instrumentation only. Update this master plan with the exact artifact root and findings, and create the next QA-ready handoff if you land a clean discriminator.
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.h`
+- `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp`
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+**Status:** ✅ Complete
+
+**Results:** Landed a second, still-default-off discriminator on top of the existing matched-handoff proof. `DebugRenderPassScope` now preserves the render-pass handle, framebuffer handle, attachment load-op vector, attachment exact hash, and compatibility hash captured at `command_begin_render_pass()`. `projection_backend_handoff=` now appends two post-handoff checkpoints anchored strictly after the existing `gdgs_projection_boundary ... boundary=immediate_downstream_handoff` marker: `first_post_handoff_scope` and `first_meaningful_post_handoff_scope`. Those summaries report the first render-pass scope visible after the matched handoff, classify it (`render_pass_wrapper`, `pass_local_workload`, `draw_payload`, `secondary_payload`, or `empty`), and include the exact render-pass/framebuffer identity plus attachment load-op/hash recipe for that earliest consumer-side scope. This preserves the locked producer/consumer identity checks while letting QA distinguish “the first visible consumer-side scope already differs right after the matched handoff” from “that earliest scope still matches and the failure surfaces later in execution/completion.” Repo-local validation passed via `python3 misc/scripts/file_format.py drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`, `git diff --check -- drivers/vulkan/rendering_device_driver_vulkan.h drivers/vulkan/rendering_device_driver_vulkan.cpp`, and `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.dev.x86_64.o`.
+
+### Session Handoff (2026-05-28 07:53 EDT)
+
+**Stopping Point:** The matched submit-9 producer→consumer handoff remains locked, and this coder slice added the next immediate post-handoff discriminator without reopening skipped detours: the projection handoff summary now exposes the first render-pass scope and first meaningful scope that become visible after the matched handoff marker, along with their render-pass/framebuffer identity and attachment load-op/hash recipe.
+
+**Next Slice:** QA should rerun the same locked good-vs-first-bad source-build ladder under `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled and diff the new `projection_backend_handoff.first_post_handoff_scope` plus `projection_backend_handoff.first_meaningful_post_handoff_scope` fields across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`. If those earliest post-handoff scope summaries already diverge, the bug is now localized to the first visible consumer-side state after the matched handoff; if they stay matched too, the next seam moves later into execution/completion after that first consumer-visible scope.
+
+**Blockers/Decisions:** No new blocker. Derrick’s earlier decision to skip the optional `device_lost_edge` wrinkle still stands and was preserved in this slice.
