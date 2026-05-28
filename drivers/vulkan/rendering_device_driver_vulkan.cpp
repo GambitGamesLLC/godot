@@ -13227,12 +13227,93 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 	}
 
 	const DebugLabelEntry &trace_entry = p_command_buffer->debug_label_entries[trace_entry_index];
+	const uint32_t handoff_label_index = handoff_marker_index >= 0 ? p_command_buffer->debug_label_entries[handoff_marker_index].label_index : UINT32_MAX;
+	const uint32_t search_start_label_index = handoff_marker_index >= 0 ? handoff_label_index : trace_entry.label_index;
 	if (!trace_entry.first_compute_dispatch_consumption.valid) {
-		return String("{status=missing_projection_dispatch,trace_label=\"") + trace_entry.label + "\"}";
+		const auto trace_family_key = [](const String &p_label) {
+			const int level_suffix_index = p_label.find(" (L");
+			return level_suffix_index >= 0 ? p_label.substr(0, level_suffix_index) : p_label;
+		};
+		const String family_key = trace_family_key(trace_entry.label);
+		uint32_t family_label_count_after_anchor = 0;
+		uint32_t family_compute_label_count_after_anchor = 0;
+		uint32_t family_dispatch_count_after_anchor = 0;
+		uint32_t any_dispatch_count_after_anchor = 0;
+		int32_t first_family_dispatch_entry_index = -1;
+		int32_t first_any_dispatch_entry_index = -1;
+		for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
+			const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+			if (entry.label_index <= trace_entry.label_index) {
+				continue;
+			}
+			if (handoff_marker_index >= 0 && entry.label_index > handoff_label_index) {
+				continue;
+			}
+			const bool family_match = trace_family_key(entry.label) == family_key;
+			if (family_match) {
+				family_label_count_after_anchor++;
+				if (entry.operation_tag == "Compute") {
+					family_compute_label_count_after_anchor++;
+				}
+			}
+			if (!entry.first_compute_dispatch_consumption.valid) {
+				continue;
+			}
+			any_dispatch_count_after_anchor++;
+			if (first_any_dispatch_entry_index == -1) {
+				first_any_dispatch_entry_index = (int32_t)i;
+			}
+			if (family_match) {
+				family_dispatch_count_after_anchor++;
+				if (first_family_dispatch_entry_index == -1) {
+					first_family_dispatch_entry_index = (int32_t)i;
+				}
+			}
+		}
+		String cause = "no_compute_dispatch_recorded_before_handoff";
+		if (family_dispatch_count_after_anchor > 0) {
+			cause = "trace_anchor_lookup_failed_family_dispatch_present";
+		} else if (family_compute_label_count_after_anchor > 0) {
+			cause = "trace_family_compute_labels_without_dispatch_capture";
+		} else if (any_dispatch_count_after_anchor > 0) {
+			cause = "trace_family_mismatch_nonfamily_dispatch_present";
+		}
+		String text = String("{status=missing_projection_dispatch,missing_projection_dispatch_cause=\"") + cause + "\"";
+		text += ",trace_label=\"" + trace_entry.label + "\"";
+		text += ",trace_anchor={label_index=" + itos(trace_entry.label_index);
+		text += ",operation=\"" + trace_entry.operation_tag + "\"";
+		text += ",descendant_label_count=" + itos(trace_entry.descendant_label_count);
+		text += ",first_descendant_label=" + (trace_entry.first_descendant_label.is_empty() ? String("none") : String("\"") + trace_entry.first_descendant_label + "\"");
+		text += ",last_descendant_label=" + (trace_entry.last_descendant_label.is_empty() ? String("none") : String("\"") + trace_entry.last_descendant_label + "\"");
+		text += "}";
+		text += ",trace_window={handoff_label_index=" + (handoff_marker_index >= 0 ? itos((int32_t)handoff_label_index) : String("none"));
+		text += ",family_key=\"" + family_key + "\"";
+		text += ",family_labels_after_anchor=" + itos(family_label_count_after_anchor);
+		text += ",family_compute_labels_after_anchor=" + itos(family_compute_label_count_after_anchor);
+		text += ",family_dispatches_after_anchor=" + itos(family_dispatch_count_after_anchor);
+		if (first_family_dispatch_entry_index != -1) {
+			const DebugLabelEntry &first_family_dispatch_entry = p_command_buffer->debug_label_entries[first_family_dispatch_entry_index];
+			text += ",first_family_dispatch={label=\"" + first_family_dispatch_entry.label + "\"";
+			text += ",label_index=" + itos(first_family_dispatch_entry.label_index);
+			text += ",dispatch_serial=" + String::num_uint64(first_family_dispatch_entry.first_compute_dispatch_consumption.serial) + "}";
+		} else {
+			text += ",first_family_dispatch=none";
+		}
+		text += ",any_dispatches_after_anchor=" + itos(any_dispatch_count_after_anchor);
+		if (first_any_dispatch_entry_index != -1) {
+			const DebugLabelEntry &first_any_dispatch_entry = p_command_buffer->debug_label_entries[first_any_dispatch_entry_index];
+			text += ",first_any_dispatch={label=\"" + first_any_dispatch_entry.label + "\"";
+			text += ",label_index=" + itos(first_any_dispatch_entry.label_index);
+			text += ",dispatch_serial=" + String::num_uint64(first_any_dispatch_entry.first_compute_dispatch_consumption.serial);
+			text += ",family_match=" + String(trace_family_key(first_any_dispatch_entry.label) == family_key ? "true" : "false") + "}";
+		} else {
+			text += ",first_any_dispatch=none";
+		}
+		text += "}}";
+		return text;
 	}
 
 	int32_t consumer_entry_index = -1;
-	const uint32_t search_start_label_index = handoff_marker_index >= 0 ? p_command_buffer->debug_label_entries[handoff_marker_index].label_index : trace_entry.label_index;
 	int32_t first_post_handoff_scope_index = -1;
 	int32_t first_meaningful_post_handoff_scope_index = -1;
 	for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
