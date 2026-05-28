@@ -13758,6 +13758,40 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		if (p_scope.labels_started == 0) {
 			uint64_t label_free_signature_hash = 0;
 			accumulate_scope_payload_hash(p_scope, label_free_signature_hash);
+			int32_t first_content_entry_index = -1;
+			int32_t last_content_entry_index = -1;
+			int32_t first_draw_payload_entry_index = -1;
+			int32_t last_draw_payload_entry_index = -1;
+			uint32_t content_entry_count = 0;
+			uint32_t draw_payload_entry_count = 0;
+			uint64_t content_signature_hash = 0;
+			uint64_t draw_payload_signature_hash = 0;
+			if (p_scope.begin_owner_entry_index != UINT32_MAX && p_scope.end_owner_entry_index != UINT32_MAX && p_scope.begin_owner_entry_index < p_command_buffer->debug_label_entry_count && p_scope.end_owner_entry_index < p_command_buffer->debug_label_entry_count) {
+				const uint32_t owner_begin = MIN(p_scope.begin_owner_entry_index, p_scope.end_owner_entry_index);
+				const uint32_t owner_end = MAX(p_scope.begin_owner_entry_index, p_scope.end_owner_entry_index);
+				for (uint32_t i = owner_begin; i <= owner_end; i++) {
+					const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+					if (!entry_has_content(entry)) {
+						continue;
+					}
+					content_entry_count++;
+					last_content_entry_index = (int32_t)i;
+					if (first_content_entry_index == -1) {
+						first_content_entry_index = (int32_t)i;
+					}
+					accumulate_entry_payload_hash(entry, content_signature_hash);
+					const bool draw_payload_like = entry.first_draw_indexed_consumption.valid || entry.draw_count > 0 || entry.render_pipeline_bind_count > 0 || entry.render_uniform_bind_count > 0 || entry.vertex_buffer_bind_count > 0 || entry.index_buffer_bind_count > 0;
+					if (!draw_payload_like) {
+						continue;
+					}
+					draw_payload_entry_count++;
+					last_draw_payload_entry_index = (int32_t)i;
+					if (first_draw_payload_entry_index == -1) {
+						first_draw_payload_entry_index = (int32_t)i;
+					}
+					accumulate_entry_payload_hash(entry, draw_payload_signature_hash);
+				}
+			}
 			r_text += ",status=label_free_scope_payload";
 			r_text += ",label_free_signature_hash=";
 			append_hash_hex(r_text, label_free_signature_hash);
@@ -13796,7 +13830,42 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 			r_text += p_scope.first_backend_command.is_empty() ? String("none") : String("\"") + p_scope.first_backend_command + "\"";
 			r_text += ",last=";
 			r_text += p_scope.last_backend_command.is_empty() ? String("none") : String("\"") + p_scope.last_backend_command + "\"";
-			r_text += "}}";
+			r_text += "}";
+			r_text += ",label_free_content_entry_count=" + itos(content_entry_count);
+			r_text += ",label_free_draw_payload_entry_count=" + itos(draw_payload_entry_count);
+			r_text += ",label_free_content_signature_hash=";
+			append_hash_hex(r_text, content_signature_hash);
+			r_text += ",label_free_draw_payload_signature_hash=";
+			append_hash_hex(r_text, draw_payload_signature_hash);
+			r_text += ",label_free_first_content=";
+			if (first_content_entry_index == -1) {
+				r_text += "none";
+			} else {
+				const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[first_content_entry_index];
+				append_meaningful_content_entry_summary(r_text, entry, &p_scope, 0);
+			}
+			r_text += ",label_free_last_content=";
+			if (last_content_entry_index == -1) {
+				r_text += "none";
+			} else {
+				const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[last_content_entry_index];
+				append_meaningful_content_entry_summary(r_text, entry, &p_scope, 0);
+			}
+			r_text += ",label_free_first_draw_payload_entry=";
+			if (first_draw_payload_entry_index == -1) {
+				r_text += "none";
+			} else {
+				const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[first_draw_payload_entry_index];
+				append_meaningful_content_entry_summary(r_text, entry, &p_scope, 0);
+			}
+			r_text += ",label_free_last_draw_payload_entry=";
+			if (last_draw_payload_entry_index == -1) {
+				r_text += "none";
+			} else {
+				const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[last_draw_payload_entry_index];
+				append_meaningful_content_entry_summary(r_text, entry, &p_scope, 0);
+			}
+			r_text += "}";
 			return;
 		}
 		int32_t first_content_entry_index = -1;
