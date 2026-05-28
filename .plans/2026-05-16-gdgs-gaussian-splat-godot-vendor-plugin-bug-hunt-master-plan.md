@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** In Progress
-**Last Updated:** 2026-05-28 08:41 EDT
+**Last Updated:** 2026-05-28 09:21 EDT
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -9801,10 +9801,70 @@ That keeps the locked identity checks intact while finally letting the handoff s
 
 **Exact next QA follow-up:** rerun only the locked six-case backend/barrier ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-missing-dispatch-cause-qa-sourcebuild-20260528-082442/` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled in both vendor trace modes (`markers_only`, `empty_compute_boundary`) and verify that the decisive submit-9 packet now reports `trace_anchor_selection.status="adopted_later_family_dispatch"` on the currently affected rungs, emits `projection_dispatch={serial=96,...}` from the adopted same-family label, and finally surfaces the already-landed `first_post_handoff_scope` plus `first_meaningful_post_handoff_scope` fields so QA can compare whether those earliest post-handoff consumer-visible scopes still match across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` or diverge immediately after the matched handoff.
 
-### Session Handoff (2026-05-28 08:27 EDT)
+### Task 255: QA rerun the six-case handoff ladder after coder commit `63e9d12a`
 
-**Stopping Point:** The narrow coder fix is in place. `projection_backend_handoff=` no longer has to bail immediately on the unclassified `label_index=95` trace anchor when the real same-family dispatch is recorded one label later; it can now adopt that later dispatch and continue the summary from the real producer payload while keeping the original anchor identity visible.
+**Bead ID:** `oc-cq2o`
+**SubAgent:** `primary`
+**Role:** `qa`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`, claim the next QA bead in the godot repo and stay strictly inside the already-approved active backend/barrier seam. Use `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-missing-dispatch-cause-qa-sourcebuild-20260528-082442/` as the source-of-truth comparison root. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the skipped `device_lost_edge` wrinkle. Rerun the same six-case ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`) across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only`. Capture a fresh artifact root with per-case stdout/stderr, command capture, env capture, exit status, and a parsed comparison. Verify whether the decisive submit-9 packet now emits `trace_anchor_selection.status="adopted_later_family_dispatch"`, an adopted `projection_dispatch={serial=96,...}`, plus `first_post_handoff_scope` and `first_meaningful_post_handoff_scope`; then compare those scope fields across the good rung and both first-bad rungs, update this plan with the exact artifact root and concrete conclusion, close the QA bead with a clear reason if complete, and materialize the next narrow follow-on bead if the seam sharpens cleanly.
 
-**Next Slice:** Hand the lane back to QA on the same approved backend/barrier seam. Reuse `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-missing-dispatch-cause-qa-sourcebuild-20260528-082442/` as the comparison baseline, rerun the same six-case ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1`, and verify that the decisive submit-9 packet now emits `trace_anchor_selection.status="adopted_later_family_dispatch"`, reports the adopted `projection_dispatch={serial=96,...}` payload, and finally exposes `first_post_handoff_scope` plus `first_meaningful_post_handoff_scope` for the good rung and both first-bad rungs.
+**Status:** ✅ Complete
 
-**Blockers/Decisions:** No new human decision needed. Derrick’s earlier decision to skip the optional `device_lost_edge` wrinkle still stands and this coder slice preserved it.
+**Results:** QA created and used bead `oc-cq2o`, then reran the locked six-case source-built ladder with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` under fresh artifact root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-adopted-dispatch-handoff-scope-qa-sourcebuild-20260528-091207/`. Captured artifacts include `context.txt`, `commands.txt`, `run_summary.tsv`, `comparison_summary.txt`, `handoff_compare.json`, and per-case `stdout.log`, `stderr.log`, `env.txt`, `exact_command.txt`, and `exit_status.txt` under `logs/`.
+
+Run outcomes matched the baseline ladder exactly again: both `projection_non_footprint_immediate_return_only` cases exited `0`, while both `projection_post_barrier_no_scratch_immediate_return_only` and both `projection_post_barrier_immediate_return_only` cases aborted with exit `134`. The decisive submit-9 packet was present in all six stdout logs, but the expected adopted-dispatch handoff never surfaced. Every case still reported `projection_backend_handoff.status=missing_projection_dispatch`, `missing_projection_dispatch_cause="trace_anchor_lookup_failed_family_dispatch_present"`, the same unclassified `trace_anchor={label_index=95,...}`, and the same later same-family dispatch proof in `trace_window.first_family_dispatch={label_index=96,dispatch_serial=96}` / `first_any_dispatch={label_index=96,dispatch_serial=96,family_match=true}`.
+
+That means the expected post-coder runtime behavior did **not** appear in the refreshed QA root:
+- `trace_anchor_selection.status="adopted_later_family_dispatch"` — **not emitted** on the good rung or either first-bad rung in either vendor trace mode.
+- `projection_dispatch={serial=96,...}` — **not emitted** on the decisive submit-9 packet in any of the six reruns.
+- `first_post_handoff_scope` — **not emitted** because the summary still returned early as `missing_projection_dispatch`.
+- `first_meaningful_post_handoff_scope` — **not emitted** for the same reason.
+
+Rung-by-rung comparison therefore remains frozen at the pre-adoption classifier rather than advancing into post-handoff scope comparison:
+- `projection_non_footprint_immediate_return_only` (`markers_only`, `empty_compute_boundary`): last-good control still succeeds, but the submit-9 packet still bottoms out at `missing_projection_dispatch` rather than the expected adopted-dispatch handoff.
+- `projection_post_barrier_no_scratch_immediate_return_only` (`markers_only`, `empty_compute_boundary`): first-bad control still aborts with the same `submit_serial=9` / fence-loss identity, and the handoff summary is still identical to the good rung at the `missing_projection_dispatch` classifier layer.
+- `projection_post_barrier_immediate_return_only` (`markers_only`, `empty_compute_boundary`): second bad rung still matches the same classifier state and never surfaces the expected post-handoff scope fields either.
+
+Exact QA conclusion: commit `63e9d12a`'s intended later-family-dispatch adoption is **not reflected in the runtime evidence produced by this source-built editor lane**. The seam sharpened cleanly in one narrow way: the backend/barrier question about post-handoff scope divergence is still blocked one layer earlier by runtime/build-integrity failure to emit the newly-added adopted-dispatch summary path. The next honest seam is therefore not more scope comparison; it is verifying why the runtime logs still show the old `missing_projection_dispatch` early return despite the landed source change.
+
+### Task 256: Coder verify why the runtime still emits the old submit-9 handoff classifier
+
+**Bead ID:** `oc-qc80`
+**SubAgent:** `primary`
+**Role:** `coder`
+**References:** `REF-08`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/`, claim bead `oc-qc80` at start and stay strictly inside the already-approved active backend/barrier seam. Use coder commit `63e9d12a`, the baseline QA root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-missing-dispatch-cause-qa-sourcebuild-20260528-082442/`, and the fresh QA rerun root `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-adopted-dispatch-handoff-scope-qa-sourcebuild-20260528-091207/` as the sources of truth. Do **not** reopen shader ancestry, blend-state, request-hash/create/provenance detours, or the skipped `device_lost_edge` wrinkle. Verify why the runtime still emits `projection_backend_handoff.status=missing_projection_dispatch` / `trace_anchor_lookup_failed_family_dispatch_present` instead of the intended `trace_anchor_selection.status="adopted_later_family_dispatch"` path. Keep the slice narrow: confirm whether the refreshed runtime binary is stale vs the source change, whether the adoption branch is compiled but unreachable in the matched submit-9 packet, or whether the emitted summary string shape differs from the QA expectation. Land the smallest reversible fix or build-integrity correction needed to make the runtime emit the adopted-dispatch handoff so the blocked post-handoff scope QA can resume, update this plan with exact validation and the next QA rerun, and close the bead with a clear reason if complete.
+
+**Status:** ✅ Complete
+
+**Results:** Verified the failure mode was build/runtime integrity, not a still-missing source branch and not a later string overwrite path. Source commit `63e9d12a` already contains the adopted-dispatch logic in `/home/derrick/.openclaw/workspace/projects/godot/drivers/vulkan/rendering_device_driver_vulkan.cpp` (`trace_anchor_selection`, `adopted_later_family_dispatch`, adopted `projection_dispatch={serial=...}`, and the post-handoff scope fields). The freshly compiled object file `bin/obj/drivers/vulkan/rendering_device_driver_vulkan.linuxbsd.editor.dev.x86_64.o` also contained those exact literals, but the runtime binary used by QA at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` did not: before rebuild, its mtime was `2026-05-28 08:17 EDT`, older than both the edited source (`08:34 EDT`) and the rebuilt Vulkan driver object (`08:35 EDT`), and binary-string inspection found `trace_anchor_lookup_failed_family_dispatch_present` plus `projection_dispatch={serial=` but **not** `adopted_later_family_dispatch` or `trace_anchor_selection=`. That proves the source-built QA lane was still running a stale pre-relink editor binary, so the matched submit-9 packet could only emit the older early-return summary.
+
+The narrow correction for this bead was therefore a rebuild/relink, not more driver instrumentation. Running `scons -j8 platform=linuxbsd target=editor dev_build=yes` relinked `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` at `2026-05-28 09:20 EDT`, and post-rebuild binary-string inspection now finds all expected new summary literals in the executable itself: `adopted_later_family_dispatch`, `trace_anchor_selection=`, `projection_dispatch={serial=`, and `first_post_handoff_scope=`. That cleanly discriminates the three candidate explanations requested in this bead:
+- **binary/build not carrying the intended logic** — **yes, before rebuild**; the editor binary was stale even though source/object carried the new path.
+- **runtime not reaching the new branch** — not the first problem proven here; QA was still executing a binary that could not emit the new branch strings at all.
+- **new branch reached but later overwritten / bypassed by an older early return path** — not supported by the build-integrity evidence; the stale binary explanation fully accounts for the observed old classifier.
+
+Exact files changed in this coder slice:
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+
+No Godot source file changes were required beyond the already-landed commit `63e9d12a`; this slice repaired the runtime/build-integrity lane by rebuilding the source-built editor so QA can finally exercise that existing code.
+
+Validation run/results:
+- `git show --stat --oneline 63e9d12a -- drivers/vulkan/rendering_device_driver_vulkan.cpp drivers/vulkan/rendering_device_driver_vulkan.h` — confirmed the intended source change exists in commit `63e9d12a`.
+- `rg -n "adopted_later_family_dispatch|trace_anchor_selection|projection_dispatch_entry_index|projection_dispatch=|search_start_label_index" drivers/vulkan/rendering_device_driver_vulkan.cpp` — confirmed the active source still contains the adopted-dispatch path.
+- pre-rebuild `stat` + binary/object string inspection — proved the object contained the new literals while `bin/godot.linuxbsd.editor.dev.x86_64` did not, and that the binary timestamp predated the source/object.
+- `scons -j8 platform=linuxbsd target=editor dev_build=yes` — passed; relinked the editor binary.
+- post-rebuild `stat` + binary string inspection — confirmed the rebuilt editor now carries `adopted_later_family_dispatch`, `trace_anchor_selection=`, `projection_dispatch={serial=`, and `first_post_handoff_scope=`.
+
+Commit/push info: no new source commit was needed for this bead because the owning code change was already landed in `63e9d12a`; only this plan file changed locally.
+
+**Exact next QA follow-up:** rerun the same locked six-case backend/barrier ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-adopted-dispatch-handoff-scope-qa-sourcebuild-20260528-091207/` using the freshly rebuilt `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`). Verify that the decisive submit-9 packet now emits `trace_anchor_selection.status="adopted_later_family_dispatch"`, surfaces the adopted `projection_dispatch={serial=96,...}` payload, and finally exposes `first_post_handoff_scope` plus `first_meaningful_post_handoff_scope` so QA can compare whether the earliest post-handoff consumer-visible scope still matches across the last-good rung and both first-bad rungs or diverges immediately after the matched handoff.
+
+### Session Handoff (2026-05-28 09:21 EDT)
+
+**Stopping Point:** Coder verified that QA’s 09:12 artifact root was produced by a stale pre-relink editor binary. Commit `63e9d12a` was already present in source and in the rebuilt Vulkan driver object, but the executable at `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` had not been relinked yet and therefore could not emit `trace_anchor_selection` / `adopted_later_family_dispatch`. The editor has now been rebuilt, and the executable itself contains the new adopted-dispatch and post-handoff-scope summary literals.
+
+**Next Slice:** Hand the lane back to QA to rerun the exact same six-case ladder against the freshly rebuilt source-built editor binary and confirm that the decisive submit-9 packet now advances past the old `missing_projection_dispatch` classifier into the adopted-dispatch + post-handoff-scope summary path.
+
+**Blockers/Decisions:** No new human decision needed. Derrick’s earlier decision to skip the optional `device_lost_edge` wrinkle still stands. The prior blocker was stale build output, and that blocker is now cleared pending QA rerun.
