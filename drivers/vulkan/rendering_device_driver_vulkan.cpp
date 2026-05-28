@@ -13326,6 +13326,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 	int32_t consumer_entry_index = -1;
 	int32_t first_post_handoff_scope_index = -1;
 	int32_t first_meaningful_post_handoff_scope_index = -1;
+	int32_t first_meaningful_post_handoff_content_entry_index = -1;
+	int32_t first_post_handoff_projection_resource_consumer_entry_index = -1;
 	for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
 		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[i];
 		const uint32_t scope_anchor_label_index = scope.begin_owner_entry_index != UINT32_MAX ? scope.begin_owner_label_index : (scope.end_owner_entry_index != UINT32_MAX ? scope.end_owner_label_index : (scope.labels_started > 0 ? scope.first_label_index : 0));
@@ -13347,8 +13349,18 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		if (entry.label_index <= search_start_label_index) {
 			continue;
 		}
-		if (entry.first_compute_dispatch_consumption.valid) {
+		if (entry.first_compute_dispatch_consumption.valid && consumer_entry_index == -1) {
 			consumer_entry_index = (int32_t)i;
+		}
+		if (first_meaningful_post_handoff_scope_index != -1 && first_meaningful_post_handoff_content_entry_index == -1) {
+			const DebugRenderPassScope &meaningful_scope = p_command_buffer->debug_render_pass_scopes[first_meaningful_post_handoff_scope_index];
+			const bool inside_scope = meaningful_scope.labels_started > 0 && entry.label_index >= meaningful_scope.first_label_index && entry.label_index <= meaningful_scope.last_label_index;
+			const bool has_content = entry.first_compute_dispatch_consumption.valid || entry.first_draw_indexed_consumption.valid || entry.render_pipeline_bind_count > 0 || entry.render_uniform_bind_count > 0 || entry.vertex_buffer_bind_count > 0 || entry.index_buffer_bind_count > 0 || entry.draw_count > 0 || entry.execute_secondary_count > 0 || entry.secondary_command_buffer_count > 0 || entry.secondary_label_count > 0 || entry.secondary_draw_label_count > 0 || !entry.uniform_bind_calls.is_empty();
+			if (inside_scope && has_content) {
+				first_meaningful_post_handoff_content_entry_index = (int32_t)i;
+			}
+		}
+		if (consumer_entry_index != -1 && first_meaningful_post_handoff_content_entry_index != -1) {
 			break;
 		}
 	}
@@ -13379,10 +13391,10 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		LocalVector<DebugUniformSetBufferRef> buffers;
 		LocalVector<DebugUniformSetTextureRef> textures;
 	};
-	const auto gather_resources = [&](const DebugComputeDispatchConsumptionPayload &p_payload) {
+	const auto gather_resources_from_descriptor_sets = [&](const LocalVector<uint64_t> &p_descriptor_set_handles) {
 		ResourceLists lists;
-		for (uint32_t i = 0; i < p_payload.descriptor_set_handles.size(); i++) {
-			HashMap<uint64_t, const void *>::ConstIterator usi_it = gdgs_debug_uniform_set_info_by_vk_handle.find(p_payload.descriptor_set_handles[i]);
+		for (uint32_t i = 0; i < p_descriptor_set_handles.size(); i++) {
+			HashMap<uint64_t, const void *>::ConstIterator usi_it = gdgs_debug_uniform_set_info_by_vk_handle.find(p_descriptor_set_handles[i]);
 			if (!usi_it) {
 				continue;
 			}
@@ -13395,6 +13407,9 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 			}
 		}
 		return lists;
+	};
+	const auto gather_resources = [&](const DebugComputeDispatchConsumptionPayload &p_payload) {
+		return gather_resources_from_descriptor_sets(p_payload.descriptor_set_handles);
 	};
 	const auto producer_resources = gather_resources(projection_dispatch_entry->first_compute_dispatch_consumption);
 
@@ -13429,6 +13444,167 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		}
 		r_text += "]";
 	};
+	const auto collect_shared_buffers = [&](const LocalVector<DebugUniformSetBufferRef> &p_refs) {
+		LocalVector<DebugUniformSetBufferRef> shared;
+		for (uint32_t i = 0; i < p_refs.size(); i++) {
+			const DebugUniformSetBufferRef &ref = p_refs[i];
+			for (uint32_t j = 0; j < producer_resources.buffers.size(); j++) {
+				if (ref.buffer_id == producer_resources.buffers[j].buffer_id) {
+					shared.push_back(ref);
+					break;
+				}
+			}
+		}
+		return shared;
+	};
+	const auto collect_shared_textures = [&](const LocalVector<DebugUniformSetTextureRef> &p_refs) {
+		LocalVector<DebugUniformSetTextureRef> shared;
+		for (uint32_t i = 0; i < p_refs.size(); i++) {
+			const DebugUniformSetTextureRef &ref = p_refs[i];
+			for (uint32_t j = 0; j < producer_resources.textures.size(); j++) {
+				if (ref.texture_id == producer_resources.textures[j].texture_id) {
+					shared.push_back(ref);
+					break;
+				}
+			}
+		}
+		return shared;
+	};
+	const auto entry_has_content = [](const DebugLabelEntry &p_entry) {
+		return p_entry.first_compute_dispatch_consumption.valid || p_entry.first_draw_indexed_consumption.valid || p_entry.render_pipeline_bind_count > 0 || p_entry.render_uniform_bind_count > 0 || p_entry.vertex_buffer_bind_count > 0 || p_entry.index_buffer_bind_count > 0 || p_entry.draw_count > 0 || p_entry.execute_secondary_count > 0 || p_entry.secondary_command_buffer_count > 0 || p_entry.secondary_label_count > 0 || p_entry.secondary_draw_label_count > 0 || !p_entry.uniform_bind_calls.is_empty();
+	};
+	const auto entry_content_class = [](const DebugLabelEntry &p_entry) {
+		if (p_entry.first_compute_dispatch_consumption.valid) {
+			return String("compute_dispatch");
+		}
+		if (p_entry.first_draw_indexed_consumption.valid) {
+			return String("indexed_draw");
+		}
+		if (p_entry.draw_indexed_indirect_count > 0 && p_entry.draw_count == p_entry.draw_indexed_indirect_count) {
+			return String("indexed_indirect_draw");
+		}
+		if (p_entry.draw_indirect_count > 0 && p_entry.draw_count == p_entry.draw_indirect_count) {
+			return String("indirect_draw");
+		}
+		if (p_entry.draw_count > 0) {
+			return String("draw_only");
+		}
+		if (p_entry.render_pipeline_bind_count > 0 || p_entry.render_uniform_bind_count > 0 || p_entry.vertex_buffer_bind_count > 0 || p_entry.index_buffer_bind_count > 0 || p_entry.next_subpass_count > 0) {
+			return String("setup_only");
+		}
+		if (p_entry.execute_secondary_count > 0 || p_entry.secondary_command_buffer_count > 0 || p_entry.secondary_label_count > 0 || p_entry.secondary_draw_label_count > 0) {
+			return String("secondary_only");
+		}
+		return String("empty");
+	};
+	const auto append_projection_resource_overlap = [&](String &r_text, const LocalVector<DebugUniformSetBufferRef> &p_buffers, const LocalVector<DebugUniformSetTextureRef> &p_textures) {
+		r_text += "{shared_buffers=";
+		append_buffer_resource_list(r_text, collect_shared_buffers(p_buffers));
+		r_text += ",shared_textures=";
+		append_texture_resource_list(r_text, collect_shared_textures(p_textures));
+		r_text += "}";
+	};
+	const auto append_meaningful_content_entry_summary = [&](String &r_text, const DebugLabelEntry &p_entry, const DebugRenderPassScope *p_scope, int32_t p_scope_distance) {
+		r_text += "{label=\"" + p_entry.label + "\"";
+		r_text += ",label_index=" + itos(p_entry.label_index);
+		r_text += ",operation=\"" + p_entry.operation_tag + "\"";
+		r_text += ",class=\"" + entry_content_class(p_entry) + "\"";
+		r_text += ",scope_distance=" + itos(p_scope_distance);
+		if (p_scope != nullptr) {
+			r_text += ",scope_index=" + itos(p_scope->scope_index);
+		}
+		r_text += ",commands={pipeline_binds=" + itos(p_entry.render_pipeline_bind_count);
+		r_text += ",uniform_binds=" + itos(p_entry.render_uniform_bind_count);
+		r_text += ",vertex_buffer_binds=" + itos(p_entry.vertex_buffer_bind_count);
+		r_text += ",index_buffer_binds=" + itos(p_entry.index_buffer_bind_count);
+		r_text += ",draw_calls=" + itos(p_entry.draw_count);
+		r_text += ",draw_indexed_calls=" + itos(p_entry.draw_indexed_count);
+		r_text += ",draw_indirect_calls=" + itos(p_entry.draw_indirect_count);
+		r_text += ",draw_indexed_indirect_calls=" + itos(p_entry.draw_indexed_indirect_count);
+		r_text += ",secondary_calls=" + itos(p_entry.execute_secondary_count) + "}";
+		if (!p_entry.first_backend_command.is_empty()) {
+			r_text += ",first_backend_command=\"" + p_entry.first_backend_command + "\"";
+		}
+		if (!p_entry.last_backend_command.is_empty()) {
+			r_text += ",last_backend_command=\"" + p_entry.last_backend_command + "\"";
+		}
+		if (p_entry.first_compute_dispatch_consumption.valid) {
+			const DebugComputeDispatchConsumptionPayload &payload = p_entry.first_compute_dispatch_consumption;
+			const auto resources = gather_resources_from_descriptor_sets(payload.descriptor_set_handles);
+			r_text += ",projection_resource_overlap=";
+			append_projection_resource_overlap(r_text, resources.buffers, resources.textures);
+			r_text += ",compute_dispatch={serial=" + String::num_uint64(payload.serial);
+			r_text += ",groups=[" + itos(payload.x_groups) + "," + itos(payload.y_groups) + "," + itos(payload.z_groups) + "]";
+			r_text += ",last_uniform_bind_serial=" + String::num_uint64(payload.last_uniform_bind_serial);
+			r_text += ",last_pipeline_barrier_serial=" + String::num_uint64(payload.last_pipeline_barrier_serial);
+			r_text += ",descriptor_sets=";
+			append_descriptor_set_list(r_text, payload.descriptor_set_indices, payload.descriptor_set_handles);
+			r_text += "}";
+		} else if (p_entry.first_draw_indexed_consumption.valid) {
+			const DebugDrawIndexedConsumptionPayload &payload = p_entry.first_draw_indexed_consumption;
+			const auto resources = gather_resources_from_descriptor_sets(payload.descriptor_set_handles);
+			r_text += ",projection_resource_overlap=";
+			append_projection_resource_overlap(r_text, resources.buffers, resources.textures);
+			r_text += ",draw_indexed={serial=" + String::num_uint64(payload.serial);
+			r_text += ",index_count=" + itos(payload.index_count);
+			r_text += ",instance_count=" + itos(payload.instance_count);
+			r_text += ",first_index=" + itos(payload.first_index);
+			r_text += ",vertex_offset=" + itos(payload.vertex_offset);
+			r_text += ",first_instance=" + itos(payload.first_instance);
+			r_text += ",last_uniform_bind_serial=" + String::num_uint64(payload.last_uniform_bind_serial);
+			r_text += ",last_vertex_bind_serial=" + String::num_uint64(payload.last_vertex_bind_serial);
+			r_text += ",last_index_bind_serial=" + String::num_uint64(payload.last_index_bind_serial);
+			r_text += ",last_pipeline_barrier_serial=" + String::num_uint64(payload.last_pipeline_barrier_serial);
+			r_text += ",descriptor_sets=";
+			append_descriptor_set_list(r_text, payload.descriptor_set_indices, payload.descriptor_set_handles);
+			r_text += ",vertex_buffers=[";
+			for (uint32_t i = 0; i < payload.vertex_binding_payload.buffer_ids.size(); i++) {
+				if (i > 0) {
+					r_text += ",";
+				}
+				const uint64_t offset = i < payload.vertex_binding_payload.offsets.size() ? payload.vertex_binding_payload.offsets[i] : 0;
+				r_text += "{binding=" + itos(i) + ",driver_buffer_id=" + String::num_uint64(payload.vertex_binding_payload.buffer_ids[i]) + ",offset=" + String::num_uint64(offset) + "}";
+			}
+			r_text += "]";
+			r_text += ",index_buffer=";
+			if (payload.index_binding_payload.valid) {
+				r_text += String("{driver_buffer_id=") + String::num_uint64(payload.index_binding_payload.buffer_id) + ",offset=" + String::num_uint64(payload.index_binding_payload.offset) + ",format=\"" + _debug_index_format_to_string(payload.index_binding_payload.format) + "\"}";
+			} else {
+				r_text += "none";
+			}
+			r_text += "}";
+		} else if (!p_entry.uniform_bind_calls.is_empty()) {
+			const DebugUniformBindCallPayload &bind_call = p_entry.uniform_bind_calls[p_entry.uniform_bind_calls.size() - 1];
+			const auto resources = gather_resources_from_descriptor_sets(bind_call.descriptor_set_handles);
+			r_text += ",projection_resource_overlap=";
+			append_projection_resource_overlap(r_text, resources.buffers, resources.textures);
+			r_text += ",uniform_bind_tail={serial=" + String::num_uint64(bind_call.serial);
+			r_text += ",first_set_index=" + itos(bind_call.first_set_index);
+			r_text += ",set_count=" + itos(bind_call.set_count);
+			r_text += ",descriptor_sets=";
+			append_descriptor_set_list(r_text, bind_call.set_indices, bind_call.descriptor_set_handles);
+			r_text += "}";
+		}
+		r_text += "}";
+	};
+	for (uint32_t i = 0; i < p_command_buffer->debug_label_entry_count; i++) {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[i];
+		if (entry.label_index <= search_start_label_index || !entry_has_content(entry)) {
+			continue;
+		}
+		ResourceLists resources;
+		if (entry.first_compute_dispatch_consumption.valid) {
+			resources = gather_resources_from_descriptor_sets(entry.first_compute_dispatch_consumption.descriptor_set_handles);
+		} else if (entry.first_draw_indexed_consumption.valid) {
+			resources = gather_resources_from_descriptor_sets(entry.first_draw_indexed_consumption.descriptor_set_handles);
+		} else if (!entry.uniform_bind_calls.is_empty()) {
+			resources = gather_resources_from_descriptor_sets(entry.uniform_bind_calls[entry.uniform_bind_calls.size() - 1].descriptor_set_handles);
+		}
+		if (!collect_shared_buffers(resources.buffers).is_empty() || !collect_shared_textures(resources.textures).is_empty()) {
+			first_post_handoff_projection_resource_consumer_entry_index = (int32_t)i;
+			break;
+		}
+	}
 
 	String text = "{trace_label=\"" + trace_entry.label + "\"";
 	text += ",trace_anchor_selection={status=\"" + String(adopted_later_family_dispatch ? "adopted_later_family_dispatch" : "trace_label_dispatch") + "\"";
@@ -13476,6 +13652,36 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 		text += ",class=\"" + _debug_render_pass_scope_class(scope) + "\"";
 		text += ",scope=" + _debug_render_pass_scope_summary_text(scope) + "}";
 	}
+	text += ",first_meaningful_post_handoff_content=";
+	if (first_meaningful_post_handoff_scope_index == -1) {
+		text += "{status=missing_meaningful_scope}";
+	} else if (first_meaningful_post_handoff_content_entry_index == -1) {
+		text += "{status=missing_content_inside_meaningful_scope}";
+	} else {
+		const DebugRenderPassScope &scope = p_command_buffer->debug_render_pass_scopes[first_meaningful_post_handoff_scope_index];
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[first_meaningful_post_handoff_content_entry_index];
+		append_meaningful_content_entry_summary(text, entry, &scope, 0);
+	}
+	text += ",first_post_handoff_projection_resource_consumer=";
+	if (first_post_handoff_projection_resource_consumer_entry_index == -1) {
+		text += "{status=none_with_shared_projection_resources}";
+	} else {
+		const DebugLabelEntry &entry = p_command_buffer->debug_label_entries[first_post_handoff_projection_resource_consumer_entry_index];
+		const DebugRenderPassScope *scope = nullptr;
+		int32_t scope_distance = -1;
+		for (uint32_t i = 0; i < p_command_buffer->debug_render_pass_scope_count; i++) {
+			const DebugRenderPassScope &candidate_scope = p_command_buffer->debug_render_pass_scopes[i];
+			if (candidate_scope.labels_started == 0) {
+				continue;
+			}
+			if (entry.label_index >= candidate_scope.first_label_index && entry.label_index <= candidate_scope.last_label_index) {
+				scope = &candidate_scope;
+				scope_distance = first_meaningful_post_handoff_scope_index == -1 ? -1 : int32_t(i) - first_meaningful_post_handoff_scope_index;
+				break;
+			}
+		}
+		append_meaningful_content_entry_summary(text, entry, scope, scope_distance);
+	}
 	text += ",first_downstream_consumer=";
 	if (consumer_entry_index == -1) {
 		text += "{status=missing_consumer_after_handoff}";
@@ -13486,26 +13692,8 @@ String RenderingDeviceDriverVulkan::_debug_command_buffer_projection_backend_han
 	const DebugLabelEntry &consumer_entry = p_command_buffer->debug_label_entries[consumer_entry_index];
 	const DebugComputeDispatchConsumptionPayload &consumer_payload = consumer_entry.first_compute_dispatch_consumption;
 	const auto consumer_resources = gather_resources(consumer_payload);
-	LocalVector<DebugUniformSetBufferRef> shared_buffers;
-	for (uint32_t i = 0; i < consumer_resources.buffers.size(); i++) {
-		const DebugUniformSetBufferRef &consumer_ref = consumer_resources.buffers[i];
-		for (uint32_t j = 0; j < producer_resources.buffers.size(); j++) {
-			if (consumer_ref.buffer_id == producer_resources.buffers[j].buffer_id) {
-				shared_buffers.push_back(consumer_ref);
-				break;
-			}
-		}
-	}
-	LocalVector<DebugUniformSetTextureRef> shared_textures;
-	for (uint32_t i = 0; i < consumer_resources.textures.size(); i++) {
-		const DebugUniformSetTextureRef &consumer_ref = consumer_resources.textures[i];
-		for (uint32_t j = 0; j < producer_resources.textures.size(); j++) {
-			if (consumer_ref.texture_id == producer_resources.textures[j].texture_id) {
-				shared_textures.push_back(consumer_ref);
-				break;
-			}
-		}
-	}
+	LocalVector<DebugUniformSetBufferRef> shared_buffers = collect_shared_buffers(consumer_resources.buffers);
+	LocalVector<DebugUniformSetTextureRef> shared_textures = collect_shared_textures(consumer_resources.textures);
 	text += "{label=\"" + consumer_entry.label + "\"";
 	text += ",dispatch_serial=" + String::num_uint64(consumer_payload.serial);
 	text += ",last_uniform_bind_serial=" + String::num_uint64(consumer_payload.last_uniform_bind_serial);
