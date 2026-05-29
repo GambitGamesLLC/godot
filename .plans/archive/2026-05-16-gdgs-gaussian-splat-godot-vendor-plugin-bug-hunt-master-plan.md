@@ -1,8 +1,9 @@
 # GDGS Gaussian Splat Godot Vendor Plugin Bug Hunt — Master Plan
 
 **Date:** 2026-05-16
-**Status:** In Progress
-**Last Updated:** 2026-05-28 10:56 EDT
+**Status:** Complete
+**Last Updated:** 2026-05-29 09:46 EDT
+**Blocked Reason:** None
 **Agent:** Chip 🐱‍💻
 
 ---
@@ -10188,6 +10189,88 @@ Validation note / blocker encountered:
 - Full editor relink attempted with `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64`, but the host filesystem ran out of space during archive/relink (`ar: unable to copy file 'bin/obj/core/libcore.linuxbsd.editor.dev.x86_64.a'; reason: No space left on device`). So the instrumentation is landed in source and the touched Vulkan TU compiles, but QA still needs a successful editor relink before replaying the new fields.
 
 **Exact next QA follow-up:** after recovering enough disk space to finish `scons platform=linuxbsd target=editor dev_build=yes -j8 bin/godot.linuxbsd.editor.dev.x86_64` in `/home/derrick/.openclaw/workspace/projects/godot/`, rerun the same locked six-case backend/barrier ladder from `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-label-free-later-draw-payload-qa-sourcebuild-20260528-104256/` using the rebuilt `/home/derrick/.openclaw/workspace/projects/godot/bin/godot.linuxbsd.editor.dev.x86_64` with `GODOT_GDGS_DEBUG_PROJECTION_HANDOFF_TRACE=1` still enabled under both vendor trace modes (`markers_only`, `empty_compute_boundary`). On the decisive submit-9 packet, compare `first_later_post_scope_draw_payload_content.label_free_draw_payload_signature_hash`, `label_free_first_draw_payload_entry`, `label_free_last_draw_payload_entry`, `post_scope_failure_surface_classifier.last_post_scope_content.draw_indexed`, and the nested descriptor / vertex / index binding state across `projection_non_footprint_immediate_return_only`, `projection_post_barrier_no_scratch_immediate_return_only`, and `projection_post_barrier_immediate_return_only` to determine whether the next discriminating seam is inside that later indexed-draw payload/binds or whether those still match and the seam must move later again.
+
+### QA Addendum (2026-05-29 07:29 EDT) — bead `oc-8od6`
+
+**Source of truth:** `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-indexed-draw-payload-qa-sourcebuild-20260528-113650/`
+
+**Why this addendum exists:** the generated compare summary in the restored `...113650/` root was out of sync with the raw rerun logs, so this adjudication was done directly from the raw `*.projection_backend_handoff.log` artifacts instead of trusting the parsed summary.
+
+**Exact raw artifacts inspected:**
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-indexed-draw-payload-qa-sourcebuild-20260528-113650/logs/projection_only__projection_non_footprint_immediate_return_only__markers_only.projection_backend_handoff.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-indexed-draw-payload-qa-sourcebuild-20260528-113650/logs/projection_only__projection_non_footprint_immediate_return_only__empty_compute_boundary.projection_backend_handoff.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-indexed-draw-payload-qa-sourcebuild-20260528-113650/logs/projection_only__projection_post_barrier_no_scratch_immediate_return_only__markers_only.projection_backend_handoff.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-indexed-draw-payload-qa-sourcebuild-20260528-113650/logs/projection_only__projection_post_barrier_no_scratch_immediate_return_only__empty_compute_boundary.projection_backend_handoff.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-indexed-draw-payload-qa-sourcebuild-20260528-113650/logs/projection_only__projection_post_barrier_immediate_return_only__markers_only.projection_backend_handoff.log`
+- `/home/derrick/.openclaw/workspace/.temp/gdgs-stage-repro-2026-05-28/official-projection-later-indexed-draw-payload-qa-sourcebuild-20260528-113650/logs/projection_only__projection_post_barrier_immediate_return_only__empty_compute_boundary.projection_backend_handoff.log`
+
+**Submit-9 rung-by-rung raw adjudication for the requested fields:**
+- Good rung — `projection_non_footprint_immediate_return_only`
+  - `markers_only`: the restored later packet **does** materialize `first_later_post_scope_draw_payload_content.label_free_draw_payload_signature_hash=0x0256b6a1`, `label_free_first_draw_payload_entry`, `label_free_last_draw_payload_entry`, and `post_scope_failure_surface_classifier.last_post_scope_content.draw_indexed` on later `Command Graph (L94) (Draw)`.
+  - `empty_compute_boundary`: the same four fields **do** materialize on later `Command Graph (L98) (Draw)` with `label_free_draw_payload_signature_hash=0xe3c7ef1c`.
+- First-bad rung — `projection_post_barrier_no_scratch_immediate_return_only`
+  - `markers_only`: the same four fields **do** materialize on later `Command Graph (L94) (Draw)` with `label_free_draw_payload_signature_hash=0xf5822d68`.
+  - `empty_compute_boundary`: the same four fields **do** materialize on later `Command Graph (L98) (Draw)` with `label_free_draw_payload_signature_hash=0x4f0d137d`.
+- First-bad rung — `projection_post_barrier_immediate_return_only`
+  - `markers_only`: the same four fields **do** materialize on later `Command Graph (L94) (Draw)` with `label_free_draw_payload_signature_hash=0xea691d9a`.
+  - `empty_compute_boundary`: the same four fields **do** materialize on later `Command Graph (L98) (Draw)` with `label_free_draw_payload_signature_hash=0xf75bcf6f`.
+
+**What the raw excerpts actually prove:**
+- The stale generated summary was wrong to imply that the restored good rung still emitted none of those later indexed-draw fields. In the parity-restored `...113650/` rerun, the good rung now reaches the same later `Command Graph` draw packet shape and emits all four requested fields in both vendor trace modes.
+- Across the raw payload excerpts I inspected, the stable semantic indexed-draw content still matches at the level this probe currently exposes: same `class="indexed_draw"`, same draw counts, same `index_count=6`, `instance_count=27`, `first_index=0`, `vertex_offset=0`, `first_instance=0`, same last bind/barrier serial pattern, same `vertex_buffers=[{binding=0,... offset=2097152}]`, same `index_buffer={... offset=0,format="uint16"}`, and the same descriptor binding/provenance recipe pattern under the later packet.
+- The requested fields therefore no longer discriminate by simple presence/absence on the restored rerun, and the differing signature hashes are not enough by themselves to honestly call this the first stable semantic seam.
+
+**Concrete QA conclusion / next seam:**
+- The next honest seam is **not** “presence of later indexed-draw payload fields” anymore.
+- Based on the restored raw artifacts, the later indexed-draw payload / tightly adjacent bound state still matches closely enough that QA cannot truthfully call it the discriminating boundary from these excerpts alone.
+- So the seam must move later again (or to a later/finer downstream surface after this still-matched later draw packet), rather than claiming victory inside the currently exposed indexed-draw payload/bind summary.
+
+### Operator Observation (2026-05-29 07:50 EDT)
+
+- Derrick manually opened `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` on Cookie's terminal and reported that the default happy-path scene successfully rendered the default splat.
+- This does **not** close the active bug-hunt lane, but it materially strengthens the current reading that the surviving failure is **not** a universal vendor-project inability to render the default splat.
+- Working interpretation after this observation: the remaining fault boundary is more likely host-specific, runtime-path-specific, renderer/backend-path-specific, or instrumentation/source-build specific to Derrick's active repro environment than a broad “vendor GDGS project can never render the default splat” failure.
+- Next seam should preserve that distinction explicitly: keep the active lane focused on the failing Derrick-terminal / source-build submit-9 path while treating Cookie's happy-path success as a positive control / environment discriminator.
+
+### Task 267: Inspect the local Godot editor crash logs for the Chip-side vendor-project open/import crash
+
+**Bead ID:** `oc-85du`
+**SubAgent:** `primary` (for `research`)
+**Role:** `research`
+**References:** `REF-04`, `REF-05`, `REF-11`
+**Prompt:** In `/home/derrick/.openclaw/workspace/projects/godot/` and the local runtime/log locations on Chip, claim bead `oc-85du` at start and inspect the most recent Godot editor crash logs associated with opening `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs` from Chip’s desktop session. Derrick reports that the project began opening under Remmina and then crashed to desktop twice. Determine whether the crash logs indicate an import-time, editor-render-time, renderer/backend, GDGS, or splat-related fault signature, and whether that signature plausibly aligns with the active master-plan Gaussian-splat rendering/device-loss lane. Keep the work diagnostic/reversible, do not widen into fixes yet, update this plan with exact log paths and the crash-signature conclusion, and close the bead with a clear reason if complete.
+
+**Folders Created/Deleted/Modified:**
+- `/home/derrick/.local/share/godot/`
+- `/home/derrick/.config/godot/`
+- `/home/derrick/.cache/godot/`
+- `/home/derrick/.openclaw/workspace/projects/godot/`
+- `/home/derrick/.openclaw/workspace/projects/aerobeat/aerobeat-vendor-gdgs/`
+
+**Files Created/Deleted/Modified:**
+- `/home/derrick/.openclaw/workspace/projects/godot/.plans/2026-05-16-gdgs-gaussian-splat-godot-vendor-plugin-bug-hunt-master-plan.md`
+- relevant Godot editor crash logs / temp crash artifacts if present (inspection only unless documentation is needed)
+
+**Status:** ✅ Complete
+
+**Results:** Claimed bead `oc-85du` and inspected the newest local Chip-side Godot runtime artifacts plus kernel/journal evidence for the reported vendor-project crash attempts. Exact runtime log paths inspected: `/home/derrick/.local/share/godot/app_userdata/AeroBeat Vendor GDGS Control/logs/godot2026-05-28T11.37.25.log`, `/home/derrick/.local/share/godot/app_userdata/AeroBeat Vendor GDGS Control/logs/godot2026-05-28T11.37.31.log`, `/home/derrick/.local/share/godot/app_userdata/AeroBeat Vendor GDGS Control/logs/godot2026-05-28T11.37.43.log`, and the rolled current log `/home/derrick/.local/share/godot/app_userdata/AeroBeat Vendor GDGS Control/logs/godot.log`; supporting state paths inspected: `/home/derrick/.local/share/godot/app_userdata/AeroBeat Vendor GDGS Control/.recovery_mode_lock`, `/home/derrick/.config/godot/editor_settings-4.6.tres`, `/home/derrick/.cache/godot/`; searched but no dedicated Godot `crash*`/dump/backtrace file was found under `~/.local/share/godot`, `~/.config/godot`, `~/.cache/godot`, or `/tmp`. The high-signal crash signature came from the system journal rather than a Godot crash.txt: repeated Intel i915 GPU hangs and context resets at the same timestamps as the launches — `Resetting rcs0 for preemption time out`, `godot.linuxbsd.[pid] context reset due to GPU hang`, and `GPU HANG: ecode 12:1:85dcfffb` at 11:37:13, 11:37:25, 11:37:42/43, and 11:37:54. The Godot/GDGS logs themselves did not end with a script exception, import failure, or editor-side assertion/backtrace; they cut off mid-frame while emitting dense `[gdgs-rd]` / `[gdgs-vk]` render submission traffic, repeatedly ending around `last_breadcrumb="BLIT_PASS"`, `present_submission=true`, and missing render-pass scope markers such as `opaque_pass_scope={status=missing_opaque_scope,...}` / `tonemap_pass_scope={status=missing_tonemap_scope,...}` immediately before the external GPU reset. Conclusion: this looks like an editor-render-time renderer/backend failure manifesting as Intel Vulkan/GPU device hang during GDGS rendering, not an import-time content parse failure. That strongly aligns with the active master-plan splat/rendering/device-loss lane, because the failure presents as repeated renderer submission/device-hang behavior during live GDGS frame execution rather than asset import or generic editor startup. Immediate next discriminator: rerun the same vendor project once with a different renderer/backend path (for example Compatibility/OpenGL or a Vulkan-disabled path if available) while preserving the same project content; if the crash disappears, the evidence heavily isolates the failure to the Intel Vulkan + GDGS render/device-loss path rather than project import or higher-level editor logic.
+
+### Closure Addendum (2026-05-29 09:46 EDT)
+
+- Derrick explicitly closed this bug-hunt lane as **complete-but-unresolved**: the investigation produced enough truth to stop spending engineering time on a direct Iris Xe Vulkan fix and instead design AeroBeat around the limitation.
+- Final decision from this lane:
+  - Cookie (NVIDIA) remains the positive control where the vendor GDGS project works on Vulkan Forward+.
+  - Chip (Intel Iris Xe) continues to reproduce Vulkan device-loss / GPU-hang behavior on the same vendor project.
+  - Compatibility/OpenGL opens on both machines but does not render the splat, so it is a stability control rather than a viable splat-rendering fallback.
+  - Mobile Vulkan is not the escape hatch either; it does not become the happy-path splat renderer and still fails to provide a deployable answer for AeroBeat.
+  - Chip’s Mesa/Vulkan/Intel userspace packages are already on current apt candidate versions, so there is no obvious pending package update to treat as the likely fix.
+- Product conclusion: treat the remaining issue as a real platform limitation for AeroBeat rather than an in-scope engine/plugin fix target for this cycle.
+- Follow-on product direction moved out of this plan and into the next AeroBeat planning session:
+  1. detect user hardware at startup,
+  2. default known Intel Iris Xe devices to fallback environments,
+  3. require every workout set to include an image fallback environment,
+  4. help creators by auto-generating fallback images from video / GLB / splat sources in authoring tooling.
+- This closes the bug-hunt master plan with a truthful answer: the lane is narrowed enough to support a product design-around decision, even though the underlying Godot/GDGS Iris Xe Vulkan fault is not resolved.
 
 ### Session Handoff (2026-05-28)
 
